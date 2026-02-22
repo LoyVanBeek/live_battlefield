@@ -5,6 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
 import os
+import math
+import random
+import string
 
 from app.config import settings
 from app.models import get_all_events
@@ -363,3 +366,52 @@ async def quick_reset_team(action: QuickAction, db: AsyncSession = Depends(get_a
     )
 
     return {"success": True, "message": f"Reset team {action.team_color}!"}
+
+
+class CreateLocations(BaseModel):
+    latitude: float
+    longitude: float
+    count: int = 10
+    radius_km: float = 2.0
+
+
+@app.post("/api/quick/create_locations")
+async def create_locations(
+    action: CreateLocations, db: AsyncSession = Depends(get_api_db)
+):
+    created = []
+
+    for i in range(action.count):
+        lat_offset = random.uniform(-action.radius_km / 111, action.radius_km / 111)
+        lon_offset = random.uniform(
+            -action.radius_km / (111 * math.cos(action.latitude * math.pi / 180)),
+            action.radius_km / (111 * math.cos(action.latitude * math.pi / 180)),
+        )
+
+        lat = action.latitude + lat_offset
+        lon = action.longitude + lon_offset
+
+        code = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
+
+        from app.models import create_location
+        from app.models import get_next_location_number
+
+        number = await get_next_location_number(db)
+        await create_location(db, number, lat, lon, code)
+
+        from app.models import add_event
+        from app.database import EventType
+
+        await add_event(
+            db,
+            EventType.LOCATION_ADDED,
+            {"number": number, "latitude": lat, "longitude": lon, "code": code},
+        )
+
+        created.append({"number": number, "code": code, "lat": lat, "lon": lon})
+
+    return {
+        "success": True,
+        "message": f"Created {len(created)} locations!",
+        "locations": created,
+    }

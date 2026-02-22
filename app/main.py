@@ -23,6 +23,7 @@ from app.bot.handlers import (
     handle_location,
     handle_locations_list,
     handle_register_gm,
+    handle_create_locations,
 )
 
 
@@ -122,6 +123,31 @@ async def register_gm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(result)
 
 
+async def create_locations_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 3:
+        await update.message.reply_text(
+            "Usage: /create_locations <count> <latitude> <longitude> [radius_km]"
+        )
+        return
+
+    try:
+        count = int(context.args[0])
+        latitude = float(context.args[1])
+        longitude = float(context.args[2])
+        radius = float(context.args[3]) if len(context.args) > 3 else 2.0
+    except ValueError:
+        await update.message.reply_text(
+            "Invalid parameters. Usage: /create_locations <count> <latitude> <longitude> [radius_km]"
+        )
+        return
+
+    async with async_session_maker() as db:
+        result = await handle_create_locations(
+            db, update, context, count, latitude, longitude, radius
+        )
+        await update.message.reply_text(result)
+
+
 async def location_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.location:
         return
@@ -155,6 +181,7 @@ def run_bot():
     app.add_handler(CommandHandler("overview", overview_handler))
     app.add_handler(CommandHandler("locations", locations_handler))
     app.add_handler(CommandHandler("registergm", register_gm_handler))
+    app.add_handler(CommandHandler("create_locations", create_locations_handler))
     app.add_handler(MessageHandler(filters.LOCATION, location_message_handler))
 
     print("Bot is running...")
