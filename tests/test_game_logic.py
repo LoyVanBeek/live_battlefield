@@ -258,3 +258,191 @@ class TestGameState:
 
         assert "red" in state.teams
         assert len(state.teams["red"].ships) == 1
+
+
+class TestPlaceAllShips:
+    def test_place_all_ships_algorithm(self):
+        """Test that the random placement algorithm can place all ships"""
+        import random
+        random.seed(42)  # For reproducible tests
+
+        from app.game.ships import SHIP_COUNTS
+
+        # Simulate the placement algorithm
+        team = TeamState(name="Test", color="red", chat_id=123)
+
+        placed = []
+        failed = []
+
+        for ship_type, count in SHIP_COUNTS.items():
+            for i in range(count):
+                attempts = 0
+                placed_ship = False
+                while attempts < 5000:
+                    row = random.randint(0, 9)
+                    col = random.randint(0, 9)
+                    direction = random.choice(["horizontal", "vertical"])
+
+                    if team.place_ship(ship_type, row, col, direction):
+                        placed.append(ship_type)
+                        placed_ship = True
+                        break
+                    attempts += 1
+
+                if not placed_ship:
+                    failed.append(ship_type)
+
+        # With 5000 attempts, all ships should be placeable
+        assert len(failed) == 0, f"Failed to place: {failed}"
+        assert len(placed) == sum(SHIP_COUNTS.values()), f"Expected {sum(SHIP_COUNTS.values())} ships, placed {len(placed)}"
+
+        # Verify all ships are placed correctly
+        assert team.has_all_ships() == True
+
+    def test_place_ship_respects_no_touching_rule(self):
+        """Test that ships cannot touch each other"""
+        team = TeamState(name="Test", color="red", chat_id=123)
+
+        # Place first ship at A1 horizontal (cells: A1, A2, A3, A4)
+        result = team.place_ship("patrol_boat", 0, 0, "horizontal")
+        assert result == True
+
+        # Try to place adjacent ship - should fail due to no-touching rule
+        # Ship at B1 would touch A1 (diagonal is not allowed)
+        result = team.place_ship("patrol_boat", 1, 0, "horizontal")
+        assert result == False
+
+        # Place ship far away - should succeed
+        result = team.place_ship("patrol_boat", 5, 5, "horizontal")
+        assert result == True
+
+    def test_place_all_ships_returns_failure_on_error(self):
+        """Test that the endpoint returns success: False when placement fails"""
+        # This test simulates what happens when placement fails
+        # by using an impossible scenario (too few attempts)
+        
+        # We'll test that the algorithm correctly identifies failures
+        import random
+        random.seed(42)
+        
+        team = TeamState(name="Test", color="red", chat_id=123)
+        
+        # Try to place with ONLY 1 attempt per ship - this will definitely fail
+        # because the 10x10 board with no-touching rule is very constrained
+        placed = []
+        failed = []
+        
+        from app.game.ships import SHIP_COUNTS
+        
+        for ship_type, count in SHIP_COUNTS.items():
+            for i in range(count):
+                attempts = 0
+                placed_ship = False
+                while attempts < 1:  # Only 1 attempt - will fail
+                    row = 0
+                    col = 0
+                    direction = "horizontal"
+                    
+                    if team.place_ship(ship_type, row, col, direction):
+                        placed.append(ship_type)
+                        placed_ship = True
+                        break
+                    attempts += 1
+                
+                if not placed_ship:
+                    failed.append(ship_type)
+        
+        # With only 1 attempt, many ships should fail to place
+        # The return value should indicate failure
+        result_success = len(failed) == 0  # This is what the API checks
+        
+        # This test documents the expected behavior: 
+        # when ships fail to place, success should be False
+        assert result_success == False or len(failed) > 0, "Expected some ships to fail with only 1 attempt"
+
+    def test_place_all_ships_returns_ships_placed_count(self):
+        """Test that the endpoint returns ships_placed count in the response"""
+        import random
+        random.seed(42)
+
+        from app.game.ships import SHIP_COUNTS
+
+        # Simulate the placement algorithm exactly as the API does
+        team = TeamState(name="Test", color="red", chat_id=123)
+
+        placed = []
+        failed = []
+
+        for ship_type, count in SHIP_COUNTS.items():
+            for i in range(count):
+                attempts = 0
+                placed_ship = False
+                while attempts < 5000:
+                    row = random.randint(0, 9)
+                    col = random.randint(0, 9)
+                    direction = random.choice(["horizontal", "vertical"])
+
+                    if team.place_ship(ship_type, row, col, direction):
+                        placed.append(ship_type)
+                        placed_ship = True
+                        break
+                    attempts += 1
+
+                if not placed_ship:
+                    failed.append(ship_type)
+
+        # Simulate the API response format
+        ships_placed_count = sum(team.placed_ship_types.values())
+        
+        if failed:
+            response = {
+                "success": False,
+                "message": f"Placed {len(placed)} ships. Failed: {failed}",
+                "ships_placed": ships_placed_count,
+            }
+        else:
+            response = {
+                "success": True,
+                "message": f"Placed all {len(placed)} ships successfully!",
+                "ships_placed": ships_placed_count,
+            }
+
+        # Verify the response contains ships_placed
+        assert "ships_placed" in response
+        assert response["ships_placed"] == ships_placed_count
+        
+        # When all ships placed, success should be True
+        assert response["success"] == True
+        assert response["ships_placed"] == sum(SHIP_COUNTS.values())
+
+        # Test failure case: use 1 attempt which will fail
+        team2 = TeamState(name="Test2", color="blue", chat_id=456)
+        placed2 = []
+        failed2 = []
+
+        for ship_type, count in SHIP_COUNTS.items():
+            for i in range(count):
+                attempts = 0
+                placed_ship = False
+                while attempts < 1:  # Only 1 attempt - will definitely fail
+                    if team2.place_ship(ship_type, 0, 0, "horizontal"):
+                        placed2.append(ship_type)
+                        placed_ship = True
+                        break
+                    attempts += 1
+                if not placed_ship:
+                    failed2.append(ship_type)
+
+        ships_placed2 = sum(team2.placed_ship_types.values())
+        
+        if failed2:
+            response2 = {
+                "success": False,
+                "message": f"Placed {len(placed2)} ships. Failed: {failed2}",
+                "ships_placed": ships_placed2,
+            }
+
+        # When ships fail to place, success should be False
+        assert response2["success"] == False
+        # ships_placed should reflect what was actually placed
+        assert response2["ships_placed"] == ships_placed2

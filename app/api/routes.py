@@ -443,7 +443,7 @@ async def quick_place_all_ships(
     for ship_type, count in SHIP_COUNTS.items():
         for i in range(count):
             attempts = 0
-            while attempts < 100:
+            while attempts < 5000:
                 row = random.randint(0, 9)
                 col = random.randint(0, 9)
                 direction = random.choice(["horizontal", "vertical"])
@@ -475,10 +475,15 @@ async def quick_place_all_ships(
 
     if failed:
         return {
-            "success": True,
+            "success": False,
             "message": f"Placed {len(placed)} ships. Failed: {failed}",
+            "ships_placed": sum(team.placed_ship_types.values()),
         }
-    return {"success": True, "message": f"Placed all {len(placed)} ships successfully!"}
+    return {
+        "success": True,
+        "message": f"Placed all {len(placed)} ships successfully!",
+        "ships_placed": sum(team.placed_ship_types.values()),
+    }
 
 
 @app.post("/api/quick/reset_team")
@@ -610,7 +615,7 @@ async def clear_players(db: AsyncSession = Depends(get_api_db)):
 async def update_game_settings(db: AsyncSession, **kwargs):
     from app.models import get_or_create_game_settings
     from app.database import GameSettings as DBGameSettings
-    
+
     settings = await get_or_create_game_settings(db)
     for key, value in kwargs.items():
         if hasattr(settings, key):
@@ -626,21 +631,28 @@ async def start_game(db: AsyncSession = Depends(get_api_db)):
     from app.database import GameStatus
 
     settings = await get_or_create_game_settings(db)
-    
+
     if settings.status == GameStatus.STARTED:
         return {"success": False, "message": "Game has already started!"}
-    
+
     if settings.status == GameStatus.ENDED:
         return {"success": False, "message": "Game has ended! Reset first."}
 
     await update_game_settings(db, status=GameStatus.STARTED)
 
-    return {"success": True, "message": "Game started! Teams can now bomb and redeem codes."}
+    return {
+        "success": True,
+        "message": "Game started! Teams can now bomb and redeem codes.",
+    }
 
 
 @app.get("/api/game-status")
 async def get_game_status(db: AsyncSession = Depends(get_api_db)):
-    from app.models import get_or_create_game_settings, get_all_locations, get_all_events
+    from app.models import (
+        get_or_create_game_settings,
+        get_all_locations,
+        get_all_events,
+    )
     from app.game.state import GameState
 
     settings = await get_or_create_game_settings(db)
