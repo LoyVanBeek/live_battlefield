@@ -273,6 +273,14 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
         team.bombs -= 1
         bomb_result, ship = target.receive_bomb(row, col, cmd.team_color)
 
+        from app.game.ships import parse_coordinate
+
+        coord_str = cmd.args.get("coordinate", "A1")
+        try:
+            row_val, col_val = parse_coordinate(coord_str)
+        except:
+            row_val, col_val = 0, 0
+
         if bomb_result == BombResult.HIT:
             msg = f"HIT at {coord}!"
             if ship and ship.is_sunk():
@@ -284,6 +292,22 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
         result["message"] = (
             f"Bombed {target_color} at {coord}: {msg}. Bombs left: {team.bombs}"
         )
+
+        payload = {
+            "color": cmd.team_color,
+            "command": cmd.command,
+            **cmd.args,
+            "attacker_color": cmd.team_color,
+            "target_color": target_color,
+            "row": row_val,
+            "col": col_val,
+            "result": bomb_result.value,
+        }
+
+        from app.models import add_event
+        from app.database import EventType
+
+        await add_event(db, EventType.BOMB_THROWN, payload)
 
     elif cmd.command == "code":
         if cmd.team_color not in state.teams:
@@ -312,10 +336,14 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
     from app.models import add_event
     from app.database import EventType
 
-    payload = {"color": cmd.team_color, "command": cmd.command, **cmd.args}
     if result["success"]:
-        payload["executed"] = True
-        await add_event(db, EventType.TEAM_JOINED, payload)
+        payload = {"color": cmd.team_color, "command": cmd.command, **cmd.args}
+        if cmd.command == "place":
+            await add_event(db, EventType.SHIP_PLACED, payload)
+        elif cmd.command == "code":
+            await add_event(db, EventType.CODE_REDEEMED, payload)
+        elif cmd.command == "join":
+            await add_event(db, EventType.TEAM_JOINED, payload)
 
     return result
 
