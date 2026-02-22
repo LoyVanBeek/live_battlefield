@@ -370,8 +370,10 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
 
                     if bomb_result == BombResult.HIT:
                         notify_msg = f"💥 HIT! {team.name} ({cmd.team_color}) bombed you at {coord_display}!"
-                        if ship and ship.is_sunk():
-                            notify_msg += f" Your {ship.ship_type} was sunk!"
+                        if ship:
+                            notify_msg += f" Your {ship.ship_type} was hit!"
+                            if ship.is_sunk():
+                                notify_msg = notify_msg.replace("was hit!", "was SUNK!")
                     else:
                         notify_msg = f"💨 MISS! {team.name} ({cmd.team_color}) missed at {coord_display}!"
 

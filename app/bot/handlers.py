@@ -219,8 +219,10 @@ async def handle_bomb(
             hit_msg = (
                 f"💥 HIT! {attacker.name} ({attacker.color}) bombed you at {coord_str}!"
             )
-            if ship and ship.is_sunk():
-                hit_msg += f" Your {ship.ship_type} was sunk!"
+            if ship:
+                hit_msg += f" Your {ship.ship_type} was hit!"
+                if ship.is_sunk():
+                    hit_msg = hit_msg.replace("was hit!", "was SUNK!")
         else:
             hit_msg = (
                 f"💨 MISS! {attacker.name} ({attacker.color}) missed at {coord_str}!"
@@ -229,8 +231,10 @@ async def handle_bomb(
 
     if result == BombResult.HIT:
         msg = f"You bombed {target.name} at {coord}! 💥 HIT!"
-        if ship and ship.is_sunk():
-            msg += f" You sunk their {ship.ship_type}!"
+        if ship:
+            msg += f" You hit their {ship.ship_type}!"
+            if ship.is_sunk():
+                msg = msg.replace("You hit their", "You SUNK their")
     else:
         msg = f"You bombed {target.name} at {coord}. 💨 MISS!"
 
