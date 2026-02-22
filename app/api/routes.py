@@ -53,6 +53,72 @@ async def root():
     return {"message": "Live Battlefield API", "admin": "/admin"}
 
 
+@app.get("/api/game-status")
+async def get_game_status(db: AsyncSession = Depends(get_api_db)):
+    from app.models import get_or_create_game_settings, update_game_settings
+    from app.database import GameStatus
+    from app.game.state import GameState
+
+    settings = await get_or_create_game_settings(db)
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    teams_with_ships = sum(1 for t in state.teams.values() if t.has_all_ships())
+    total_teams = len(state.teams)
+    locations_count = len(state.location_codes)
+
+    can_start = state.can_start(settings.total_locations_needed)
+
+    return {
+        "status": settings.status.value,
+        "total_locations_needed": settings.total_locations_needed,
+        "locations_placed": locations_count,
+        "teams_with_all_ships": teams_with_ships,
+        "total_teams": total_teams,
+        "can_start": can_start,
+    }
+
+
+class SetLocationCount(BaseModel):
+    count: int
+
+
+@app.post("/api/quick/set-location-count")
+async def set_location_count(
+    data: SetLocationCount, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import update_game_settings
+
+    await update_game_settings(db, total_locations_needed=data.count)
+    return {"success": True, "message": f"Location count set to {data.count}"}
+
+
+@app.post("/api/quick/start-game")
+async def start_game_api(db: AsyncSession = Depends(get_api_db)):
+    from app.models import get_or_create_game_settings, update_game_settings
+    from app.database import GameStatus
+
+    settings = await get_or_create_game_settings(db)
+
+    if settings.status == GameStatus.STARTED:
+        return {"success": False, "message": "Game already started!"}
+
+    if settings.status == GameStatus.ENDED:
+        return {"success": False, "message": "Game ended. Reset first."}
+
+    await update_game_settings(db, status=GameStatus.STARTED)
+    return {"success": True, "message": "Game started!"}
+
+
+@app.post("/api/quick/reset-game")
+async def reset_game_api(db: AsyncSession = Depends(get_api_db)):
+    from app.models import update_game_settings
+    from app.database import GameStatus
+
+    await update_game_settings(db, status=GameStatus.WAITING, started_at=None)
+    return {"success": True, "message": "Game reset!"}
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
     return templates.TemplateResponse("admin.html", {"request": request})

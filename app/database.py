@@ -85,6 +85,21 @@ class Location(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class GameStatus(str, enum.Enum):
+    WAITING = "waiting"
+    STARTED = "started"
+    ENDED = "ended"
+
+
+class GameSettings(Base):
+    __tablename__ = "game_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    status = Column(Enum(GameStatus), nullable=False, default=GameStatus.WAITING)
+    total_locations_needed = Column(Integer, nullable=False, default=33)
+    started_at = Column(DateTime, nullable=True)
+
+
 async def get_db() -> AsyncSession:
     async with async_session_maker() as session:
         yield session

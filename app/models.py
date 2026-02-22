@@ -1,7 +1,17 @@
-from app.database import Base, Player, GameEvent, Location, EventType, Role
+from app.database import (
+    Base,
+    Player,
+    GameEvent,
+    Location,
+    EventType,
+    Role,
+    GameSettings,
+    GameStatus,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
+from datetime import datetime
 
 
 async def get_player_by_chat(db: AsyncSession, chat_id: int) -> Optional[Player]:
@@ -15,11 +25,15 @@ async def get_player_by_id(db: AsyncSession, player_id: int) -> Optional[Player]
 
 
 async def get_player_by_color(db: AsyncSession, color: str) -> Optional[Player]:
-    result = await db.execute(select(Player).where(Player.color == color, Player.role == Role.TEAM))
+    result = await db.execute(
+        select(Player).where(Player.color == color, Player.role == Role.TEAM)
+    )
     return result.scalar_one_or_none()
 
 
-async def create_player(db: AsyncSession, name: str, color: str, chat_id: int, role: Role = Role.TEAM) -> Player:
+async def create_player(
+    db: AsyncSession, name: str, color: str, chat_id: int, role: Role = Role.TEAM
+) -> Player:
     player = Player(name=name, color=color, chat_id=chat_id, role=role)
     db.add(player)
     await db.commit()
@@ -37,7 +51,12 @@ async def get_all_game_masters(db: AsyncSession) -> list[Player]:
     return list(result.scalars().all())
 
 
-async def add_event(db: AsyncSession, event_type: EventType, payload: dict, player_id: Optional[int] = None) -> GameEvent:
+async def add_event(
+    db: AsyncSession,
+    event_type: EventType,
+    payload: dict,
+    player_id: Optional[int] = None,
+) -> GameEvent:
     event = GameEvent(event_type=event_type, payload=payload, player_id=player_id)
     db.add(event)
     await db.commit()
@@ -56,15 +75,21 @@ async def get_location_by_number(db: AsyncSession, number: int) -> Optional[Loca
 
 
 async def get_next_location_number(db: AsyncSession) -> int:
-    result = await db.execute(select(Location).order_by(Location.number.desc()).limit(1))
+    result = await db.execute(
+        select(Location).order_by(Location.number.desc()).limit(1)
+    )
     last_location = result.scalar_one_or_none()
     if last_location:
         return last_location.number + 1
     return 1
 
 
-async def create_location(db: AsyncSession, number: int, latitude: float, longitude: float, code: str) -> Location:
-    location = Location(number=number, latitude=latitude, longitude=longitude, code=code)
+async def create_location(
+    db: AsyncSession, number: int, latitude: float, longitude: float, code: str
+) -> Location:
+    location = Location(
+        number=number, latitude=latitude, longitude=longitude, code=code
+    )
     db.add(location)
     await db.commit()
     await db.refresh(location)
@@ -74,3 +99,28 @@ async def create_location(db: AsyncSession, number: int, latitude: float, longit
 async def get_all_locations(db: AsyncSession) -> list[Location]:
     result = await db.execute(select(Location).order_by(Location.number))
     return list(result.scalars().all())
+
+
+async def get_game_settings(db: AsyncSession) -> Optional[GameSettings]:
+    result = await db.execute(select(GameSettings).limit(1))
+    return result.scalar_one_or_none()
+
+
+async def get_or_create_game_settings(db: AsyncSession) -> GameSettings:
+    settings = await get_game_settings(db)
+    if not settings:
+        settings = GameSettings(status=GameStatus.WAITING, total_locations_needed=33)
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+    return settings
+
+
+async def update_game_settings(db: AsyncSession, **kwargs) -> GameSettings:
+    settings = await get_or_create_game_settings(db)
+    for key, value in kwargs.items():
+        if hasattr(settings, key):
+            setattr(settings, key, value)
+    await db.commit()
+    await db.refresh(settings)
+    return settings

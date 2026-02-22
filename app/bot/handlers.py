@@ -54,6 +54,16 @@ async def handle_join(
     events = await get_all_events(db)
     state = GameState.from_events(events)
 
+    from app.models import get_or_create_game_settings
+
+    settings = await get_or_create_game_settings(db)
+
+    if settings.status.value == "started":
+        return "The game has already started! No new teams can join."
+
+    if settings.status.value == "ended":
+        return "The game has ended! Use /resetgame to start a new game."
+
     if state.is_team_name_taken(team_name):
         return f"Team name '{team_name}' is already taken!"
 
@@ -160,6 +170,13 @@ async def handle_bomb(
     events = await get_all_events(db)
     state = GameState.from_events(events)
 
+    from app.models import get_or_create_game_settings
+
+    settings = await get_or_create_game_settings(db)
+
+    if settings.status.value != "started":
+        return "The game hasn't started yet! Waiting for all ships and locations to be ready."
+
     if player.color not in state.teams:
         return "You are not in the game yet!"
 
@@ -240,6 +257,15 @@ async def handle_code(
 
     events = await get_all_events(db)
     state = GameState.from_events(events)
+
+    from app.models import get_or_create_game_settings
+
+    settings = await get_or_create_game_settings(db)
+
+    if settings.status.value != "started":
+        return (
+            "The game hasn't started yet! Wait for all ships and locations to be ready."
+        )
 
     if player.color not in state.teams:
         return "You are not in the game yet!"
@@ -421,3 +447,47 @@ async def handle_create_locations(
     msg += "\n".join(created)
 
     return msg
+
+
+async def handle_start_game(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    player = await get_player_by_chat(db, chat_id)
+    if not player:
+        return "You need to register as a game master first!"
+
+    if player.role != Role.GAMEMASTER:
+        return "Only game masters can start the game!"
+
+    from app.models import get_or_create_game_settings, update_game_settings
+    from app.database import GameStatus
+
+    settings = await get_or_create_game_settings(db)
+
+    if settings.status == GameStatus.STARTED:
+        return "The game has already started!"
+
+    if settings.status == GameStatus.ENDED:
+        return "The game has ended! Use /resetgame to start a new game."
+
+    await update_game_settings(db, status=GameStatus.STARTED)
+
+    return "🎮 The game has started! Teams can now use bombs and redeem codes!"
+
+
+async def handle_reset_game(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    player = await get_player_by_chat(db, chat_id)
+    if not player:
+        return "You need to register as a game master first!"
+
+    if player.role != Role.GAMEMASTER:
+        return "Only game masters can reset the game!"
+
+    from app.models import update_game_settings
+    from app.database import GameStatus
+
+    await update_game_settings(db, status=GameStatus.WAITING, started_at=None)
+
+    return "🔄 The game has been reset! Teams can now join again."

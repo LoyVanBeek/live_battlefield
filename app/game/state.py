@@ -239,3 +239,22 @@ class GameState:
         if len(survivors) == 1:
             return survivors[0]
         return None
+
+    def can_start(self, total_locations_needed: int = 33) -> bool:
+        if not self.teams:
+            return False
+        if len(self.location_codes) < total_locations_needed:
+            return False
+        for team in self.teams.values():
+            if not team.has_all_ships():
+                return False
+        return True
+
+    def is_started(self, game_status: str) -> bool:
+        return game_status == "started"
+
+    def is_waiting(self, game_status: str) -> bool:
+        return game_status == "waiting"
+
+    def is_ended(self, game_status: str) -> bool:
+        return game_status == "ended"

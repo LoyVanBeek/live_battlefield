@@ -24,6 +24,8 @@ from app.bot.handlers import (
     handle_locations_list,
     handle_register_gm,
     handle_create_locations,
+    handle_start_game,
+    handle_reset_game,
 )
 
 
@@ -37,7 +39,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/bomb <team_color> <coordinate> - Throw a bomb\n"
         "/code <location_number> <code> - Redeem a code\n"
         "/overview - View your boards\n"
-        "/locations - View all locations\n\n"
+        "/locations - View all locations\n"
+        "/startgame - Start the game (GM)\n"
+        "/resetgame - Reset the game (GM)\n\n"
         "Ship types: airplane_carrier, battleship, torpedo_hunter, patrol_boat\n"
         "Coordinates: A1-J10\n"
         "Directions: horizontal, vertical\n\n"
@@ -148,6 +152,18 @@ async def create_locations_handler(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text(result)
 
 
+async def start_game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async with async_session_maker() as db:
+        result = await handle_start_game(db, update, context)
+        await update.message.reply_text(result)
+
+
+async def reset_game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async with async_session_maker() as db:
+        result = await handle_reset_game(db, update, context)
+        await update.message.reply_text(result)
+
+
 async def location_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.location:
         return
@@ -182,6 +198,8 @@ def run_bot():
     app.add_handler(CommandHandler("locations", locations_handler))
     app.add_handler(CommandHandler("registergm", register_gm_handler))
     app.add_handler(CommandHandler("create_locations", create_locations_handler))
+    app.add_handler(CommandHandler("startgame", start_game_handler))
+    app.add_handler(CommandHandler("resetgame", reset_game_handler))
     app.add_handler(MessageHandler(filters.LOCATION, location_message_handler))
 
     print("Bot is running...")
