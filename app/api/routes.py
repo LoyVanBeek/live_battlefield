@@ -8,6 +8,7 @@ import os
 import math
 import random
 import string
+import asyncio
 
 from app.config import settings
 from app.models import get_all_events
@@ -18,8 +19,21 @@ from app.game.board import (
     render_private_board,
     boards_to_bytes,
 )
-from app.game.ships import SHIP_SIZES, SHIP_COUNTS, VALID_SHIP_TYPES
+from app.game.ships import (
+    SHIP_SIZES,
+    SHIP_COUNTS,
+    VALID_SHIP_TYPES,
+    coordinate_to_string,
+)
 from app.game.state import BombResult
+
+try:
+    from telegram import Bot
+
+    TELEGRAM_BOT_AVAILABLE = True
+except ImportError:
+    TELEGRAM_BOT_AVAILABLE = False
+    Bot = None
 
 api_engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
 api_session_maker = async_sessionmaker(
@@ -343,6 +357,29 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
         from app.models import add_event
 
         await add_event(db, EventType.BOMB_THROWN, payload)
+
+        # Send notification to target player
+        if TELEGRAM_BOT_AVAILABLE and settings.telegram_bot_token:
+            from app.models import get_player_by_color
+
+            target_player = await get_player_by_color(db, target_color)
+            if target_player and target_player.chat_id:
+                try:
+                    bot = Bot(token=settings.telegram_bot_token)
+                    coord_display = coordinate_to_string(row, col)
+
+                    if bomb_result == BombResult.HIT:
+                        notify_msg = f"💥 HIT! {team.name} ({cmd.team_color}) bombed you at {coord_display}!"
+                        if ship and ship.is_sunk():
+                            notify_msg += f" Your {ship.ship_type} was sunk!"
+                    else:
+                        notify_msg = f"💨 MISS! {team.name} ({cmd.team_color}) missed at {coord_display}!"
+
+                    await bot.send_message(
+                        chat_id=target_player.chat_id, text=notify_msg
+                    )
+                except Exception as e:
+                    print(f"Failed to send notification: {e}")
 
     elif cmd.command == "code":
         if cmd.team_color not in state.teams:

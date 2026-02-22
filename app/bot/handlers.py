@@ -215,11 +215,16 @@ async def handle_bomb(
     target_player = await get_player_by_color(db, target_color)
     if target_player:
         coord_str = coordinate_to_string(row, col)
-        hit_msg = (
-            f"💥 HIT! {attacker.name} ({attacker.color}) bombed you at {coord_str}!"
-        )
-        if ship and ship.is_sunk():
-            hit_msg += f" Your {ship.ship_type} was sunk!"
+        if result == BombResult.HIT:
+            hit_msg = (
+                f"💥 HIT! {attacker.name} ({attacker.color}) bombed you at {coord_str}!"
+            )
+            if ship and ship.is_sunk():
+                hit_msg += f" Your {ship.ship_type} was sunk!"
+        else:
+            hit_msg = (
+                f"💨 MISS! {attacker.name} ({attacker.color}) missed at {coord_str}!"
+            )
         await send_message(context, target_player.chat_id, hit_msg)
 
     if result == BombResult.HIT:
