@@ -275,6 +275,16 @@ async def handle_code(
     if location.code.upper() != code.upper():
         return "Invalid code! Please check the code at the location."
 
+    events = await get_all_events(db)
+    for event in events:
+        if event.event_type == EventType.CODE_REDEEMED:
+            payload = event.payload
+            if (
+                payload.get("color") == player.color
+                and payload.get("location_number") == location_number
+            ):
+                return "You've already visited this location!"
+
     team.bombs += 1
 
     await add_event(

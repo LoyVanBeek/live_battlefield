@@ -11,6 +11,7 @@ import string
 
 from app.config import settings
 from app.models import get_all_events
+from app.database import EventType
 from app.game.state import GameState, TEAM_COLORS
 from app.game.board import (
     render_all_public_boards,
@@ -226,6 +227,8 @@ async def get_game_state_png(db: AsyncSession = Depends(get_api_db)):
 
 @app.post("/api/execute")
 async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_api_db)):
+    from app.database import EventType
+
     events = await get_all_events(db)
     state = GameState.from_events(events)
 
@@ -358,6 +361,16 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
         if state.location_codes[location_num] != code.upper():
             result["message"] = "Invalid code!"
             return result
+
+        for event in events:
+            if event.event_type == EventType.CODE_REDEEMED:
+                payload = event.payload
+                if (
+                    payload.get("color") == cmd.team_color
+                    and payload.get("location_number") == location_num
+                ):
+                    result["message"] = "You've already visited this location!"
+                    return result
 
         team.bombs += 1
         result["success"] = True
