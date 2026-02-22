@@ -29,6 +29,12 @@ from app.bot.handlers import (
 )
 
 
+async def safe_reply(update: Update, text: str):
+    """Safely reply to an update, handling cases where message might be None"""
+    if update and update.message:
+        await update.message.reply_text(text)
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome to Live Battlefield!\n\n"
@@ -75,12 +81,12 @@ async def place_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session_maker() as db:
         result = await handle_place(db, update, context, ship_type, coord, direction)
         if result:
-            await update.message.reply_text(result)
+            await safe_reply(update, result)
 
 
 async def bomb_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 2:
-        await update.message.reply_text("Usage: /bomb <team_color> <coordinate>")
+        await safe_reply(update, "Usage: /bomb <team_color> <coordinate>")
         return
 
     target_color = context.args[0].lower()
@@ -89,25 +95,25 @@ async def bomb_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session_maker() as db:
         result = await handle_bomb(db, update, context, target_color, coord)
         if result:
-            await update.message.reply_text(result)
+            await safe_reply(update, result)
 
 
 async def code_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 2:
-        await update.message.reply_text("Usage: /code <location_number> <code>")
+        await safe_reply(update, "Usage: /code <location_number> <code>")
         return
 
     try:
         location_number = int(context.args[0])
     except ValueError:
-        await update.message.reply_text("Location number must be a number")
+        await safe_reply(update, "Location number must be a number")
         return
 
     code = context.args[1]
 
     async with async_session_maker() as db:
         result = await handle_code(db, update, context, location_number, code)
-        await update.message.reply_text(result)
+        await safe_reply(update, result)
 
 
 async def overview_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,19 +124,20 @@ async def overview_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def locations_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session_maker() as db:
         result = await handle_locations_list(db, update, context)
-        await update.message.reply_text(result)
+        await safe_reply(update, result)
 
 
 async def register_gm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session_maker() as db:
         result = await handle_register_gm(db, update, context)
-        await update.message.reply_text(result)
+        await safe_reply(update, result)
 
 
 async def create_locations_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 3:
-        await update.message.reply_text(
-            "Usage: /create_locations <count> <latitude> <longitude> [radius_km]"
+        await safe_reply(
+            update,
+            "Usage: /create_locations <count> <latitude> <longitude> [radius_km]",
         )
         return
 
@@ -140,8 +147,9 @@ async def create_locations_handler(update: Update, context: ContextTypes.DEFAULT
         longitude = float(context.args[2])
         radius = float(context.args[3]) if len(context.args) > 3 else 2.0
     except ValueError:
-        await update.message.reply_text(
-            "Invalid parameters. Usage: /create_locations <count> <latitude> <longitude> [radius_km]"
+        await safe_reply(
+            update,
+            "Invalid parameters. Usage: /create_locations <count> <latitude> <longitude> [radius_km]",
         )
         return
 
@@ -149,19 +157,19 @@ async def create_locations_handler(update: Update, context: ContextTypes.DEFAULT
         result = await handle_create_locations(
             db, update, context, count, latitude, longitude, radius
         )
-        await update.message.reply_text(result)
+        await safe_reply(update, result)
 
 
 async def start_game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session_maker() as db:
         result = await handle_start_game(db, update, context)
-        await update.message.reply_text(result)
+        await safe_reply(update, result)
 
 
 async def reset_game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session_maker() as db:
         result = await handle_reset_game(db, update, context)
-        await update.message.reply_text(result)
+        await safe_reply(update, result)
 
 
 async def location_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -174,7 +182,7 @@ async def location_message_handler(update: Update, context: ContextTypes.DEFAULT
 
     async with async_session_maker() as db:
         result = await handle_location(db, update, context, lat, lon, code)
-        await update.message.reply_text(result)
+        await safe_reply(update, result)
 
 
 async def post_init(application: Application):
