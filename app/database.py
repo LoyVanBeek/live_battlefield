@@ -1,4 +1,9 @@
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    create_async_engine,
+    async_sessionmaker,
+    AsyncEngine,
+)
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, JSON, Text
 from datetime import datetime
@@ -7,8 +12,28 @@ import enum
 from app.config import settings
 
 
-engine = create_async_engine(settings.database_url, echo=False)
-async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+_engine: AsyncEngine = None
+_async_session_maker = None
+
+
+def get_engine() -> AsyncEngine:
+    global _engine
+    if _engine is None:
+        _engine = create_async_engine(settings.database_url, echo=False)
+    return _engine
+
+
+def get_async_session_maker():
+    global _async_session_maker
+    if _async_session_maker is None:
+        _async_session_maker = async_sessionmaker(
+            get_engine(), class_=AsyncSession, expire_on_commit=False
+        )
+    return _async_session_maker
+
+
+engine = get_engine()
+async_session_maker = get_async_session_maker()
 
 
 class Base(DeclarativeBase):
