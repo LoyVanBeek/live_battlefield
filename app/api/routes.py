@@ -640,12 +640,12 @@ async def start_game(db: AsyncSession = Depends(get_api_db)):
 
 @app.get("/api/game-status")
 async def get_game_status(db: AsyncSession = Depends(get_api_db)):
-    from app.models import get_or_create_game_settings, get_all_locations
-    from app.game.state import GameState, get_all_events as get_events
+    from app.models import get_or_create_game_settings, get_all_locations, get_all_events
+    from app.game.state import GameState
 
     settings = await get_or_create_game_settings(db)
     locations = await get_all_locations(db)
-    events = await get_events(db)
+    events = await get_all_events(db)
     state = GameState.from_events(events)
 
     teams_with_all_ships = sum(
