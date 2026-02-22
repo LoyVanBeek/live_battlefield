@@ -36,7 +36,8 @@ async def safe_reply(update: Update, text: str):
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
+    await safe_reply(
+        update,
         "Welcome to Live Battlefield!\n\n"
         "Commands:\n"
         "/join <team_name> - Join the game\n"
@@ -47,12 +48,38 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/overview - View your boards\n"
         "/locations - View all locations\n"
         "/startgame - Start the game (GM)\n"
-        "/resetgame - Reset the game (GM)\n\n"
+        "/resetgame - Reset the game (GM)\n"
+        "/help - Show this help message\n\n"
         "Ship types: airplane_carrier, battleship, torpedo_hunter, patrol_boat\n"
         "Coordinates: A1-J10\n"
         "Directions: horizontal, vertical\n\n"
-        "Example: /place battleship B2 horizontal"
+        "Example: /place battleship B2 horizontal",
     )
+
+
+async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = """🎮 Live Battlefield - Commands
+
+📝 For Players:
+/join <team_name> - Join the game
+/place <ship_type> <coordinate> <direction> - Place a ship
+/bomb <team_color> <coordinate> - Throw a bomb
+/code <location_number> <code> - Redeem a location code
+/overview - View your boards
+/locations - View all locations
+
+👮 For Game Masters:
+/registergm - Register as game master
+/create_locations <count> <lat> <lon> [radius] - Create locations
+/startgame - Start the game
+/resetgame - Reset the game
+
+📋 Ship types: airplane_carrier (6), battleship (4), torpedo_hunter (3), patrol_boat (2)
+📍 Coordinates: A1-J10 (A-J columns, 1-10 rows)
+↔️ Directions: horizontal, vertical
+
+Example: /place battleship B2 horizontal"""
+    await safe_reply(update, help_text)
 
 
 async def join_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -198,6 +225,7 @@ def run_bot():
     )
 
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("help", help_handler))
     app.add_handler(CommandHandler("join", join_handler))
     app.add_handler(CommandHandler("place", place_handler))
     app.add_handler(CommandHandler("bomb", bomb_handler))
