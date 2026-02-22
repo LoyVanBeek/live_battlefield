@@ -380,24 +380,25 @@ async def quick_place_all_ships(
 
                     coord = coordinate_to_string(row, col)
                     placed.append(f"{ship_type} at {coord} {direction}")
+
+                    from app.models import add_event
+                    from app.database import EventType
+
+                    await add_event(
+                        db,
+                        EventType.SHIP_PLACED,
+                        {
+                            "color": action.team_color,
+                            "ship_type": ship_type,
+                            "row": row,
+                            "col": col,
+                            "direction": direction,
+                        },
+                    )
                     break
                 attempts += 1
             else:
                 failed.append(ship_type)
-
-    from app.models import add_event
-    from app.database import EventType
-
-    await add_event(
-        db,
-        EventType.SHIP_PLACED,
-        {
-            "color": action.team_color,
-            "quick_action": "place_all_ships",
-            "placed": placed,
-            "failed": failed,
-        },
-    )
 
     if failed:
         return {

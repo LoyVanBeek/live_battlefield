@@ -140,6 +140,12 @@ class GameState:
         return state
 
     def handle_team_joined(self, payload: dict) -> None:
+        if "quick_action" in payload:
+            color = payload.get("color")
+            if color and color in self.teams:
+                self.handle_quick_action(payload)
+            return
+
         if "name" not in payload or "color" not in payload:
             return
         color = payload["color"]
@@ -150,7 +156,32 @@ class GameState:
             bombs=payload.get("bombs", 3),
         )
 
+    def handle_quick_action(self, payload: dict) -> None:
+        quick_action = payload.get("quick_action")
+        color = payload.get("color")
+
+        if not color or color not in self.teams:
+            return
+
+        team = self.teams[color]
+
+        if quick_action == "add_bombs":
+            count = payload.get("count", 1)
+            team.bombs += count
+        elif quick_action == "reset_team":
+            team.ships = []
+            team.placed_ship_types = {}
+            team.private_board = [[False] * 10 for _ in range(10)]
+            team.public_board = [[None] * 10 for _ in range(10)]
+            team.bombed_cells = []
+        elif quick_action == "place_all_ships":
+            pass  # Ships are placed in the API, not replayed
+
     def handle_ship_placed(self, payload: dict) -> None:
+        if "quick_action" in payload:
+            self.handle_quick_action(payload)
+            return
+
         if "ship_type" not in payload or "color" not in payload:
             return
         color = payload["color"]
