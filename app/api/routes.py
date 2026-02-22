@@ -124,6 +124,46 @@ async def admin_page(request: Request):
     return templates.TemplateResponse("admin.html", {"request": request})
 
 
+@app.get("/admin/locations-secret", response_class=HTMLResponse)
+async def locations_page(request: Request):
+    return templates.TemplateResponse("locations.html", {"request": request})
+
+
+@app.get("/api/admin/locations")
+async def get_admin_locations(db: AsyncSession = Depends(get_api_db)):
+    from app.models import get_all_locations
+    from app.database import EventType
+
+    locations = await get_all_locations(db)
+    events = await get_all_events(db)
+
+    location_visits = {}
+    for event in events:
+        if event.event_type == EventType.CODE_REDEEMED:
+            payload = event.payload
+            location_num = payload.get("location_number")
+            color = payload.get("color")
+            if location_num and color:
+                if location_num not in location_visits:
+                    location_visits[location_num] = []
+                if color not in location_visits[location_num]:
+                    location_visits[location_num].append(color)
+
+    result = []
+    for loc in locations:
+        result.append(
+            {
+                "number": loc.number,
+                "code": loc.code,
+                "latitude": loc.latitude,
+                "longitude": loc.longitude,
+                "visited_by": location_visits.get(loc.number, []),
+            }
+        )
+
+    return {"locations": result}
+
+
 @app.get("/api/state")
 async def get_game_state(db: AsyncSession = Depends(get_api_db)):
     events = await get_all_events(db)
