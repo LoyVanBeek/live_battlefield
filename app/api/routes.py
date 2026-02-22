@@ -341,7 +341,6 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
         }
 
         from app.models import add_event
-        from app.database import EventType
 
         await add_event(db, EventType.BOMB_THROWN, payload)
 
