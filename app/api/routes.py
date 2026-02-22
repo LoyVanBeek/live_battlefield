@@ -555,3 +555,107 @@ async def create_locations(
         "message": f"Created {len(created)} locations!",
         "locations": created,
     }
+
+
+@app.post("/api/quick/reset-game")
+async def reset_game(db: AsyncSession = Depends(get_api_db)):
+    from app.models import delete_all_events
+    from app.database import GameStatus
+
+    count = await delete_all_events(db)
+    await update_game_settings(db, status=GameStatus.WAITING, started_at=None)
+
+    return {
+        "success": True,
+        "message": f"Game reset! Deleted {count} events. Teams can rejoin.",
+    }
+
+
+@app.post("/api/quick/clear-locations")
+async def clear_locations(db: AsyncSession = Depends(get_api_db)):
+    from app.models import delete_all_locations
+
+    count = await delete_all_locations(db)
+
+    return {
+        "success": True,
+        "message": f"Cleared {count} locations!",
+    }
+
+
+@app.post("/api/quick/reset-settings")
+async def reset_settings(db: AsyncSession = Depends(get_api_db)):
+    from app.models import reset_game_settings
+
+    settings = await reset_game_settings(db)
+
+    return {
+        "success": True,
+        "message": f"Settings reset! Status: {settings.status.value}, Locations needed: {settings.total_locations_needed}",
+    }
+
+
+@app.post("/api/quick/clear-players")
+async def clear_players(db: AsyncSession = Depends(get_api_db)):
+    from app.models import delete_all_players
+
+    count = await delete_all_players(db)
+
+    return {
+        "success": True,
+        "message": f"Cleared {count} teams!",
+    }
+
+
+async def update_game_settings(db: AsyncSession, **kwargs):
+    from app.models import get_or_create_game_settings
+    from app.database import GameSettings as DBGameSettings
+    
+    settings = await get_or_create_game_settings(db)
+    for key, value in kwargs.items():
+        if hasattr(settings, key):
+            setattr(settings, key, value)
+    await db.commit()
+    await db.refresh(settings)
+    return settings
+
+
+@app.post("/api/quick/start-game")
+async def start_game(db: AsyncSession = Depends(get_api_db)):
+    from app.models import get_or_create_game_settings
+    from app.database import GameStatus
+
+    settings = await get_or_create_game_settings(db)
+    
+    if settings.status == GameStatus.STARTED:
+        return {"success": False, "message": "Game has already started!"}
+    
+    if settings.status == GameStatus.ENDED:
+        return {"success": False, "message": "Game has ended! Reset first."}
+
+    await update_game_settings(db, status=GameStatus.STARTED)
+
+    return {"success": True, "message": "Game started! Teams can now bomb and redeem codes."}
+
+
+@app.get("/api/game-status")
+async def get_game_status(db: AsyncSession = Depends(get_api_db)):
+    from app.models import get_or_create_game_settings, get_all_locations
+    from app.game.state import GameState, get_all_events as get_events
+
+    settings = await get_or_create_game_settings(db)
+    locations = await get_all_locations(db)
+    events = await get_events(db)
+    state = GameState.from_events(events)
+
+    teams_with_all_ships = sum(
+        1 for team in state.teams.values() if team.has_all_ships()
+    )
+
+    return {
+        "status": settings.status.value,
+        "locations_placed": len(locations),
+        "total_locations_needed": settings.total_locations_needed,
+        "total_teams": len(state.teams),
+        "teams_with_all_ships": teams_with_all_ships,
+    }

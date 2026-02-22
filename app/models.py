@@ -8,7 +8,7 @@ from app.database import (
     GameSettings,
     GameStatus,
 )
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from datetime import datetime
@@ -121,6 +121,46 @@ async def update_game_settings(db: AsyncSession, **kwargs) -> GameSettings:
     for key, value in kwargs.items():
         if hasattr(settings, key):
             setattr(settings, key, value)
+    await db.commit()
+    await db.refresh(settings)
+    return settings
+
+
+async def delete_all_events(db: AsyncSession) -> int:
+    result = await db.execute(select(GameEvent))
+    events = result.scalars().all()
+    count = len(events)
+    for event in events:
+        await db.delete(event)
+    await db.commit()
+    return count
+
+
+async def delete_all_locations(db: AsyncSession) -> int:
+    result = await db.execute(select(Location))
+    locations = result.scalars().all()
+    count = len(locations)
+    for loc in locations:
+        await db.delete(loc)
+    await db.commit()
+    return count
+
+
+async def delete_all_players(db: AsyncSession) -> int:
+    result = await db.execute(select(Player).where(Player.role == Role.TEAM))
+    players = result.scalars().all()
+    count = len(players)
+    for player in players:
+        await db.delete(player)
+    await db.commit()
+    return count
+
+
+async def reset_game_settings(db: AsyncSession) -> GameSettings:
+    settings = await get_or_create_game_settings(db)
+    settings.status = GameStatus.WAITING
+    settings.total_locations_needed = 33
+    settings.started_at = None
     await db.commit()
     await db.refresh(settings)
     return settings
