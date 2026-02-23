@@ -153,7 +153,7 @@ class GameState:
             name=payload["name"],
             color=color,
             chat_id=payload.get("chat_id", 0),
-            bombs=payload.get("bombs", 3),
+            bombs=payload.get("bombs", 0),
         )
 
     def handle_quick_action(self, payload: dict) -> None:
