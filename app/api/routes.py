@@ -690,6 +690,27 @@ async def clear_players(db: AsyncSession = Depends(get_api_db)):
     }
 
 
+@app.post("/api/quick/clear-database")
+async def clear_database(db: AsyncSession = Depends(get_api_db)):
+    from app.models import (
+        delete_all_players,
+        delete_all_events,
+        delete_all_locations,
+        reset_game_settings,
+    )
+    from app.database import GameStatus
+
+    players_count = await delete_all_players(db)
+    events_count = await delete_all_events(db)
+    locations_count = await delete_all_locations(db)
+    await reset_game_settings(db)
+
+    return {
+        "success": True,
+        "message": f"Database cleared! Players: {players_count}, Events: {events_count}, Locations: {locations_count}. Settings reset.",
+    }
+
+
 async def update_game_settings(db: AsyncSession, **kwargs):
     from app.models import get_or_create_game_settings
     from app.database import GameSettings as DBGameSettings

@@ -236,6 +236,7 @@
                 <button class="btn btn-warning" onclick="clearLocations()">Clear Locations</button>
                 <button class="btn btn-warning" onclick="resetSettings()">Reset Settings</button>
                 <button class="btn btn-danger" onclick="clearPlayers()">Clear Players</button>
+                <button class="btn btn-danger" onclick="clearDatabase()">Clear Database</button>
             </div>
         </div>
 
@@ -495,6 +496,15 @@
             if (!confirm('Clear ALL teams/players? This cannot be undone!')) return;
             
             const result = await apiCall('/api/quick/clear-players', 'POST', {});
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function clearDatabase() {
+            if (!confirm('Clear ENTIRE database? This will delete ALL teams, events, locations, and reset settings. This cannot be undone!')) return;
+            if (!confirm('Are you REALLY sure? This will wipe everything!')) return;
+            
+            const result = await apiCall('/api/quick/clear-database', 'POST', {});
             showOutput(result.message, !result.success);
             await refreshAll();
         }
