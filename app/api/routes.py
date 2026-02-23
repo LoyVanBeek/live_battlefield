@@ -257,7 +257,7 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
 
         team_name = cmd.args.get("name", cmd.team_color)
         state.handle_team_joined(
-            {"name": team_name, "color": cmd.team_color, "chat_id": 999999, "bombs": 3}
+            {"name": team_name, "color": cmd.team_color, "chat_id": 999999, "bombs": 0}
         )
         result["success"] = True
         result["message"] = f"Joined {team_name} as {cmd.team_color} team!"
