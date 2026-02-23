@@ -82,6 +82,7 @@ class Location(Base):
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     code = Column(String(20), nullable=False)
+    bomb_value = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

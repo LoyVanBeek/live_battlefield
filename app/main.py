@@ -24,6 +24,7 @@ from app.bot.handlers import (
     handle_locations_list,
     handle_register_gm,
     handle_create_locations,
+    handle_set_location_bombs,
     handle_start_game,
     handle_reset_game,
 )
@@ -187,6 +188,32 @@ async def create_locations_handler(update: Update, context: ContextTypes.DEFAULT
         await safe_reply(update, result)
 
 
+async def set_location_bombs_handler(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+):
+    if len(context.args) < 2:
+        await safe_reply(
+            update, "Usage: /setlocationbombs <location_number> <bomb_count>"
+        )
+        return
+
+    try:
+        location_number = int(context.args[0])
+        bomb_count = int(context.args[1])
+    except ValueError:
+        await safe_reply(
+            update,
+            "Invalid parameters. Usage: /setlocationbombs <location_number> <bomb_count>",
+        )
+        return
+
+    async with async_session_maker() as db:
+        result = await handle_set_location_bombs(
+            db, update, context, location_number, bomb_count
+        )
+        await safe_reply(update, result)
+
+
 async def start_game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session_maker() as db:
         result = await handle_start_game(db, update, context)
@@ -234,6 +261,7 @@ def run_bot():
     app.add_handler(CommandHandler("locations", locations_handler))
     app.add_handler(CommandHandler("registergm", register_gm_handler))
     app.add_handler(CommandHandler("create_locations", create_locations_handler))
+    app.add_handler(CommandHandler("setlocationbombs", set_location_bombs_handler))
     app.add_handler(CommandHandler("startgame", start_game_handler))
     app.add_handler(CommandHandler("resetgame", reset_game_handler))
     app.add_handler(MessageHandler(filters.LOCATION, location_message_handler))

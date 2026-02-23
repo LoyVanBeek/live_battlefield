@@ -76,11 +76,11 @@ async def handle_join(
     await add_event(
         db,
         EventType.TEAM_JOINED,
-        {"name": team_name, "color": color, "chat_id": chat_id, "bombs": 3},
+        {"name": team_name, "color": color, "chat_id": chat_id, "bombs": 0},
         player.id,
     )
 
-    return f"Welcome {team_name}! You are the {color} team.\nYou have 3 bombs to start."
+    return f"Welcome {team_name}! You are the {color} team.\nYou have 0 bombs to start. Visit locations to earn bombs!"
 
 
 async def handle_place(
@@ -294,7 +294,7 @@ async def handle_code(
             ):
                 return "You've already visited this location!"
 
-    team.bombs += 1
+    team.bombs += location.bomb_value
 
     await add_event(
         db,
@@ -304,11 +304,12 @@ async def handle_code(
             "location_number": location_number,
             "code": code.upper(),
             "success": True,
+            "bombs_earned": location.bomb_value,
         },
         player.id,
     )
 
-    return f"Correct! +1 bomb added. You now have {team.bombs} bombs."
+    return f"Correct! +{location.bomb_value} bomb(s) added. You now have {team.bombs} bombs."
 
 
 async def handle_overview(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -392,11 +393,35 @@ async def handle_locations_list(db, update: Update, context: ContextTypes.DEFAUL
     if not locations:
         return "No locations have been added yet."
 
-    msg = "📍 Locations:\n"
+    # Calculate default bomb value
+    num_locations = len(locations)
+    default_bomb_value = max(1, 100 // num_locations)
+
+    # Send each location as an interactive Telegram location message
     for loc in locations:
-        msg += (
-            f"{loc.number}. https://maps.google.com/?q={loc.latitude},{loc.longitude}\n"
-        )
+        try:
+            await context.bot.send_location(
+                chat_id=chat_id,
+                latitude=loc.latitude,
+                longitude=loc.longitude,
+            )
+        except Exception as e:
+            print(f"Error sending location: {e}")
+
+    # Also send text with bomb values
+    msg = f"📍 {len(locations)} Locations (Worth {default_bomb_value} bombs each by default):\n"
+    for loc in locations:
+        bomb_val = loc.bomb_value if loc.bomb_value else default_bomb_value
+        if bomb_val != default_bomb_value:
+            msg += f"  • Location {loc.number}: {bomb_val} bombs\n"
+
+    if (
+        msg
+        == f"📍 {len(locations)} Locations (Worth {default_bomb_value} bombs each by default):\n"
+    ):
+        msg = f"📍 {len(locations)} Locations (Worth {default_bomb_value} bombs each)"
+    else:
+        msg += "\n💣 GM can override with /setlocationbombs"
 
     return msg
 
@@ -433,11 +458,26 @@ async def handle_create_locations(
     if player.role != Role.GAMEMASTER:
         return "Only game masters can create locations!"
 
+    # Check total locations won't exceed 100
+    from app.models import get_all_locations
+
+    existing_locations = await get_all_locations(db)
+    if len(existing_locations) + count > 100:
+        return f"Cannot create {count} locations! Would exceed 100 maximum. Current: {len(existing_locations)}"
+
     import random
     import string
 
     created = []
     from app.models import get_next_location_number
+
+    # Calculate default bomb value - total should equal 100
+    total_after = len(existing_locations) + count
+    default_bomb_value = max(1, 100 // total_after)
+
+    # Update ALL existing locations to have equal bomb values
+    for loc in existing_locations:
+        loc.bomb_value = default_bomb_value
 
     for i in range(count):
         lat_offset = random.uniform(-radius_km / 111, radius_km / 111)
@@ -452,20 +492,72 @@ async def handle_create_locations(
         code = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
 
         number = await get_next_location_number(db)
-        await create_location(db, number, lat, lon, code)
+
+        # Create location with default bomb value
+        from app.database import Location
+
+        new_location = Location(
+            number=number,
+            latitude=lat,
+            longitude=lon,
+            code=code,
+            bomb_value=default_bomb_value,
+        )
+        db.add(new_location)
 
         await add_event(
             db,
             EventType.LOCATION_ADDED,
-            {"number": number, "latitude": lat, "longitude": lon, "code": code},
+            {
+                "number": number,
+                "latitude": lat,
+                "longitude": lon,
+                "code": code,
+                "bomb_value": default_bomb_value,
+            },
         )
 
-        created.append(f"{number}. {code} - https://maps.google.com/?q={lat},{lon}")
+        created.append(f"{number}. {code} - Worth {default_bomb_value} bombs")
 
-    msg = f"✅ Created {count} locations around ({latitude}, {longitude}):\n"
+    await db.commit()
+
+    msg = f"✅ Created {count} locations around ({latitude}, {longitude}). Each worth {default_bomb_value} bombs (Total: 100):\n"
     msg += "\n".join(created)
+    msg += (
+        f"\n\nTotal locations: {total_after}. Bombs per location: {default_bomb_value}"
+    )
 
     return msg
+
+
+async def handle_set_location_bombs(
+    db,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    location_number: int,
+    bomb_count: int,
+):
+    chat_id = update.effective_chat.id
+
+    player = await get_player_by_chat(db, chat_id)
+    if not player:
+        return "You need to register as a game master first!"
+
+    if player.role != Role.GAMEMASTER:
+        return "Only game masters can set location bomb values!"
+
+    location = await get_location_by_number(db, location_number)
+    if not location:
+        return f"Location {location_number} does not exist!"
+
+    if bomb_count < 1:
+        return "Bomb count must be at least 1!"
+
+    # Update bomb value
+    location.bomb_value = bomb_count
+    await db.commit()
+
+    return f"✅ Location {location_number} now worth {bomb_count} bombs!"
 
 
 async def handle_start_game(db, update: Update, context: ContextTypes.DEFAULT_TYPE):

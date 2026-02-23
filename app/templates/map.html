@@ -197,6 +197,7 @@
                         const popupContent = `
                             <div class="popup-content">
                                 <h3>📍 Location #${loc.number}</h3>
+                                <p>💣 Worth: ${loc.bomb_value || 1} bombs</p>
                                 <p>${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}</p>
                                 <a href="https://maps.google.com/?q=${loc.latitude},${loc.longitude}" target="_blank">
                                     Open in Google Maps

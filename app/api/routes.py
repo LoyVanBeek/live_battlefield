@@ -87,6 +87,7 @@ async def get_public_locations(db: AsyncSession = Depends(get_api_db)):
                 "number": loc.number,
                 "latitude": loc.latitude,
                 "longitude": loc.longitude,
+                "bomb_value": loc.bomb_value,
             }
             for loc in locations
         ]
@@ -165,6 +166,7 @@ async def get_admin_locations(db: AsyncSession = Depends(get_api_db)):
                 "code": loc.code,
                 "latitude": loc.latitude,
                 "longitude": loc.longitude,
+                "bomb_value": loc.bomb_value,
                 "visited_by": location_visits.get(loc.number, []),
             }
         )
@@ -410,9 +412,15 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
                     result["message"] = "You've already visited this location!"
                     return result
 
-        team.bombs += 1
+        # Get location's bomb value
+        from app.models import get_location_by_number
+
+        location = await get_location_by_number(db, location_num)
+        bomb_value = location.bomb_value if location else 1
+
+        team.bombs += bomb_value
         result["success"] = True
-        result["message"] = f"Code redeemed! Bombs: {team.bombs}"
+        result["message"] = f"Code redeemed! +{bomb_value} bombs. Total: {team.bombs}"
 
     else:
         result["message"] = f"Unknown command: {cmd.command}"
@@ -425,6 +433,7 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
         if cmd.command == "place":
             await add_event(db, EventType.SHIP_PLACED, payload)
         elif cmd.command == "code":
+            payload["bombs_earned"] = bomb_value
             await add_event(db, EventType.CODE_REDEEMED, payload)
         elif cmd.command == "join":
             await add_event(db, EventType.TEAM_JOINED, payload)
@@ -563,6 +572,25 @@ class CreateLocations(BaseModel):
 async def create_locations(
     action: CreateLocations, db: AsyncSession = Depends(get_api_db)
 ):
+    from app.models import get_all_locations, get_next_location_number, add_event
+    from app.database import EventType, Location
+
+    # Check existing locations
+    existing_locations = await get_all_locations(db)
+    if len(existing_locations) + action.count > 100:
+        return {
+            "success": False,
+            "message": f"Cannot create {action.count} locations! Would exceed 100 maximum. Current: {len(existing_locations)}",
+        }
+
+    # Calculate default bomb value - total should equal 100
+    total_after = len(existing_locations) + action.count
+    default_bomb_value = max(1, 100 // total_after)
+
+    # Update ALL existing locations to have equal bomb values
+    for loc in existing_locations:
+        loc.bomb_value = default_bomb_value
+
     created = []
 
     for i in range(action.count):
@@ -577,27 +605,38 @@ async def create_locations(
 
         code = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
 
-        from app.models import create_location
-        from app.models import get_next_location_number
-
         number = await get_next_location_number(db)
-        await create_location(db, number, lat, lon, code)
 
-        from app.models import add_event
-        from app.database import EventType
+        new_location = Location(
+            number=number,
+            latitude=lat,
+            longitude=lon,
+            code=code,
+            bomb_value=default_bomb_value,
+        )
+        db.add(new_location)
 
         await add_event(
             db,
             EventType.LOCATION_ADDED,
-            {"number": number, "latitude": lat, "longitude": lon, "code": code},
+            {
+                "number": number,
+                "latitude": lat,
+                "longitude": lon,
+                "code": code,
+                "bomb_value": default_bomb_value,
+            },
         )
 
         created.append({"number": number, "code": code, "lat": lat, "lon": lon})
 
+    await db.commit()
+
     return {
         "success": True,
-        "message": f"Created {len(created)} locations!",
+        "message": f"Created {len(created)} locations! Each worth {default_bomb_value} bombs (Total: 100)",
         "locations": created,
+        "bomb_value": default_bomb_value,
     }
 
 
@@ -709,4 +748,34 @@ async def get_game_status(db: AsyncSession = Depends(get_api_db)):
         "total_locations_needed": settings.total_locations_needed,
         "total_teams": len(state.teams),
         "teams_with_all_ships": teams_with_all_ships,
+    }
+
+
+class SetLocationBombs(BaseModel):
+    location_number: int
+    bomb_value: int
+
+
+@app.post("/api/quick/set_location_bombs")
+async def set_location_bombs(
+    data: SetLocationBombs, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_location_by_number
+
+    location = await get_location_by_number(db, data.location_number)
+    if not location:
+        return {
+            "success": False,
+            "message": f"Location {data.location_number} does not exist!",
+        }
+
+    if data.bomb_value < 1:
+        return {"success": False, "message": "Bomb value must be at least 1!"}
+
+    location.bomb_value = data.bomb_value
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"Location {data.location_number} now worth {data.bomb_value} bombs!",
     }
