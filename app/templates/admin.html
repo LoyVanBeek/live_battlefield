@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Battlefield - Test Panel</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #00d9ff;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #16213e;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .team-select {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        select {
+            padding: 10px 15px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 2px solid #0f3460;
+            background: #1a1a2e;
+            color: #eee;
+            cursor: pointer;
+        }
+        select:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .btn {
+            padding: 10px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+        .btn-primary {
+            background: #00d9ff;
+            color: #1a1a2e;
+        }
+        .btn-primary:hover {
+            background: #00b8d4;
+        }
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #45a049;
+        }
+        .btn-warning {
+            background: #ff9800;
+            color: #1a1a2e;
+        }
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #da190b;
+        }
+        .boards-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .board-container {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .board-container h3 {
+            margin-bottom: 10px;
+            color: #00d9ff;
+        }
+        .board-container img {
+            max-width: 100%;
+            border-radius: 5px;
+        }
+        .quick-actions {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .quick-actions h3 {
+            margin-bottom: 10px;
+            color: #00d9ff;
+        }
+        .quick-actions .btn {
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        .commands {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .command-box {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .command-box h3 {
+            margin-bottom: 10px;
+            color: #00d9ff;
+        }
+        .command-box input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            border: 2px solid #0f3460;
+            border-radius: 5px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .command-box input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .command-box .btn {
+            width: 100%;
+        }
+        .command-box .input-row {
+            display: flex;
+            gap: 10px;
+        }
+        .command-box .input-row input {
+            flex: 1;
+        }
+        .output {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .output h3 {
+            margin-bottom: 10px;
+            color: #00d9ff;
+        }
+        #output-text {
+            font-family: monospace;
+            white-space: pre-wrap;
+            color: #4caf50;
+            min-height: 60px;
+        }
+        .team-info {
+            background: #0f3460;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .team-info .color-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🕵️ Live Battlefield Test Panel</h1>
+        
+        <div class="header">
+            <div class="team-select">
+                <label>Select Team:</label>
+                <select id="team-select">
+                    <option value="">-- Select Team --</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="refreshAll()">🔄 Refresh All</button>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <a href="/map" style="color: #4caf50; text-decoration: none; font-size: 14px; margin-right: 15px;">🗺️ View Map</a>
+            <a href="/admin/locations-secret" style="color: #00d9ff; text-decoration: none; font-size: 14px;">📍 View Locations (Secret)</a>
+        </div>
+
+        <div class="command-box" style="margin-bottom: 20px;">
+            <h3>🎮 Game Status: <span id="game-status">Loading...</span></h3>
+            <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 10px;">
+                <div>
+                    <label>Locations: <span id="loc-progress">0/33</span></label>
+                </div>
+                <div>
+                    <label>Teams with all ships: <span id="ship-progress">0/0</span></label>
+                </div>
+            </div>
+            <div class="input-row">
+                <input type="number" id="loc-count-setting" placeholder="Required locations" style="width: 150px;">
+                <button class="btn btn-primary" onclick="setLocationCount()">Set Location Count</button>
+            </div>
+            <div style="margin-top: 10px;">
+                <button class="btn btn-success" onclick="startGame()">Start Game</button>
+            </div>
+            <div style="margin-top: 10px;">
+                <button class="btn btn-danger" onclick="resetGame()">Reset Game (clear events)</button>
+                <button class="btn btn-warning" onclick="clearLocations()">Clear Locations</button>
+                <button class="btn btn-warning" onclick="resetSettings()">Reset Settings</button>
+                <button class="btn btn-danger" onclick="clearPlayers()">Clear Players</button>
+            </div>
+        </div>
+
+        <div id="team-info" class="team-info" style="display: none;">
+            <span id="team-name"></span>
+            <span>💣 Bombs: <span id="bomb-count">0</span></span>
+            <span>🚢 Ships: <span id="ship-count">0</span>/10</span>
+            <span>💥 Sunk: <span id="sunk-count">0</span></span>
+        </div>
+
+        <div class="boards-section">
+            <div class="board-container">
+                <h3>Your Private Board</h3>
+                <img id="private-board" src="" alt="Private board" style="display:none;">
+                <p id="private-board-msg" style="color: #888;">Select a team to view board</p>
+            </div>
+            <div class="board-container">
+                <h3>All Public Boards</h3>
+                <img id="public-board" src="/api/board/public.png" alt="Public boards">
+            </div>
+        </div>
+
+        <div class="quick-actions">
+            <h3>⚡ Quick Actions</h3>
+            <button class="btn btn-success" onclick="addBombs()">+5 Bombs</button>
+            <button class="btn btn-warning" onclick="placeAllShips()">Place All Ships</button>
+            <button class="btn btn-danger" onclick="resetTeam()">Reset Team</button>
+        </div>
+
+        <div class="command-box" style="margin-bottom: 20px;">
+            <h3>📍 Create Random Locations</h3>
+            <div class="input-row">
+                <input type="number" id="loc-count" placeholder="Count" value="10" style="width: 80px;">
+                <input type="number" id="loc-lat" placeholder="Latitude" step="0.0001">
+                <input type="number" id="loc-lon" placeholder="Longitude" step="0.0001">
+                <input type="number" id="loc-radius" placeholder="Radius km" value="2" style="width: 80px;">
+            </div>
+            <button class="btn btn-primary" onclick="createLocations()">Create Locations</button>
+        </div>
+
+        <div class="commands">
+            <div class="command-box">
+                <h3>/join</h3>
+                <input type="text" id="join-name" placeholder="Team name">
+                <button class="btn btn-primary" onclick="executeJoin()">Execute</button>
+            </div>
+            <div class="command-box">
+                <h3>/place</h3>
+                <div class="input-row">
+                    <select id="place-ship">
+                        <option value="airplane_carrier">airplane_carrier (6)</option>
+                        <option value="battleship">battleship (4)</option>
+                        <option value="torpedo_hunter">torpedo_hunter (3)</option>
+                        <option value="patrol_boat">patrol_boat (2)</option>
+                    </select>
+                    <input type="text" id="place-coord" placeholder="A1" style="width: 80px;">
+                    <select id="place-dir" style="width: 100px;">
+                        <option value="horizontal">horizontal</option>
+                        <option value="vertical">vertical</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="executePlace()">Execute</button>
+            </div>
+            <div class="command-box">
+                <h3>/bomb</h3>
+                <div class="input-row">
+                    <select id="bomb-target" style="width: 100px;">
+                        <option value="red">red</option>
+                        <option value="blue">blue</option>
+                        <option value="green">green</option>
+                        <option value="purple">purple</option>
+                        <option value="orange">orange</option>
+                        <option value="yellow">yellow</option>
+                    </select>
+                    <input type="text" id="bomb-coord" placeholder="A1">
+                </div>
+                <button class="btn btn-primary" onclick="executeBomb()">Execute</button>
+            </div>
+            <div class="command-box">
+                <h3>/code</h3>
+                <div class="input-row">
+                    <input type="number" id="code-loc" placeholder="Loc #" style="width: 80px;">
+                    <input type="text" id="code-val" placeholder="ABCD">
+                </div>
+                <button class="btn btn-primary" onclick="executeCode()">Execute</button>
+            </div>
+        </div>
+
+        <div class="output">
+            <h3>📤 Output</h3>
+            <div id="output-text">Ready...</div>
+        </div>
+    </div>
+
+    <script>
+        let currentState = null;
+
+        async function apiCall(url, method = 'GET', body = null) {
+            try {
+                const options = { method };
+                if (body) {
+                    options.headers = { 'Content-Type': 'application/json' };
+                    options.body = JSON.stringify(body);
+                }
+                const resp = await fetch(url, options);
+                if (!resp.ok) {
+                    return { success: false, message: `HTTP error: ${resp.status} ${resp.statusText}` };
+                }
+                return await resp.json();
+            } catch (error) {
+                return { success: false, message: `Network error: ${error.message}` };
+            }
+        }
+
+        async function loadState() {
+            const state = await apiCall('/api/state');
+            
+            // Check for errors
+            if (!state || !state.teams) {
+                console.error('Failed to load state:', state);
+                showOutput('Failed to load game state: ' + (state?.message || 'Unknown error'), true);
+                return;
+            }
+            
+            currentState = state;
+            
+            const select = document.getElementById('team-select');
+            select.innerHTML = '<option value="">-- Select Team --</option>';
+            
+            currentState.teams.forEach(team => {
+                const opt = document.createElement('option');
+                opt.value = team.color;
+                opt.textContent = `${team.name} (${team.color})`;
+                select.appendChild(opt);
+            });
+
+            currentState.available_colors.forEach(color => {
+                const opt = document.createElement('option');
+                opt.value = color;
+                opt.textContent = `[Join] ${color.toUpperCase()}`;
+                select.appendChild(opt);
+            });
+
+            const savedTeam = localStorage.getItem('selectedTeam');
+            if (savedTeam) {
+                select.value = savedTeam;
+                if (savedTeam) updateTeamView(savedTeam);
+            }
+        }
+
+        async function updateTeamView(color) {
+            localStorage.setItem('selectedTeam', color);
+            
+            const team = currentState?.teams?.find(t => t.color === color);
+            const infoDiv = document.getElementById('team-info');
+            
+            if (team) {
+                infoDiv.style.display = 'flex';
+                document.getElementById('team-name').innerHTML = `<span class="color-dot" style="background:${color}"></span>${team.name}`;
+                document.getElementById('bomb-count').textContent = team.bombs;
+                document.getElementById('ship-count').textContent = team.ships_placed;
+                document.getElementById('sunk-count').textContent = team.ships_sunk;
+                
+                document.getElementById('private-board').src = `/api/board/${color}/private.png`;
+                document.getElementById('private-board').style.display = 'block';
+                document.getElementById('private-board-msg').style.display = 'none';
+            } else {
+                infoDiv.style.display = 'none';
+                document.getElementById('private-board').style.display = 'none';
+                document.getElementById('private-board-msg').style.display = 'block';
+            }
+
+            document.getElementById('public-board').src = '/api/board/public.png?' + Date.now();
+        }
+
+        function showOutput(msg, isError = false) {
+            document.getElementById('output-text').textContent = msg;
+            document.getElementById('output-text').style.color = isError ? '#f44336' : '#4caf50';
+        }
+
+        async function loadGameStatus() {
+            try {
+                const resp = await fetch('/api/game-status');
+                if (!resp.ok) {
+                    console.error('Failed to load game status:', resp.status);
+                    return;
+                }
+                const status = await resp.json();
+                
+                if (!status) return;
+                
+                const statusEl = document.getElementById('game-status');
+                if (status.status === 'started') {
+                    statusEl.textContent = '🎮 STARTED';
+                    statusEl.style.color = '#4caf50';
+                } else if (status.status === 'ended') {
+                    statusEl.textContent = '🏁 ENDED';
+                    statusEl.style.color = '#f44336';
+                } else {
+                    statusEl.textContent = '⏳ WAITING';
+                    statusEl.style.color = '#ff9800';
+                }
+                
+                document.getElementById('loc-progress').textContent = 
+                    `${status.locations_placed}/${status.total_locations_needed}`;
+                document.getElementById('ship-progress').textContent = 
+                    `${status.teams_with_all_ships}/${status.total_teams}`;
+                document.getElementById('loc-count-setting').value = status.total_locations_needed;
+                
+                return status;
+            } catch (e) {
+                console.error('Error loading game status:', e);
+                return null;
+            }
+        }
+
+        async function setLocationCount() {
+            const count = parseInt(document.getElementById('loc-count-setting').value);
+            if (!count || count < 1) return showOutput('Enter a valid count!', true);
+            
+            const result = await apiCall('/api/quick/set-location-count', 'POST', { count });
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function startGame() {
+            const result = await apiCall('/api/quick/start-game', 'POST', {});
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function resetGame() {
+            if (!confirm('Reset the game? This will clear all events (ships, bombs) and allow new teams to join.')) return;
+            
+            const result = await apiCall('/api/quick/reset-game', 'POST', {});
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function clearLocations() {
+            if (!confirm('Clear ALL locations? This cannot be undone!')) return;
+            
+            const result = await apiCall('/api/quick/clear-locations', 'POST', {});
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function resetSettings() {
+            if (!confirm('Reset game settings to defaults?')) return;
+            
+            const result = await apiCall('/api/quick/reset-settings', 'POST', {});
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function clearPlayers() {
+            if (!confirm('Clear ALL teams/players? This cannot be undone!')) return;
+            
+            const result = await apiCall('/api/quick/clear-players', 'POST', {});
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function refreshAll() {
+            document.body.classList.add('loading');
+            try {
+                await loadGameStatus();
+                await loadState();
+                const select = document.getElementById('team-select');
+                if (select.value) await updateTeamView(select.value);
+                showOutput('Refreshed!');
+            } finally {
+                document.body.classList.remove('loading');
+            }
+        }
+
+        async function addBombs() {
+            const color = document.getElementById('team-select').value;
+            if (!color) return showOutput('Select a team first!', true);
+            
+            const result = await apiCall('/api/quick/add_bombs', 'POST', { team_color: color, count: 5 });
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function placeAllShips() {
+            const color = document.getElementById('team-select').value;
+            if (!color) return showOutput('Select a team first!', true);
+            
+            const result = await apiCall('/api/quick/place_all_ships', 'POST', { team_color: color });
+            showOutput(result.message, !result.success);
+            
+            // Update ship count from the response if available
+            if (result.ships_placed !== undefined) {
+                document.getElementById('ship-count').textContent = result.ships_placed;
+            }
+            
+            await refreshAll();
+        }
+
+        async function resetTeam() {
+            const color = document.getElementById('team-select').value;
+            if (!color) return showOutput('Select a team first!', true);
+            if (!confirm(`Reset team ${color}?`)) return;
+            
+            const result = await apiCall('/api/quick/reset_team', 'POST', { team_color: color });
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function createLocations() {
+            const count = parseInt(document.getElementById('loc-count').value) || 10;
+            const lat = parseFloat(document.getElementById('loc-lat').value);
+            const lon = parseFloat(document.getElementById('loc-lon').value);
+            const radius = parseFloat(document.getElementById('loc-radius').value) || 2;
+            
+            if (isNaN(lat) || isNaN(lon)) {
+                return showOutput('Enter latitude and longitude!', true);
+            }
+            
+            const result = await apiCall('/api/quick/create_locations', 'POST', {
+                count: count,
+                latitude: lat,
+                longitude: lon,
+                radius_km: radius
+            });
+            
+            if (result.success) {
+                let msg = result.message + '\n\n';
+                result.locations.forEach(loc => {
+                    msg += `${loc.number}. ${loc.code} - https://maps.google.com/?q=${loc.lat},${loc.lon}\n`;
+                });
+                showOutput(msg);
+            } else {
+                showOutput(result.message, true);
+            }
+            await refreshAll();
+        }
+
+        async function executeJoin() {
+            const color = document.getElementById('team-select').value;
+            const name = document.getElementById('join-name').value || color;
+            if (!color) return showOutput('Select a color first!', true);
+            
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: color,
+                command: 'join',
+                args: { name }
+            });
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function executePlace() {
+            const color = document.getElementById('team-select').value;
+            if (!color) return showOutput('Select a team first!', true);
+            
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: color,
+                command: 'place',
+                args: {
+                    ship_type: document.getElementById('place-ship').value,
+                    coordinate: document.getElementById('place-coord').value || 'A1',
+                    direction: document.getElementById('place-dir').value
+                }
+            });
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function executeBomb() {
+            const color = document.getElementById('team-select').value;
+            if (!color) return showOutput('Select a team first!', true);
+            
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: color,
+                command: 'bomb',
+                args: {
+                    target: document.getElementById('bomb-target').value,
+                    coordinate: document.getElementById('bomb-coord').value || 'A1'
+                }
+            });
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function executeCode() {
+            const color = document.getElementById('team-select').value;
+            if (!color) return showOutput('Select a team first!', true);
+            
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: color,
+                command: 'code',
+                args: {
+                    location_number: parseInt(document.getElementById('code-loc').value) || 1,
+                    code: document.getElementById('code-val').value
+                }
+            });
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        document.getElementById('team-select').addEventListener('change', (e) => {
+            if (e.target.value) updateTeamView(e.target.value);
+        });
+
+        // Handle Enter key to trigger actions
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                const focusedId = document.activeElement.id;
+                
+                // Map input IDs to action functions
+                const enterActions = {
+                    'loc-count-setting': setLocationCount,
+                    'loc-count': createLocations,
+                    'loc-lat': createLocations,
+                    'loc-lon': createLocations,
+                    'loc-radius': createLocations,
+                    'join-name': executeJoin,
+                    'place-coord': executePlace,
+                    'bomb-coord': executeBomb,
+                    'code-val': executeCode,
+                };
+                
+                const action = enterActions[focusedId];
+                if (action) {
+                    event.preventDefault();
+                    action();
+                }
+            }
+        });
+
+        loadGameStatus();
+        loadState();
+    </script>
+</body>
+</html>
