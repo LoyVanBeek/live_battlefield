@@ -294,7 +294,9 @@ async def handle_code(
             ):
                 return "You've already visited this location!"
 
-    team.bombs += location.bomb_value
+    # Use database bomb_value directly (source of truth)
+    bomb_value = location.bomb_value
+    team.bombs += bomb_value
 
     await add_event(
         db,
@@ -304,12 +306,12 @@ async def handle_code(
             "location_number": location_number,
             "code": code.upper(),
             "success": True,
-            "bombs_earned": location.bomb_value,
+            "bombs_earned": bomb_value,
         },
         player.id,
     )
 
-    return f"Correct! +{location.bomb_value} bomb(s) added. You now have {team.bombs} bombs."
+    return f"Correct! +{bomb_value} bomb(s) added. You now have {team.bombs} bombs."
 
 
 async def handle_overview(db, update: Update, context: ContextTypes.DEFAULT_TYPE):

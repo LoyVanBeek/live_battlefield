@@ -240,7 +240,7 @@ class GameState:
             payload["success"] = False
             return
 
-        self.teams[color].bombs += 1
+        self.teams[color].bombs += payload.get("bombs_earned", 1)
         payload["success"] = True
 
     def handle_location_added(self, payload: dict) -> None:

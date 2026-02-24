@@ -412,7 +412,7 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
                     result["message"] = "You've already visited this location!"
                     return result
 
-        # Get location's bomb value
+        # Get location's bomb value from database (source of truth)
         from app.models import get_location_by_number
 
         location = await get_location_by_number(db, location_num)
