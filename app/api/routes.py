@@ -12,7 +12,6 @@ import asyncio
 
 from app.config import settings
 from app.models import get_all_events
-from app.database import EventType
 from app.game.state import GameState, TEAM_COLORS
 from app.game.board import (
     render_all_public_boards,
@@ -26,6 +25,15 @@ from app.game.ships import (
     coordinate_to_string,
 )
 from app.game.state import BombResult
+from app.events import (
+    EventType,
+    TeamJoinedEvent,
+    ShipPlacedEvent,
+    BombThrownEvent,
+    CodeRedeemedEvent,
+    LocationAddedEvent,
+    save_event,
+)
 
 try:
     from telegram import Bot
@@ -356,9 +364,14 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
             "result": bomb_result.value,
         }
 
-        from app.models import add_event
-
-        await add_event(db, EventType.BOMB_THROWN, payload)
+        event = BombThrownEvent(
+            attacker_color=cmd.team_color,
+            target_color=target_color,
+            row=row_val,
+            col=col_val,
+            result=bomb_result.value,
+        )
+        await save_event(db, event)
 
         # Send notification to target player
         if TELEGRAM_BOT_AVAILABLE and settings.telegram_bot_token:
@@ -425,18 +438,33 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
     else:
         result["message"] = f"Unknown command: {cmd.command}"
 
-    from app.models import add_event
-    from app.database import EventType
-
     if result["success"]:
-        payload = {"color": cmd.team_color, "command": cmd.command, **cmd.args}
         if cmd.command == "place":
-            await add_event(db, EventType.SHIP_PLACED, payload)
+            event = ShipPlacedEvent(
+                color=cmd.team_color,
+                ship_type=cmd.args.get("ship_type", ""),
+                row=cmd.args.get("row", 0),
+                col=cmd.args.get("col", 0),
+                direction=cmd.args.get("direction", "horizontal"),
+            )
+            await save_event(db, event)
         elif cmd.command == "code":
-            payload["bombs_earned"] = bomb_value
-            await add_event(db, EventType.CODE_REDEEMED, payload)
+            event = CodeRedeemedEvent(
+                color=cmd.team_color,
+                location_number=location_num,
+                code=code,
+                success=True,
+                bombs_earned=bomb_value,
+            )
+            await save_event(db, event)
         elif cmd.command == "join":
-            await add_event(db, EventType.TEAM_JOINED, payload)
+            event = TeamJoinedEvent(
+                name=cmd.args.get("name", cmd.team_color),
+                color=cmd.team_color,
+                chat_id=999999,
+                bombs=0,
+            )
+            await save_event(db, event)
 
     return result
 
@@ -452,18 +480,14 @@ async def quick_add_bombs(action: QuickAction, db: AsyncSession = Depends(get_ap
     team = state.teams[action.team_color]
     team.bombs += action.count
 
-    from app.models import add_event
-    from app.database import EventType
-
-    await add_event(
-        db,
-        EventType.TEAM_JOINED,
-        {
-            "color": action.team_color,
-            "quick_action": "add_bombs",
-            "count": action.count,
-        },
+    event = TeamJoinedEvent(
+        color=action.team_color,
+        name=action.team_color,
+        chat_id=0,
+        quick_action="add_bombs",
+        count=action.count,
     )
+    await save_event(db, event)
 
     return {
         "success": True,
@@ -502,20 +526,14 @@ async def quick_place_all_ships(
                     coord = coordinate_to_string(row, col)
                     placed.append(f"{ship_type} at {coord} {direction}")
 
-                    from app.models import add_event
-                    from app.database import EventType
-
-                    await add_event(
-                        db,
-                        EventType.SHIP_PLACED,
-                        {
-                            "color": action.team_color,
-                            "ship_type": ship_type,
-                            "row": row,
-                            "col": col,
-                            "direction": direction,
-                        },
+                    event = ShipPlacedEvent(
+                        color=action.team_color,
+                        ship_type=ship_type,
+                        row=row,
+                        col=col,
+                        direction=direction,
                     )
+                    await save_event(db, event)
                     break
                 attempts += 1
             else:
@@ -549,14 +567,13 @@ async def quick_reset_team(action: QuickAction, db: AsyncSession = Depends(get_a
     team.public_board = [[None] * 10 for _ in range(10)]
     team.bombed_cells = []
 
-    from app.models import add_event
-    from app.database import EventType
-
-    await add_event(
-        db,
-        EventType.TEAM_JOINED,
-        {"color": action.team_color, "quick_action": "reset_team"},
+    event = TeamJoinedEvent(
+        color=action.team_color,
+        name=action.team_color,
+        chat_id=0,
+        quick_action="reset_team",
     )
+    await save_event(db, event)
 
     return {"success": True, "message": f"Reset team {action.team_color}!"}
 
@@ -572,8 +589,8 @@ class CreateLocations(BaseModel):
 async def create_locations(
     action: CreateLocations, db: AsyncSession = Depends(get_api_db)
 ):
-    from app.models import get_all_locations, get_next_location_number, add_event
-    from app.database import EventType, Location
+    from app.models import get_all_locations, get_next_location_number
+    from app.database import Location
 
     # Check existing locations
     existing_locations = await get_all_locations(db)
@@ -616,17 +633,14 @@ async def create_locations(
         )
         db.add(new_location)
 
-        await add_event(
-            db,
-            EventType.LOCATION_ADDED,
-            {
-                "number": number,
-                "latitude": lat,
-                "longitude": lon,
-                "code": code,
-                "bomb_value": default_bomb_value,
-            },
+        event = LocationAddedEvent(
+            number=number,
+            latitude=lat,
+            longitude=lon,
+            code=code,
+            bomb_value=default_bomb_value,
         )
+        await save_event(db, event)
 
         created.append({"number": number, "code": code, "lat": lat, "lon": lon})
 

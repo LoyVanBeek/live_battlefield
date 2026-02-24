@@ -1,4 +1,3 @@
-from app.database import EventType
 from app.game.ships import (
     SHIP_SIZES,
     SHIP_COUNTS,
@@ -12,6 +11,14 @@ from app.game.ships import (
 from dataclasses import dataclass, field
 from typing import Optional
 from enum import Enum
+from app.events.factory import create_events, _get_event_type_value
+from app.events.models import (
+    TeamJoinedEvent,
+    ShipPlacedEvent,
+    BombThrownEvent,
+    CodeRedeemedEvent,
+    LocationAddedEvent,
+)
 
 
 TEAM_COLORS = ["red", "blue", "green", "purple", "orange", "yellow"]
@@ -121,44 +128,42 @@ class GameState:
     @classmethod
     def from_events(cls, events: list) -> "GameState":
         state = cls()
+        typed_events = create_events(events)
 
-        for event in events:
-            event_type = event.event_type
-            payload = event.payload
+        for event in typed_events:
+            event_type_value = _get_event_type_value(event.event_type)
 
-            if event_type == EventType.TEAM_JOINED:
-                state.handle_team_joined(payload)
-            elif event_type == EventType.SHIP_PLACED:
-                state.handle_ship_placed(payload)
-            elif event_type == EventType.BOMB_THROWN:
-                state.handle_bomb_thrown(payload)
-            elif event_type == EventType.CODE_REDEEMED:
-                state.handle_code_redeemed(payload)
-            elif event_type == EventType.LOCATION_ADDED:
-                state.handle_location_added(payload)
+            if event_type_value == "team_joined":
+                state.handle_team_joined(event)
+            elif event_type_value == "ship_placed":
+                state.handle_ship_placed(event)
+            elif event_type_value == "bomb_thrown":
+                state.handle_bomb_thrown(event)
+            elif event_type_value == "code_redeemed":
+                state.handle_code_redeemed(event)
+            elif event_type_value == "location_added":
+                state.handle_location_added(event)
 
         return state
 
-    def handle_team_joined(self, payload: dict) -> None:
-        if "quick_action" in payload:
-            color = payload.get("color")
+    def handle_team_joined(self, event: TeamJoinedEvent) -> None:
+        if event.quick_action:
+            color = event.color
             if color and color in self.teams:
-                self.handle_quick_action(payload)
+                self.handle_quick_action(event)
             return
 
-        if "name" not in payload or "color" not in payload:
-            return
-        color = payload["color"]
+        color = event.color
         self.teams[color] = TeamState(
-            name=payload["name"],
+            name=event.name,
             color=color,
-            chat_id=payload.get("chat_id", 0),
-            bombs=payload.get("bombs", 0),
+            chat_id=event.chat_id,
+            bombs=event.bombs,
         )
 
-    def handle_quick_action(self, payload: dict) -> None:
-        quick_action = payload.get("quick_action")
-        color = payload.get("color")
+    def handle_quick_action(self, event) -> None:
+        quick_action = event.quick_action
+        color = event.color
 
         if not color or color not in self.teams:
             return
@@ -166,7 +171,7 @@ class GameState:
         team = self.teams[color]
 
         if quick_action == "add_bombs":
-            count = payload.get("count", 1)
+            count = getattr(event, "count", 1)
             team.bombs += count
         elif quick_action == "reset_team":
             team.ships = []
@@ -175,32 +180,24 @@ class GameState:
             team.public_board = [[None] * 10 for _ in range(10)]
             team.bombed_cells = []
         elif quick_action == "place_all_ships":
-            pass  # Ships are placed in the API, not replayed
+            pass
 
-    def handle_ship_placed(self, payload: dict) -> None:
-        if "quick_action" in payload:
-            self.handle_quick_action(payload)
+    def handle_ship_placed(self, event: ShipPlacedEvent) -> None:
+        if event.quick_action:
+            self.handle_quick_action(event)
             return
 
-        if "ship_type" not in payload or "color" not in payload:
-            return
-        color = payload["color"]
+        color = event.color
         if color not in self.teams:
             return
-
         team = self.teams[color]
-        team.place_ship(
-            payload["ship_type"], payload["row"], payload["col"], payload["direction"]
-        )
+        team.place_ship(event.ship_type, event.row, event.col, event.direction)
 
-    def handle_bomb_thrown(self, payload: dict) -> None:
-        required = ["attacker_color", "target_color", "row", "col"]
-        if not all(k in payload for k in required):
-            return
-        attacker_color = payload["attacker_color"]
-        target_color = payload["target_color"]
-        row = payload["row"]
-        col = payload["col"]
+    def handle_bomb_thrown(self, event: BombThrownEvent) -> None:
+        attacker_color = event.attacker_color
+        target_color = event.target_color
+        row = event.row
+        col = event.col
 
         if attacker_color not in self.teams:
             return
@@ -216,36 +213,33 @@ class GameState:
         attacker.bombs -= 1
         result, ship = target.receive_bomb(row, col, attacker_color)
 
-        payload["result"] = result.value
+        event.result = result.value
         if ship:
-            payload["ship_type"] = ship.ship_type
-            payload["ship_sunk"] = ship.is_sunk()
+            event.ship_type = ship.ship_type
+            event.ship_sunk = ship.is_sunk()
 
-    def handle_code_redeemed(self, payload: dict) -> None:
-        required = ["color", "location_number", "code"]
-        if not all(k in payload for k in required):
-            return
-        color = payload["color"]
-        location_number = payload["location_number"]
+    def handle_code_redeemed(self, event: CodeRedeemedEvent) -> None:
+        color = event.color
+        location_number = event.location_number
+        code = event.code
 
         if color not in self.teams:
             return
 
         if location_number not in self.location_codes:
-            payload["success"] = False
+            event.success = False
             return
 
-        code = payload["code"]
         if self.location_codes[location_number] != code:
-            payload["success"] = False
+            event.success = False
             return
 
-        self.teams[color].bombs += payload.get("bombs_earned", 1)
-        payload["success"] = True
+        self.teams[color].bombs += event.bombs_earned
+        event.success = True
 
-    def handle_location_added(self, payload: dict) -> None:
-        number = payload["number"]
-        code = payload["code"]
+    def handle_location_added(self, event: LocationAddedEvent) -> None:
+        number = event.number
+        code = event.code
         self.location_codes[number] = code
         if number > self.location_counter:
             self.location_counter = number

@@ -12,7 +12,7 @@ from app.game.board import (
     render_private_board,
     boards_to_bytes,
 )
-from app.database import EventType, Role
+from app.database import Role
 from app.models import (
     get_player_by_chat,
     get_player_by_id,
@@ -20,12 +20,20 @@ from app.models import (
     create_player,
     get_all_teams,
     get_all_game_masters,
-    add_event,
     get_all_events,
     get_location_by_number,
     create_location,
     get_next_location_number,
     get_all_locations,
+)
+from app.events import (
+    EventType,
+    TeamJoinedEvent,
+    ShipPlacedEvent,
+    BombThrownEvent,
+    CodeRedeemedEvent,
+    LocationAddedEvent,
+    save_event,
 )
 from app.bot.helpers import send_message, send_photo
 from telegram import Update
@@ -73,12 +81,8 @@ async def handle_join(
 
     player = await create_player(db, team_name, color, chat_id)
 
-    await add_event(
-        db,
-        EventType.TEAM_JOINED,
-        {"name": team_name, "color": color, "chat_id": chat_id, "bombs": 0},
-        player.id,
-    )
+    event = TeamJoinedEvent(name=team_name, color=color, chat_id=chat_id, bombs=0)
+    await save_event(db, event)
 
     return f"Welcome {team_name}! You are the {color} team.\nYou have 0 bombs to start. Visit locations to earn bombs!"
 
@@ -123,18 +127,14 @@ async def handle_place(
     if not success:
         return "Cannot place ship there! Check boundaries and that ships don't touch."
 
-    await add_event(
-        db,
-        EventType.SHIP_PLACED,
-        {
-            "color": player.color,
-            "ship_type": ship_type,
-            "row": row,
-            "col": col,
-            "direction": direction,
-        },
-        player.id,
+    event = ShipPlacedEvent(
+        color=player.color,
+        ship_type=ship_type,
+        row=row,
+        col=col,
+        direction=direction,
     )
+    await save_event(db, event)
 
     img = render_private_board(team)
     img_bytes = boards_to_bytes(img)
@@ -199,18 +199,14 @@ async def handle_bomb(
     attacker.bombs -= 1
     result, ship = target.receive_bomb(row, col, player.color)
 
-    await add_event(
-        db,
-        EventType.BOMB_THROWN,
-        {
-            "attacker_color": player.color,
-            "target_color": target_color,
-            "row": row,
-            "col": col,
-            "result": result.value,
-        },
-        player.id,
+    event = BombThrownEvent(
+        attacker_color=player.color,
+        target_color=target_color,
+        row=row,
+        col=col,
+        result=result.value,
     )
+    await save_event(db, event)
 
     target_player = await get_player_by_color(db, target_color)
     if target_player:
@@ -294,22 +290,17 @@ async def handle_code(
             ):
                 return "You've already visited this location!"
 
-    # Use database bomb_value directly (source of truth)
     bomb_value = location.bomb_value
     team.bombs += bomb_value
 
-    await add_event(
-        db,
-        EventType.CODE_REDEEMED,
-        {
-            "color": player.color,
-            "location_number": location_number,
-            "code": code.upper(),
-            "success": True,
-            "bombs_earned": bomb_value,
-        },
-        player.id,
+    event = CodeRedeemedEvent(
+        color=player.color,
+        location_number=location_number,
+        code=code.upper(),
+        success=True,
+        bombs_earned=bomb_value,
     )
+    await save_event(db, event)
 
     return f"Correct! +{bomb_value} bomb(s) added. You now have {team.bombs} bombs."
 
@@ -372,17 +363,13 @@ async def handle_location(
 
     await create_location(db, number, latitude, longitude, location_code)
 
-    await add_event(
-        db,
-        EventType.LOCATION_ADDED,
-        {
-            "number": number,
-            "latitude": latitude,
-            "longitude": longitude,
-            "code": location_code,
-        },
-        player.id,
+    event = LocationAddedEvent(
+        number=number,
+        latitude=latitude,
+        longitude=longitude,
+        code=location_code,
     )
+    await save_event(db, event)
 
     return f"Location {number} added!\nCode: {location_code}\nhttps://maps.google.com/?q={latitude},{longitude}"
 
@@ -507,17 +494,14 @@ async def handle_create_locations(
         )
         db.add(new_location)
 
-        await add_event(
-            db,
-            EventType.LOCATION_ADDED,
-            {
-                "number": number,
-                "latitude": lat,
-                "longitude": lon,
-                "code": code,
-                "bomb_value": default_bomb_value,
-            },
+        event = LocationAddedEvent(
+            number=number,
+            latitude=lat,
+            longitude=lon,
+            code=code,
+            bomb_value=default_bomb_value,
         )
+        await save_event(db, event)
 
         created.append(f"{number}. {code} - Worth {default_bomb_value} bombs")
 

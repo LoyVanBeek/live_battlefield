@@ -7,6 +7,13 @@ from app.game.ships import (
     SHIP_COUNTS,
 )
 from app.game.state import GameState, BombResult, TeamState
+from app.events.models import (
+    TeamJoinedEvent,
+    ShipPlacedEvent,
+    BombThrownEvent,
+    CodeRedeemedEvent,
+    LocationAddedEvent,
+)
 
 
 class TestCoordinateParsing:
@@ -151,9 +158,8 @@ class TestTeamState:
 class TestGameState:
     def test_team_joined(self):
         state = GameState()
-        state.handle_team_joined(
-            {"name": "Team A", "color": "red", "chat_id": 123, "bombs": 3}
-        )
+        event = TeamJoinedEvent(name="Team A", color="red", chat_id=123, bombs=3)
+        state.handle_team_joined(event)
 
         assert "red" in state.teams
         assert state.teams["red"].name == "Team A"
@@ -164,9 +170,8 @@ class TestGameState:
 
         assert state.get_next_color() == "red"
 
-        state.handle_team_joined(
-            {"name": "Team A", "color": "red", "chat_id": 123, "bombs": 3}
-        )
+        event = TeamJoinedEvent(name="Team A", color="red", chat_id=123, bombs=3)
+        state.handle_team_joined(event)
 
         assert state.get_next_color() == "blue"
 
@@ -175,9 +180,8 @@ class TestGameState:
 
         assert state.is_team_name_taken("Team A") == False
 
-        state.handle_team_joined(
-            {"name": "Team A", "color": "red", "chat_id": 123, "bombs": 3}
-        )
+        event = TeamJoinedEvent(name="Team A", color="red", chat_id=123, bombs=3)
+        state.handle_team_joined(event)
 
         assert state.is_team_name_taken("Team A") == True
         assert state.is_team_name_taken("team a") == True
@@ -185,41 +189,38 @@ class TestGameState:
 
     def test_bomb_thrown(self):
         state = GameState()
-        state.handle_team_joined(
-            {"name": "Team A", "color": "red", "chat_id": 123, "bombs": 5}
+        event1 = TeamJoinedEvent(name="Team A", color="red", chat_id=123, bombs=5)
+        state.handle_team_joined(event1)
+        event2 = TeamJoinedEvent(name="Team B", color="blue", chat_id=456, bombs=3)
+        state.handle_team_joined(event2)
+        ship_event = ShipPlacedEvent(
+            color="blue",
+            ship_type="patrol_boat",
+            row=0,
+            col=0,
+            direction="horizontal",
         )
-        state.handle_team_joined(
-            {"name": "Team B", "color": "blue", "chat_id": 456, "bombs": 3}
-        )
-        state.handle_ship_placed(
-            {
-                "color": "blue",
-                "ship_type": "patrol_boat",
-                "row": 0,
-                "col": 0,
-                "direction": "horizontal",
-            }
-        )
+        state.handle_ship_placed(ship_event)
 
-        state.handle_bomb_thrown(
-            {"attacker_color": "red", "target_color": "blue", "row": 0, "col": 0}
+        bomb_event = BombThrownEvent(
+            attacker_color="red", target_color="blue", row=0, col=0
         )
+        state.handle_bomb_thrown(bomb_event)
 
         assert state.teams["red"].bombs == 4
         assert state.teams["blue"].public_board[0][0] == ("red", True)
 
     def test_code_redeemed(self):
         state = GameState()
-        state.handle_team_joined(
-            {"name": "Team A", "color": "red", "chat_id": 123, "bombs": 3}
+        event = TeamJoinedEvent(name="Team A", color="red", chat_id=123, bombs=3)
+        state.handle_team_joined(event)
+        loc_event = LocationAddedEvent(
+            number=1, latitude=52.0, longitude=5.0, code="ABCD"
         )
-        state.handle_location_added(
-            {"number": 1, "latitude": 52.0, "longitude": 5.0, "code": "ABCD"}
-        )
+        state.handle_location_added(loc_event)
 
-        state.handle_code_redeemed(
-            {"color": "red", "location_number": 1, "code": "ABCD"}
-        )
+        code_event = CodeRedeemedEvent(color="red", location_number=1, code="ABCD")
+        state.handle_code_redeemed(code_event)
 
         assert state.teams["red"].bombs == 4
 
@@ -264,6 +265,7 @@ class TestPlaceAllShips:
     def test_place_all_ships_algorithm(self):
         """Test that the random placement algorithm can place all ships"""
         import random
+
         random.seed(42)  # For reproducible tests
 
         from app.game.ships import SHIP_COUNTS
@@ -294,7 +296,9 @@ class TestPlaceAllShips:
 
         # With 5000 attempts, all ships should be placeable
         assert len(failed) == 0, f"Failed to place: {failed}"
-        assert len(placed) == sum(SHIP_COUNTS.values()), f"Expected {sum(SHIP_COUNTS.values())} ships, placed {len(placed)}"
+        assert len(placed) == sum(SHIP_COUNTS.values()), (
+            f"Expected {sum(SHIP_COUNTS.values())} ships, placed {len(placed)}"
+        )
 
         # Verify all ships are placed correctly
         assert team.has_all_ships() == True
@@ -320,20 +324,21 @@ class TestPlaceAllShips:
         """Test that the endpoint returns success: False when placement fails"""
         # This test simulates what happens when placement fails
         # by using an impossible scenario (too few attempts)
-        
+
         # We'll test that the algorithm correctly identifies failures
         import random
+
         random.seed(42)
-        
+
         team = TeamState(name="Test", color="red", chat_id=123)
-        
+
         # Try to place with ONLY 1 attempt per ship - this will definitely fail
         # because the 10x10 board with no-touching rule is very constrained
         placed = []
         failed = []
-        
+
         from app.game.ships import SHIP_COUNTS
-        
+
         for ship_type, count in SHIP_COUNTS.items():
             for i in range(count):
                 attempts = 0
@@ -342,27 +347,30 @@ class TestPlaceAllShips:
                     row = 0
                     col = 0
                     direction = "horizontal"
-                    
+
                     if team.place_ship(ship_type, row, col, direction):
                         placed.append(ship_type)
                         placed_ship = True
                         break
                     attempts += 1
-                
+
                 if not placed_ship:
                     failed.append(ship_type)
-        
+
         # With only 1 attempt, many ships should fail to place
         # The return value should indicate failure
         result_success = len(failed) == 0  # This is what the API checks
-        
-        # This test documents the expected behavior: 
+
+        # This test documents the expected behavior:
         # when ships fail to place, success should be False
-        assert result_success == False or len(failed) > 0, "Expected some ships to fail with only 1 attempt"
+        assert result_success == False or len(failed) > 0, (
+            "Expected some ships to fail with only 1 attempt"
+        )
 
     def test_place_all_ships_returns_ships_placed_count(self):
         """Test that the endpoint returns ships_placed count in the response"""
         import random
+
         random.seed(42)
 
         from app.game.ships import SHIP_COUNTS
@@ -393,7 +401,7 @@ class TestPlaceAllShips:
 
         # Simulate the API response format
         ships_placed_count = sum(team.placed_ship_types.values())
-        
+
         if failed:
             response = {
                 "success": False,
@@ -410,7 +418,7 @@ class TestPlaceAllShips:
         # Verify the response contains ships_placed
         assert "ships_placed" in response
         assert response["ships_placed"] == ships_placed_count
-        
+
         # When all ships placed, success should be True
         assert response["success"] == True
         assert response["ships_placed"] == sum(SHIP_COUNTS.values())
@@ -434,7 +442,7 @@ class TestPlaceAllShips:
                     failed2.append(ship_type)
 
         ships_placed2 = sum(team2.placed_ship_types.values())
-        
+
         if failed2:
             response2 = {
                 "success": False,
