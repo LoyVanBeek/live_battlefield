@@ -32,6 +32,8 @@ from app.events import (
     BombThrownEvent,
     CodeRedeemedEvent,
     LocationAddedEvent,
+    BombsAddedEvent,
+    TeamResetEvent,
     save_event,
 )
 
@@ -477,18 +479,15 @@ async def quick_add_bombs(action: QuickAction, db: AsyncSession = Depends(get_ap
     if action.team_color not in state.teams:
         return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
 
-    team = state.teams[action.team_color]
-    team.bombs += action.count
-
-    event = TeamJoinedEvent(
+    event = BombsAddedEvent(
         color=action.team_color,
-        name=action.team_color,
-        chat_id=0,
-        quick_action="add_bombs",
-        count=action.count,
+        count=action.count or 1,
     )
+    new_state, updated_event = event.apply(state)
+
     await save_event(db, event)
 
+    team = new_state.teams[action.team_color]
     return {
         "success": True,
         "message": f"Added {action.count} bombs. Total: {team.bombs}",
@@ -560,19 +559,11 @@ async def quick_reset_team(action: QuickAction, db: AsyncSession = Depends(get_a
     if action.team_color not in state.teams:
         return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
 
-    team = state.teams[action.team_color]
-    team.ships = []
-    team.placed_ship_types = {}
-    team.private_board = [[False] * 10 for _ in range(10)]
-    team.public_board = [[None] * 10 for _ in range(10)]
-    team.bombed_cells = []
-
-    event = TeamJoinedEvent(
+    event = TeamResetEvent(
         color=action.team_color,
-        name=action.team_color,
-        chat_id=0,
-        quick_action="reset_team",
     )
+    new_state, updated_event = event.apply(state)
+
     await save_event(db, event)
 
     return {"success": True, "message": f"Reset team {action.team_color}!"}

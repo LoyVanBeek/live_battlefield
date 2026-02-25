@@ -6,6 +6,8 @@ from app.events.models import (
     BombThrownEvent,
     CodeRedeemedEvent,
     LocationAddedEvent,
+    BombsAddedEvent,
+    TeamResetEvent,
 )
 
 
@@ -491,39 +493,30 @@ class TestEventSequences:
             "blue"
         ].public_board[0][1] == ("red", False)
 
-    def test_quick_action_add_bombs(self):
-        """Quick action to add bombs to a team."""
+    def test_bombs_added_event(self):
+        """Add bombs to a team using BombsAddedEvent."""
         events = [
             TeamJoinedEvent(name="Team A", color="red", chat_id=1, bombs=5),
-            TeamJoinedEvent(
-                name="Team B",
-                color="red",
-                chat_id=1,
-                bombs=3,
-                quick_action="add_bombs",
-                count=10,
-            ),
+            BombsAddedEvent(color="red", count=10),
         ]
 
         state = create_full_game_state(events)
 
         assert state.teams["red"].bombs == 15
 
-    def test_quick_action_add_bombs_default_count(self):
-        """Quick action add_bombs uses default count of 1."""
+    def test_bombs_added_default_count(self):
+        """BombsAddedEvent uses default count of 1."""
         events = [
             TeamJoinedEvent(name="Team A", color="red", chat_id=1, bombs=5),
-            TeamJoinedEvent(
-                name="Team B", color="red", chat_id=1, bombs=3, quick_action="add_bombs"
-            ),
+            BombsAddedEvent(color="red"),
         ]
 
         state = create_full_game_state(events)
 
         assert state.teams["red"].bombs == 6
 
-    def test_quick_action_reset_team(self):
-        """Quick action to reset a team's state."""
+    def test_team_reset_event(self):
+        """Reset a team's state using TeamResetEvent."""
         events = [
             TeamJoinedEvent(name="Team A", color="red", chat_id=1, bombs=10),
             ShipPlacedEvent(
@@ -539,60 +532,27 @@ class TestEventSequences:
                 row=2,
                 col=0,
                 direction="horizontal",
-                quick_action="reset_team",
             ),
+            TeamResetEvent(color="red"),
         ]
 
         state = create_full_game_state(events)
 
-        assert state.teams["red"].bombs == 10
+        assert state.teams["red"].bombs == 3  # default
         assert len(state.teams["red"].ships) == 0
         assert state.teams["red"].placed_ship_types == {}
 
-    def test_quick_action_reset_team_with_ship_placed_event(self):
-        """Quick action reset_team via ShipPlacedEvent."""
-        events = [
-            TeamJoinedEvent(name="Team A", color="red", chat_id=1, bombs=10),
-            ShipPlacedEvent(
-                color="red",
-                ship_type="patrol_boat",
-                row=0,
-                col=0,
-                direction="horizontal",
-            ),
-            ShipPlacedEvent(
-                color="red",
-                ship_type="battleship",
-                row=2,
-                col=0,
-                direction="horizontal",
-                quick_action="reset_team",
-            ),
-        ]
-
-        state = create_full_game_state(events)
-
-        assert len(state.teams["red"].ships) == 0
-        assert state.teams["red"].bombs == 10
-
-    def test_quick_action_ignore_invalid_color(self):
-        """Quick action for non-existent team is ignored."""
+    def test_bombs_added_nonexistent_team(self):
+        """BombsAddedEvent for non-existent team is ignored."""
         events = [
             TeamJoinedEvent(name="Team A", color="red", chat_id=1, bombs=5),
-            TeamJoinedEvent(
-                name="Team B",
-                color="blue",
-                chat_id=2,
-                bombs=3,
-                quick_action="add_bombs",
-                count=10,
-            ),
+            BombsAddedEvent(color="blue", count=10),
         ]
 
         state = create_full_game_state(events)
 
-        assert "red" in state.teams
         assert "blue" not in state.teams
+        assert state.teams["red"].bombs == 5
 
     def test_ship_placement_success_event(self):
         """Ship placed event returns success=True when placement succeeds."""

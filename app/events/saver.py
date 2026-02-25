@@ -7,6 +7,8 @@ from app.events.models import (
     BombThrownEvent,
     CodeRedeemedEvent,
     LocationAddedEvent,
+    BombsAddedEvent,
+    TeamResetEvent,
 )
 
 
@@ -18,6 +20,8 @@ async def save_event(
         BombThrownEvent,
         CodeRedeemedEvent,
         LocationAddedEvent,
+        BombsAddedEvent,
+        TeamResetEvent,
     ],
 ) -> GameEvent:
     game_event = event.to_game_event()

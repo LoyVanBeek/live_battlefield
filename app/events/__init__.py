@@ -5,6 +5,8 @@ from app.events.models import (
     BombThrownEvent,
     CodeRedeemedEvent,
     LocationAddedEvent,
+    BombsAddedEvent,
+    TeamResetEvent,
 )
 from app.events.factory import create_event, create_events
 from app.events.saver import save_event

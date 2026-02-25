@@ -160,6 +160,7 @@ class TeamState:
     def with_reset(self) -> "TeamState":
         return _copy_team(
             self,
+            bombs=3,
             ships=[],
             placed_ship_types={},
             private_board=[[False] * 10 for _ in range(10)],

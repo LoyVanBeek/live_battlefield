@@ -14,29 +14,9 @@ class TeamJoinedEvent:
     color: str = ""
     chat_id: int = 0
     bombs: int = 0
-    quick_action: Optional[str] = None
-    count: Optional[int] = None
 
     def apply(self, state: "GameState") -> tuple["GameState", "TeamJoinedEvent"]:
         from app.game.state import TeamState
-
-        if self.quick_action:
-            color = self.color
-            if color and color in state.teams:
-                new_teams = dict(state.teams)
-                team = new_teams[color]
-
-                if self.quick_action == "add_bombs":
-                    count = self.count if self.count is not None else 1
-                    new_teams[color] = team.with_bombs(team.bombs + count)
-                elif self.quick_action == "reset_team":
-                    new_teams[color] = team.with_reset()
-                elif self.quick_action == "place_all_ships":
-                    pass
-
-                return replace(state, teams=new_teams), self
-
-            return state, self
 
         color = self.color
         if color in state.teams:
@@ -59,8 +39,6 @@ class TeamJoinedEvent:
                 "color": self.color,
                 "chat_id": self.chat_id,
                 "bombs": self.bombs,
-                "quick_action": self.quick_action,
-                "count": self.count,
             },
             player_id=player_id,
         )
@@ -74,26 +52,10 @@ class ShipPlacedEvent:
     row: int = 0
     col: int = 0
     direction: str = ""
-    quick_action: Optional[str] = None
     success: bool = False
 
     def apply(self, state: "GameState") -> tuple["GameState", "ShipPlacedEvent"]:
         from app.game.state import TeamState
-
-        if self.quick_action:
-            color = self.color
-            if color and color in state.teams:
-                new_teams = dict(state.teams)
-                team = new_teams[color]
-
-                if self.quick_action == "reset_team":
-                    new_teams[color] = team.with_reset()
-                elif self.quick_action == "place_all_ships":
-                    pass
-
-                return replace(state, teams=new_teams), self
-
-            return state, self
 
         color = self.color
         if color not in state.teams:
@@ -119,7 +81,6 @@ class ShipPlacedEvent:
                 "row": self.row,
                 "col": self.col,
                 "direction": self.direction,
-                "quick_action": self.quick_action,
                 "success": self.success,
             },
             player_id=player_id,
@@ -272,6 +233,68 @@ class LocationAddedEvent:
                 "longitude": self.longitude,
                 "code": self.code,
                 "bomb_value": self.bomb_value,
+            },
+            player_id=player_id,
+        )
+
+
+@dataclass
+class BombsAddedEvent:
+    event_type: EventType = EventType.BOMBS_ADDED
+    color: str = ""
+    count: int = 1
+    success: bool = False
+
+    def apply(self, state: "GameState") -> tuple["GameState", "BombsAddedEvent"]:
+        from app.game.state import TeamState
+
+        color = self.color
+        if color not in state.teams:
+            return state, replace(self, success=False)
+
+        team = state.teams[color]
+        new_team = team.with_bombs(team.bombs + self.count)
+
+        new_teams = {**state.teams, color: new_team}
+        return replace(state, teams=new_teams), replace(self, success=True)
+
+    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.BOMBS_ADDED,
+            payload={
+                "color": self.color,
+                "count": self.count,
+                "success": self.success,
+            },
+            player_id=player_id,
+        )
+
+
+@dataclass
+class TeamResetEvent:
+    event_type: EventType = EventType.TEAM_RESET
+    color: str = ""
+    success: bool = False
+
+    def apply(self, state: "GameState") -> tuple["GameState", "TeamResetEvent"]:
+        from app.game.state import TeamState
+
+        color = self.color
+        if color not in state.teams:
+            return state, replace(self, success=False)
+
+        team = state.teams[color]
+        new_team = team.with_reset()
+
+        new_teams = {**state.teams, color: new_team}
+        return replace(state, teams=new_teams), replace(self, success=True)
+
+    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.TEAM_RESET,
+            payload={
+                "color": self.color,
+                "success": self.success,
             },
             player_id=player_id,
         )

@@ -33,6 +33,8 @@ from app.events import (
     BombThrownEvent,
     CodeRedeemedEvent,
     LocationAddedEvent,
+    BombsAddedEvent,
+    TeamResetEvent,
     save_event,
 )
 from app.bot.helpers import send_message, send_photo
@@ -123,7 +125,7 @@ async def handle_place(
     if not team.can_place_ship(ship_type):
         return f"You've already placed all your {ship_type} ships!"
 
-    success = team.place_ship(ship_type, row, col, direction)
+    success, _ = team.place_ship(ship_type, row, col, direction)
     if not success:
         return "Cannot place ship there! Check boundaries and that ships don't touch."
 
