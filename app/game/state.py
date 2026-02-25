@@ -8,7 +8,7 @@ from app.game.ships import (
     get_ship_cells,
     coordinate_to_string,
 )
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 from enum import Enum
 from app.events.factory import create_events, _get_event_type_value
@@ -39,6 +39,39 @@ class Ship:
     def is_sunk(self) -> bool:
         return self.hits >= len(self.cells)
 
+    def with_hits(self, hits: int) -> "Ship":
+        return replace(self, hits=hits)
+
+
+def _copy_team(
+    team: "TeamState",
+    *,
+    name: Optional[str] = None,
+    color: Optional[str] = None,
+    chat_id: Optional[int] = None,
+    bombs: Optional[int] = None,
+    ships: Optional[list[Ship]] = None,
+    placed_ship_types: Optional[dict[str, int]] = None,
+    private_board: Optional[list[list[bool]]] = None,
+    public_board: Optional[list[list[Optional[tuple[str, bool]]]]] = None,
+    bombed_cells: Optional[list[tuple[int, int]]] = None,
+) -> "TeamState":
+    return TeamState(
+        name=name if name is not None else team.name,
+        color=color if color is not None else team.color,
+        chat_id=chat_id if chat_id is not None else team.chat_id,
+        bombs=bombs if bombs is not None else team.bombs,
+        ships=ships if ships is not None else team.ships,
+        placed_ship_types=placed_ship_types
+        if placed_ship_types is not None
+        else team.placed_ship_types,
+        private_board=private_board
+        if private_board is not None
+        else team.private_board,
+        public_board=public_board if public_board is not None else team.public_board,
+        bombed_cells=bombed_cells if bombed_cells is not None else team.bombed_cells,
+    )
+
 
 @dataclass
 class TeamState:
@@ -68,25 +101,28 @@ class TeamState:
         placed = self.placed_ship_types.get(ship_type, 0)
         return placed < SHIP_COUNTS[ship_type]
 
-    def place_ship(self, ship_type: str, row: int, col: int, direction: str) -> bool:
+    def place_ship(
+        self, ship_type: str, row: int, col: int, direction: str
+    ) -> tuple[bool, "TeamState"]:
         if not self.can_place_ship(ship_type):
-            return False
+            return False, self
 
         size = SHIP_SIZES[ship_type]
         existing_ships = [ship.cells for ship in self.ships]
 
         if not validate_ship_placement(row, col, size, direction, existing_ships):
-            return False
+            return False, self
 
         cells = get_ship_cells(row, col, size, direction)
-        ship = Ship(ship_type=ship_type, cells=cells)
-        self.ships.append(ship)
+        new_ship = Ship(ship_type=ship_type, cells=cells)
+        self.ships.append(new_ship)
 
         for r, c in cells:
             self.private_board[r][c] = True
 
         self.placed_ship_types[ship_type] = self.placed_ship_types.get(ship_type, 0) + 1
-        return True
+
+        return True, _copy_team(self)
 
     def has_all_ships(self) -> bool:
         for ship_type, count in SHIP_COUNTS.items():
@@ -96,10 +132,10 @@ class TeamState:
 
     def receive_bomb(
         self, row: int, col: int, attacker_color: str
-    ) -> tuple[BombResult, Optional[Ship]]:
+    ) -> tuple[BombResult, Optional[Ship], "TeamState"]:
         cell = (row, col)
         if cell in self.bombed_cells:
-            return BombResult.ALREADY_BOMBED, None
+            return BombResult.ALREADY_BOMBED, None, self
 
         self.bombed_cells.append(cell)
 
@@ -107,16 +143,47 @@ class TeamState:
         if ship:
             ship.hits += 1
             self.public_board[row][col] = (attacker_color, True)
-            return BombResult.HIT, ship
+            return BombResult.HIT, ship, _copy_team(self)
 
         self.public_board[row][col] = (attacker_color, False)
-        return BombResult.MISS, None
+        return BombResult.MISS, None, _copy_team(self)
 
     def get_sunk_ships(self) -> list[Ship]:
         return [s for s in self.ships if s.is_sunk()]
 
     def is_destroyed(self) -> bool:
         return all(s.is_sunk() for s in self.ships)
+
+    def with_bombs(self, bombs: int) -> "TeamState":
+        return _copy_team(self, bombs=bombs)
+
+    def with_reset(self) -> "TeamState":
+        return _copy_team(
+            self,
+            ships=[],
+            placed_ship_types={},
+            private_board=[[False] * 10 for _ in range(10)],
+            public_board=[[None] * 10 for _ in range(10)],
+            bombed_cells=[],
+        )
+
+
+def _copy_game_state(
+    state: "GameState",
+    *,
+    teams: Optional[dict[str, TeamState]] = None,
+    location_codes: Optional[dict[int, str]] = None,
+    location_counter: Optional[int] = None,
+) -> "GameState":
+    return GameState(
+        teams=teams if teams is not None else state.teams,
+        location_codes=location_codes
+        if location_codes is not None
+        else state.location_codes,
+        location_counter=location_counter
+        if location_counter is not None
+        else state.location_counter,
+    )
 
 
 @dataclass
@@ -131,118 +198,54 @@ class GameState:
         typed_events = create_events(events)
 
         for event in typed_events:
-            event_type_value = _get_event_type_value(event.event_type)
-
-            if event_type_value == "team_joined":
-                state.handle_team_joined(event)
-            elif event_type_value == "ship_placed":
-                state.handle_ship_placed(event)
-            elif event_type_value == "bomb_thrown":
-                state.handle_bomb_thrown(event)
-            elif event_type_value == "code_redeemed":
-                state.handle_code_redeemed(event)
-            elif event_type_value == "location_added":
-                state.handle_location_added(event)
+            state, _ = event.apply(state)
 
         return state
 
-    def handle_team_joined(self, event: TeamJoinedEvent) -> None:
-        if event.quick_action:
-            color = event.color
-            if color and color in self.teams:
-                self.handle_quick_action(event)
-            return
+    def handle_team_joined(
+        self, event: TeamJoinedEvent
+    ) -> tuple["GameState", TeamJoinedEvent]:
+        new_state, updated_event = event.apply(self)
+        self.teams = new_state.teams
+        self.location_codes = new_state.location_codes
+        self.location_counter = new_state.location_counter
+        return new_state, updated_event
 
-        color = event.color
-        self.teams[color] = TeamState(
-            name=event.name,
-            color=color,
-            chat_id=event.chat_id,
-            bombs=event.bombs,
-        )
+    def handle_ship_placed(
+        self, event: ShipPlacedEvent
+    ) -> tuple["GameState", ShipPlacedEvent]:
+        new_state, updated_event = event.apply(self)
+        self.teams = new_state.teams
+        self.location_codes = new_state.location_codes
+        self.location_counter = new_state.location_counter
+        return new_state, updated_event
 
-    def handle_quick_action(self, event) -> None:
-        quick_action = event.quick_action
-        color = event.color
+    def handle_bomb_thrown(
+        self, event: BombThrownEvent
+    ) -> tuple["GameState", BombThrownEvent]:
+        new_state, updated_event = event.apply(self)
+        self.teams = new_state.teams
+        self.location_codes = new_state.location_codes
+        self.location_counter = new_state.location_counter
+        return new_state, updated_event
 
-        if not color or color not in self.teams:
-            return
+    def handle_code_redeemed(
+        self, event: CodeRedeemedEvent
+    ) -> tuple["GameState", CodeRedeemedEvent]:
+        new_state, updated_event = event.apply(self)
+        self.teams = new_state.teams
+        self.location_codes = new_state.location_codes
+        self.location_counter = new_state.location_counter
+        return new_state, updated_event
 
-        team = self.teams[color]
-
-        if quick_action == "add_bombs":
-            count = getattr(event, "count", 1)
-            team.bombs += count
-        elif quick_action == "reset_team":
-            team.ships = []
-            team.placed_ship_types = {}
-            team.private_board = [[False] * 10 for _ in range(10)]
-            team.public_board = [[None] * 10 for _ in range(10)]
-            team.bombed_cells = []
-        elif quick_action == "place_all_ships":
-            pass
-
-    def handle_ship_placed(self, event: ShipPlacedEvent) -> None:
-        if event.quick_action:
-            self.handle_quick_action(event)
-            return
-
-        color = event.color
-        if color not in self.teams:
-            return
-        team = self.teams[color]
-        team.place_ship(event.ship_type, event.row, event.col, event.direction)
-
-    def handle_bomb_thrown(self, event: BombThrownEvent) -> None:
-        attacker_color = event.attacker_color
-        target_color = event.target_color
-        row = event.row
-        col = event.col
-
-        if attacker_color not in self.teams:
-            return
-        if target_color not in self.teams:
-            return
-
-        attacker = self.teams[attacker_color]
-        target = self.teams[target_color]
-
-        if attacker.bombs <= 0:
-            return
-
-        attacker.bombs -= 1
-        result, ship = target.receive_bomb(row, col, attacker_color)
-
-        event.result = result.value
-        if ship:
-            event.ship_type = ship.ship_type
-            event.ship_sunk = ship.is_sunk()
-
-    def handle_code_redeemed(self, event: CodeRedeemedEvent) -> None:
-        color = event.color
-        location_number = event.location_number
-        code = event.code
-
-        if color not in self.teams:
-            return
-
-        if location_number not in self.location_codes:
-            event.success = False
-            return
-
-        if self.location_codes[location_number] != code:
-            event.success = False
-            return
-
-        self.teams[color].bombs += event.bombs_earned
-        event.success = True
-
-    def handle_location_added(self, event: LocationAddedEvent) -> None:
-        number = event.number
-        code = event.code
-        self.location_codes[number] = code
-        if number > self.location_counter:
-            self.location_counter = number
+    def handle_location_added(
+        self, event: LocationAddedEvent
+    ) -> tuple["GameState", LocationAddedEvent]:
+        new_state, updated_event = event.apply(self)
+        self.teams = new_state.teams
+        self.location_codes = new_state.location_codes
+        self.location_counter = new_state.location_counter
+        return new_state, updated_event
 
     def get_next_color(self) -> Optional[str]:
         for color in TEAM_COLORS:

@@ -23,7 +23,8 @@ class TestPlaceAllShips:
                     col = random.randint(0, 9)
                     direction = random.choice(["horizontal", "vertical"])
 
-                    if team.place_ship(ship_type, row, col, direction):
+                    success, _ = team.place_ship(ship_type, row, col, direction)
+                    if success:
                         placed.append(ship_type)
                         placed_ship = True
                         break
@@ -43,13 +44,13 @@ class TestPlaceAllShips:
         """Test that ships cannot touch each other"""
         team = TeamState(name="Test", color="red", chat_id=123)
 
-        result = team.place_ship("patrol_boat", 0, 0, "horizontal")
+        result, _ = team.place_ship("patrol_boat", 0, 0, "horizontal")
         assert result == True
 
-        result = team.place_ship("patrol_boat", 1, 0, "horizontal")
+        result, _ = team.place_ship("patrol_boat", 1, 0, "horizontal")
         assert result == False
 
-        result = team.place_ship("patrol_boat", 5, 5, "horizontal")
+        result, _ = team.place_ship("patrol_boat", 5, 5, "horizontal")
         assert result == True
 
     def test_place_all_ships_returns_failure_on_error(self):
@@ -72,7 +73,8 @@ class TestPlaceAllShips:
                     col = 0
                     direction = "horizontal"
 
-                    if team.place_ship(ship_type, row, col, direction):
+                    success, _ = team.place_ship(ship_type, row, col, direction)
+                    if success:
                         placed.append(ship_type)
                         placed_ship = True
                         break
@@ -107,7 +109,8 @@ class TestPlaceAllShips:
                     col = random.randint(0, 9)
                     direction = random.choice(["horizontal", "vertical"])
 
-                    if team.place_ship(ship_type, row, col, direction):
+                    success, _ = team.place_ship(ship_type, row, col, direction)
+                    if success:
                         placed.append(ship_type)
                         placed_ship = True
                         break
@@ -146,7 +149,8 @@ class TestPlaceAllShips:
                 attempts = 0
                 placed_ship = False
                 while attempts < 1:
-                    if team2.place_ship(ship_type, 0, 0, "horizontal"):
+                    success, _ = team2.place_ship(ship_type, 0, 0, "horizontal")
+                    if success:
                         placed2.append(ship_type)
                         placed_ship = True
                         break

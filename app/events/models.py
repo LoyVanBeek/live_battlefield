@@ -1,7 +1,10 @@
-from dataclasses import dataclass, asdict
-from typing import Optional
+from dataclasses import dataclass, replace
+from typing import Optional, TYPE_CHECKING, Any
 from app.events.types import EventType
 from app.database import GameEvent
+
+if TYPE_CHECKING:
+    from app.game.state import GameState, TeamState, BombResult
 
 
 @dataclass
@@ -13,6 +16,40 @@ class TeamJoinedEvent:
     bombs: int = 0
     quick_action: Optional[str] = None
     count: Optional[int] = None
+
+    def apply(self, state: "GameState") -> tuple["GameState", "TeamJoinedEvent"]:
+        from app.game.state import TeamState
+
+        if self.quick_action:
+            color = self.color
+            if color and color in state.teams:
+                new_teams = dict(state.teams)
+                team = new_teams[color]
+
+                if self.quick_action == "add_bombs":
+                    count = self.count if self.count is not None else 1
+                    new_teams[color] = team.with_bombs(team.bombs + count)
+                elif self.quick_action == "reset_team":
+                    new_teams[color] = team.with_reset()
+                elif self.quick_action == "place_all_ships":
+                    pass
+
+                return replace(state, teams=new_teams), self
+
+            return state, self
+
+        color = self.color
+        if color in state.teams:
+            return state, self
+
+        new_team = TeamState(
+            name=self.name,
+            color=color,
+            chat_id=self.chat_id,
+            bombs=self.bombs,
+        )
+        new_teams = {**state.teams, color: new_team}
+        return replace(state, teams=new_teams), self
 
     def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
         return GameEvent(
@@ -38,6 +75,40 @@ class ShipPlacedEvent:
     col: int = 0
     direction: str = ""
     quick_action: Optional[str] = None
+    success: bool = False
+
+    def apply(self, state: "GameState") -> tuple["GameState", "ShipPlacedEvent"]:
+        from app.game.state import TeamState
+
+        if self.quick_action:
+            color = self.color
+            if color and color in state.teams:
+                new_teams = dict(state.teams)
+                team = new_teams[color]
+
+                if self.quick_action == "reset_team":
+                    new_teams[color] = team.with_reset()
+                elif self.quick_action == "place_all_ships":
+                    pass
+
+                return replace(state, teams=new_teams), self
+
+            return state, self
+
+        color = self.color
+        if color not in state.teams:
+            return state, self
+
+        team = state.teams[color]
+        success, new_team = team.place_ship(
+            self.ship_type, self.row, self.col, self.direction
+        )
+
+        if not success:
+            return state, replace(self, success=False)
+
+        new_teams = {**state.teams, color: new_team}
+        return replace(state, teams=new_teams), replace(self, success=True)
 
     def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
         return GameEvent(
@@ -49,6 +120,7 @@ class ShipPlacedEvent:
                 "col": self.col,
                 "direction": self.direction,
                 "quick_action": self.quick_action,
+                "success": self.success,
             },
             player_id=player_id,
         )
@@ -64,6 +136,44 @@ class BombThrownEvent:
     result: Optional[str] = None
     ship_type: Optional[str] = None
     ship_sunk: Optional[bool] = None
+
+    def apply(self, state: "GameState") -> tuple["GameState", "BombThrownEvent"]:
+        from app.game.state import TeamState, BombResult
+
+        attacker_color = self.attacker_color
+        target_color = self.target_color
+
+        if attacker_color not in state.teams:
+            return state, self
+        if target_color not in state.teams:
+            return state, self
+
+        attacker = state.teams[attacker_color]
+        target = state.teams[target_color]
+
+        if attacker.bombs <= 0:
+            return state, self
+
+        result, ship, new_target = target.receive_bomb(
+            self.row, self.col, attacker_color
+        )
+
+        new_teams = dict(state.teams)
+        if target_color == attacker_color:
+            new_teams[attacker_color] = new_target.with_bombs(attacker.bombs - 1)
+        else:
+            new_attacker = attacker.with_bombs(attacker.bombs - 1)
+            new_teams[attacker_color] = new_attacker
+            new_teams[target_color] = new_target
+
+        updated_event = replace(
+            self,
+            result=result.value,
+            ship_type=ship.ship_type if ship else None,
+            ship_sunk=ship.is_sunk() if ship else None,
+        )
+
+        return replace(state, teams=new_teams), updated_event
 
     def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
         return GameEvent(
@@ -90,6 +200,28 @@ class CodeRedeemedEvent:
     success: bool = True
     bombs_earned: int = 1
 
+    def apply(self, state: "GameState") -> tuple["GameState", "CodeRedeemedEvent"]:
+        from app.game.state import TeamState
+
+        color = self.color
+        location_number = self.location_number
+        code = self.code
+
+        if color not in state.teams:
+            return state, replace(self, success=False)
+
+        if location_number not in state.location_codes:
+            return state, replace(self, success=False)
+
+        if state.location_codes[location_number] != code:
+            return state, replace(self, success=False)
+
+        team = state.teams[color]
+        new_team = team.with_bombs(team.bombs + self.bombs_earned)
+
+        new_teams = {**state.teams, color: new_team}
+        return replace(state, teams=new_teams), replace(self, success=True)
+
     def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.CODE_REDEEMED,
@@ -112,6 +244,24 @@ class LocationAddedEvent:
     longitude: float = 0.0
     code: str = ""
     bomb_value: int = 1
+
+    def apply(self, state: "GameState") -> tuple["GameState", "LocationAddedEvent"]:
+        number = self.number
+        code = self.code
+
+        new_location_codes = {**state.location_codes, number: code}
+        new_counter = (
+            number if number > state.location_counter else state.location_counter
+        )
+
+        return (
+            replace(
+                state,
+                location_codes=new_location_codes,
+                location_counter=new_counter,
+            ),
+            self,
+        )
 
     def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
         return GameEvent(
