@@ -184,6 +184,57 @@ async def get_admin_locations(db: AsyncSession = Depends(get_api_db)):
     return {"locations": result}
 
 
+@app.get("/admin/events", response_class=HTMLResponse)
+async def events_page(request: Request):
+    return templates.TemplateResponse("events.html", {"request": request})
+
+
+@app.get("/api/admin/events")
+async def get_all_events_for_timeline(db: AsyncSession = Depends(get_api_db)):
+    from app.models import get_all_events as db_get_all_events
+
+    events = await db_get_all_events(db)
+
+    return {
+        "total_events": len(events),
+        "events": [
+            {
+                "index": i,
+                "id": event.id,
+                "event_type": event.event_type.value
+                if hasattr(event.event_type, "value")
+                else event.event_type,
+                "payload": event.payload,
+                "player_id": event.player_id,
+                "created_at": event.created_at.isoformat()
+                if event.created_at
+                else None,
+            }
+            for i, event in enumerate(events)
+        ],
+    }
+
+
+@app.get("/api/admin/events/{event_index}/state")
+async def get_state_at_event(event_index: int, db: AsyncSession = Depends(get_api_db)):
+    from app.models import get_all_events as db_get_all_events
+
+    events = await db_get_all_events(db)
+
+    if event_index < 0 or event_index >= len(events):
+        return {
+            "error": f"Invalid event index. Must be between 0 and {len(events) - 1}"
+        }
+
+    state = GameState.from_events(events[: event_index + 1])
+
+    return {
+        "event_index": event_index,
+        "total_events": len(events),
+        "state": state.to_dict(),
+    }
+
+
 @app.get("/api/state")
 async def get_game_state(db: AsyncSession = Depends(get_api_db)):
     events = await get_all_events(db)
@@ -242,6 +293,41 @@ async def get_private_board(team_color: str, db: AsyncSession = Depends(get_api_
     return Response(content=img_bytes, media_type="image/png")
 
 
+@app.get("/api/admin/events/{event_index}/board/public.png")
+async def get_public_boards_at_event(
+    event_index: int, db: AsyncSession = Depends(get_api_db)
+):
+    events = await get_all_events(db)
+
+    if event_index < 0 or event_index >= len(events):
+        return {"error": f"Invalid event index"}
+
+    state = GameState.from_events(events[: event_index + 1])
+    img = render_all_public_boards(state)
+    img_bytes = boards_to_bytes(img)
+    return Response(content=img_bytes, media_type="image/png")
+
+
+@app.get("/api/admin/events/{event_index}/board/{team_color}/private.png")
+async def get_private_board_at_event(
+    event_index: int, team_color: str, db: AsyncSession = Depends(get_api_db)
+):
+    events = await get_all_events(db)
+
+    if event_index < 0 or event_index >= len(events):
+        return {"error": f"Invalid event index"}
+
+    state = GameState.from_events(events[: event_index + 1])
+
+    if team_color not in state.teams:
+        return {"error": "Team not found"}
+
+    team = state.teams[team_color]
+    img = render_private_board(team)
+    img_bytes = boards_to_bytes(img)
+    return Response(content=img_bytes, media_type="image/png")
+
+
 @app.get("/game-state.png")
 async def get_game_state_png(db: AsyncSession = Depends(get_api_db)):
     events = await get_all_events(db)
@@ -266,9 +352,14 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
             return result
 
         team_name = cmd.args.get("name", cmd.team_color)
-        state.handle_team_joined(
-            {"name": team_name, "color": cmd.team_color, "chat_id": 999999, "bombs": 0}
+        event = TeamJoinedEvent(
+            name=team_name,
+            color=cmd.team_color,
+            chat_id=999999,
+            bombs=3,
         )
+        state.handle_team_joined(event)
+        await save_event(db, event)
         result["success"] = True
         result["message"] = f"Joined {team_name} as {cmd.team_color} team!"
 
@@ -457,14 +548,6 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
                 code=code,
                 success=True,
                 bombs_earned=bomb_value,
-            )
-            await save_event(db, event)
-        elif cmd.command == "join":
-            event = TeamJoinedEvent(
-                name=cmd.args.get("name", cmd.team_color),
-                color=cmd.team_color,
-                chat_id=999999,
-                bombs=0,
             )
             await save_event(db, event)
 

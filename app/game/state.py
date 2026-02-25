@@ -42,6 +42,14 @@ class Ship:
     def with_hits(self, hits: int) -> "Ship":
         return replace(self, hits=hits)
 
+    def to_dict(self) -> dict:
+        return {
+            "ship_type": self.ship_type,
+            "cells": self.cells,
+            "hits": self.hits,
+            "is_sunk": self.is_sunk(),
+        }
+
 
 def _copy_team(
     team: "TeamState",
@@ -153,6 +161,19 @@ class TeamState:
 
     def is_destroyed(self) -> bool:
         return all(s.is_sunk() for s in self.ships)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "color": self.color,
+            "chat_id": self.chat_id,
+            "bombs": self.bombs,
+            "ships": [s.to_dict() for s in self.ships],
+            "placed_ship_types": self.placed_ship_types,
+            "ships_placed": sum(self.placed_ship_types.values()),
+            "sunk_ships": len(self.get_sunk_ships()),
+            "is_destroyed": self.is_destroyed(),
+        }
 
     def with_bombs(self, bombs: int) -> "TeamState":
         return _copy_team(self, bombs=bombs)
@@ -287,3 +308,10 @@ class GameState:
 
     def is_ended(self, game_status: str) -> bool:
         return game_status == "ended"
+
+    def to_dict(self) -> dict:
+        return {
+            "teams": {color: team.to_dict() for color, team in self.teams.items()},
+            "location_codes": self.location_codes,
+            "location_counter": self.location_counter,
+        }

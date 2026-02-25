@@ -83,7 +83,7 @@ async def handle_join(
 
     player = await create_player(db, team_name, color, chat_id)
 
-    event = TeamJoinedEvent(name=team_name, color=color, chat_id=chat_id, bombs=0)
+    event = TeamJoinedEvent(name=team_name, color=color, chat_id=chat_id, bombs=3)
     await save_event(db, event)
 
     return f"Welcome {team_name}! You are the {color} team.\nYou have 0 bombs to start. Visit locations to earn bombs!"
