@@ -561,11 +561,18 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
 
     if result["success"]:
         if cmd.command == "place":
+            from app.game.ships import parse_coordinate
+
+            coord = cmd.args.get("coordinate", "A1")
+            try:
+                row, col = parse_coordinate(coord)
+            except ValueError:
+                row, col = 0, 0
             event = ShipPlacedEvent(
                 color=cmd.team_color,
                 ship_type=cmd.args.get("ship_type", ""),
-                row=cmd.args.get("row", 0),
-                col=cmd.args.get("col", 0),
+                row=row,
+                col=col,
                 direction=cmd.args.get("direction", "horizontal"),
             )
             await save_event(db, event)
