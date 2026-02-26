@@ -199,7 +199,7 @@
         .row-label {
             font-weight: bold;
             color: #888;
-            min-width: 100px;
+            width: 100px;
             text-align: right;
             padding-right: 10px;
         }
@@ -424,21 +424,38 @@
             }
         }
 
+        function scrollToSelectedEvent() {
+            const selected = document.querySelector('.event-item.selected');
+            if (selected) {
+                selected.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        function goToFirst() {
+            if (eventsData && eventsData.events.length > 0) {
+                selectEvent(0);
+                scrollToSelectedEvent();
+            }
+        }
+
         function goToPrev() {
             if (currentIndex > 0) {
                 selectEvent(currentIndex - 1);
+                scrollToSelectedEvent();
             }
         }
 
         function goToNext() {
             if (eventsData && currentIndex < eventsData.events.length - 1) {
                 selectEvent(currentIndex + 1);
+                scrollToSelectedEvent();
             }
         }
 
         function goToLast() {
             if (eventsData && eventsData.events.length > 0) {
                 selectEvent(eventsData.events.length - 1);
+                scrollToSelectedEvent();
             }
         }
 
@@ -446,6 +463,7 @@
             const idx = parseInt(document.getElementById('jump-to').value);
             if (!isNaN(idx)) {
                 selectEvent(idx);
+                scrollToSelectedEvent();
             }
         }
 
@@ -456,6 +474,43 @@
         });
 
         loadEvents();
+
+        // Poll for new events every 5 seconds
+        setInterval(async () => {
+            const data = await apiCall('/api/admin/events');
+            if (!data.events) return;
+
+            const totalEvents = data.events.length;
+            const previousTotal = eventsData ? eventsData.events.length : 0;
+
+            if (totalEvents !== previousTotal) {
+                // New events detected - reload everything
+                eventsData = data;
+
+                // Re-render event list
+                const listEl = document.getElementById('event-list');
+                listEl.innerHTML = data.events.map((ev, i) => {
+                    const icon = EVENT_ICONS[ev.event_type] || '❓';
+                    return `
+                        <div class="event-item" data-index="${i}" onclick="selectEvent(${i})">
+                            <span class="event-index">#${i}</span>
+                            <span class="event-icon">${icon}</span>
+                            <span class="event-type ${ev.event_type}">${ev.event_type.replace('_', ' ')}</span>
+                            <span class="event-payload">${formatPayload(ev)}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                // Auto-select last event if current selection is invalid
+                if (currentIndex < 0 || currentIndex >= totalEvents) {
+                    currentIndex = totalEvents - 1;
+                }
+
+                // Select the current event to refresh boards
+                await selectEvent(currentIndex);
+            }
+            updateControls();
+        }, 5000);
     </script>
 </body>
 </html>
