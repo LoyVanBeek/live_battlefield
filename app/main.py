@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 import asyncio
+import logging
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -278,6 +279,12 @@ def run_server():
 
 if __name__ == "__main__":
     import sys
+    import logging
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 
     if len(sys.argv) > 1 and sys.argv[1] == "bot":
         run_bot()

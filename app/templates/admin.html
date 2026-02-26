@@ -410,7 +410,7 @@
                 document.getElementById('ship-count').textContent = team.ships_placed;
                 document.getElementById('sunk-count').textContent = team.ships_sunk;
                 
-                document.getElementById('private-board').src = `/api/board/${color}/private.png`;
+                document.getElementById('private-board').src = `/api/board/${color}/private.png?` + Date.now();
                 document.getElementById('private-board').style.display = 'block';
                 document.getElementById('private-board-msg').style.display = 'none';
             } else {
