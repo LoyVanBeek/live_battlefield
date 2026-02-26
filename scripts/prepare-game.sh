@@ -3,6 +3,47 @@
 
 BASE_URL="${BASE_URL:-http://localhost:8000}"
 
+WAIT_TIME=0
+WAIT_KEY=no
+
+usage() {
+    echo "Usage: $0 [-w] [-t seconds]"
+    echo "  -w, --wait-key      Wait for key press between steps"
+    echo "  -t, --wait-time N   Wait N seconds between steps"
+    exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -w|--wait-key)
+            WAIT_KEY=yes
+            shift
+            ;;
+        -t|--wait-time)
+            WAIT_TIME="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            ;;
+    esac
+done
+
+wait_between_steps() {
+    if [ "$WAIT_TIME" -gt 0 ] 2>/dev/null; then
+        echo "  (waiting ${WAIT_TIME}s...)"
+        sleep "$WAIT_TIME"
+    fi
+    if [ "$WAIT_KEY" = "yes" ]; then
+        echo ""
+        read -p "Press Enter to continue..."
+    fi
+}
+
 echo "=== Preparing Game (Join Teams & Place Ships) ==="
 
 echo ""
@@ -16,6 +57,8 @@ RESPONSE=$(curl -s -X POST "$BASE_URL/api/execute" \
   }')
 echo "$RESPONSE" | jq -r '.message // .'
 
+wait_between_steps
+
 echo ""
 echo "2. Joining team BLUE..."
 RESPONSE=$(curl -s -X POST "$BASE_URL/api/execute" \
@@ -26,6 +69,8 @@ RESPONSE=$(curl -s -X POST "$BASE_URL/api/execute" \
     "args": {"name": "Blue Team"}
   }')
 echo "$RESPONSE" | jq -r '.message // .'
+
+wait_between_steps
 
 echo ""
 echo "3. Joining team GREEN..."
@@ -38,6 +83,8 @@ RESPONSE=$(curl -s -X POST "$BASE_URL/api/execute" \
   }')
 echo "$RESPONSE" | jq -r '.message // .'
 
+wait_between_steps
+
 echo ""
 echo "=== Adding bombs to teams (must be before starting game) ==="
 echo ""
@@ -47,6 +94,8 @@ RESPONSE=$(curl -s -X POST "$BASE_URL/api/quick/add_bombs" \
   -d '{"team_color": "red", "count": 5}')
 echo "$RESPONSE" | jq -r '.message // .'
 
+wait_between_steps
+
 echo ""
 echo "5. Adding bombs to BLUE..."
 RESPONSE=$(curl -s -X POST "$BASE_URL/api/quick/add_bombs" \
@@ -54,12 +103,16 @@ RESPONSE=$(curl -s -X POST "$BASE_URL/api/quick/add_bombs" \
   -d '{"team_color": "blue", "count": 5}')
 echo "$RESPONSE" | jq -r '.message // .'
 
+wait_between_steps
+
 echo ""
 echo "6. Adding bombs to GREEN..."
 RESPONSE=$(curl -s -X POST "$BASE_URL/api/quick/add_bombs" \
   -H "Content-Type: application/json" \
   -d '{"team_color": "green", "count": 5}')
 echo "$RESPONSE" | jq -r '.message // .'
+
+wait_between_steps
 
 echo ""
 echo "=== Placing Ships ==="
@@ -70,6 +123,8 @@ RESPONSE=$(curl -s -X POST "$BASE_URL/api/quick/place_all_ships" \
   -d '{"team_color": "red"}')
 echo "$RESPONSE" | jq -r '.message // .'
 
+wait_between_steps
+
 echo ""
 echo "8. Placing all ships for BLUE..."
 RESPONSE=$(curl -s -X POST "$BASE_URL/api/quick/place_all_ships" \
@@ -77,12 +132,16 @@ RESPONSE=$(curl -s -X POST "$BASE_URL/api/quick/place_all_ships" \
   -d '{"team_color": "blue"}')
 echo "$RESPONSE" | jq -r '.message // .'
 
+wait_between_steps
+
 echo ""
 echo "9. Placing all ships for GREEN..."
 RESPONSE=$(curl -s -X POST "$BASE_URL/api/quick/place_all_ships" \
   -H "Content-Type: application/json" \
   -d '{"team_color": "green"}')
 echo "$RESPONSE" | jq -r '.message // .'
+
+wait_between_steps
 
 echo ""
 echo "=== Starting Game ==="

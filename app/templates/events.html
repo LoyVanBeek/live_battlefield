@@ -323,6 +323,7 @@
             
             if (data.events.length > 0) {
                 selectEvent(data.events.length - 1);
+                scrollToSelectedEvent();
             }
             
             updateControls();
@@ -475,7 +476,7 @@
 
         loadEvents();
 
-        // Poll for new events every 5 seconds
+        // Poll for new events every 0.5 seconds
         setInterval(async () => {
             const data = await apiCall('/api/admin/events');
             if (!data.events) return;
@@ -501,16 +502,15 @@
                     `;
                 }).join('');
 
-                // Auto-select last event if current selection is invalid
-                if (currentIndex < 0 || currentIndex >= totalEvents) {
-                    currentIndex = totalEvents - 1;
-                }
+                // Always focus on latest event when new events come in
+                currentIndex = totalEvents - 1;
 
                 // Select the current event to refresh boards
                 await selectEvent(currentIndex);
+                scrollToSelectedEvent();
             }
             updateControls();
-        }, 5000);
+        }, 500);
     </script>
 </body>
 </html>
