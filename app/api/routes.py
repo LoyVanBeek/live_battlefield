@@ -16,6 +16,7 @@ from app.game.state import GameState, TEAM_COLORS
 from app.game.board import (
     render_all_public_boards,
     render_private_board,
+    render_board,
     boards_to_bytes,
 )
 from app.game.ships import (
@@ -304,6 +305,26 @@ async def get_public_boards_at_event(
 
     state = GameState.from_events(events[: event_index + 1])
     img = render_all_public_boards(state)
+    img_bytes = boards_to_bytes(img)
+    return Response(content=img_bytes, media_type="image/png")
+
+
+@app.get("/api/admin/events/{event_index}/board/{team_color}/public.png")
+async def get_single_public_board_at_event(
+    event_index: int, team_color: str, db: AsyncSession = Depends(get_api_db)
+):
+    events = await get_all_events(db)
+
+    if event_index < 0 or event_index >= len(events):
+        return {"error": f"Invalid event index"}
+
+    state = GameState.from_events(events[: event_index + 1])
+
+    if team_color not in state.teams:
+        return {"error": "Team not found"}
+
+    team = state.teams[team_color]
+    img = render_board(team, show_private=False)
     img_bytes = boards_to_bytes(img)
     return Response(content=img_bytes, media_type="image/png")
 

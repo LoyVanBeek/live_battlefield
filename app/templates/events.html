@@ -187,10 +187,13 @@
             color: #aaa;
         }
         .board-cell {
-            min-width: 200px;
+            width: 100px;
+            vertical-align: top;
         }
         .board-cell img {
-            max-width: 180px;
+            width: 100%;
+            height: auto;
+            max-width: 100px;
             border-radius: 4px;
         }
         .row-label {
@@ -382,7 +385,7 @@
             html += '<td class="row-label">Public</td>';
             for (const color of teamColors) {
                 html += `<td class="board-cell">
-                    <img src="/api/admin/events/${index}/board/public.png?team=${color}&_=${Date.now()}" alt="${color} public">
+                    <img src="/api/admin/events/${index}/board/${color}/public.png?_=${Date.now()}" alt="${color} public">
                 </td>`;
             }
             html += '</tr>';
