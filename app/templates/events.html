@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Battlefield - Event Timeline</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #00d9ff;
+        }
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+        .nav-links {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #16213e;
+            border-radius: 8px;
+        }
+        .nav-links a {
+            color: #00d9ff;
+            text-decoration: none;
+            margin-right: 20px;
+            font-size: 14px;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+        .nav-links a.active {
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .event-list {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .event-item {
+            display: flex;
+            gap: 15px;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            align-items: center;
+        }
+        .event-item:hover {
+            background: #0f3460;
+        }
+        .event-item.selected {
+            background: #0f3460;
+            border-color: #00d9ff;
+        }
+        .event-index {
+            color: #888;
+            min-width: 40px;
+        }
+        .event-icon {
+            font-size: 16px;
+            min-width: 24px;
+            text-align: center;
+        }
+        .event-type {
+            font-weight: bold;
+            min-width: 150px;
+        }
+        .event-type.team_joined { color: #4caf50; }
+        .event-type.ship_placed { color: #2196f3; }
+        .event-type.bomb_thrown { color: #f44336; }
+        .event-type.code_redeemed { color: #ff9800; }
+        .event-type.location_added { color: #9c27b0; }
+        .event-type.bombs_added { color: #00bcd4; }
+        .event-type.team_reset { color: #ff5722; }
+        .event-payload {
+            color: #aaa;
+            font-size: 13px;
+            flex: 1;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            padding: 15px;
+            background: #16213e;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .btn {
+            padding: 10px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+        .btn-primary {
+            background: #00d9ff;
+            color: #1a1a2e;
+        }
+        .btn-primary:hover {
+            background: #00b8d4;
+        }
+        .btn-secondary {
+            background: #0f3460;
+            color: #eee;
+        }
+        .btn-secondary:hover {
+            background: #1a3a6e;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .event-counter {
+            font-size: 18px;
+            font-weight: bold;
+            color: #00d9ff;
+            min-width: 100px;
+            text-align: center;
+        }
+        .boards-section {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .boards-section h3 {
+            margin-bottom: 15px;
+            color: #00d9ff;
+        }
+        .board-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 10px;
+        }
+        .board-table th {
+            padding: 10px;
+            background: #0f3460;
+            border-radius: 8px;
+            text-align: center;
+            vertical-align: top;
+        }
+        .board-table td {
+            padding: 10px;
+            background: #0f3460;
+            border-radius: 8px;
+            text-align: center;
+            vertical-align: top;
+        }
+        .team-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .team-color-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .team-name {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .team-bombs {
+            font-size: 12px;
+            color: #aaa;
+        }
+        .board-cell {
+            min-width: 200px;
+        }
+        .board-cell img {
+            max-width: 180px;
+            border-radius: 4px;
+        }
+        .row-label {
+            font-weight: bold;
+            color: #888;
+            min-width: 100px;
+            text-align: right;
+            padding-right: 10px;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+        .loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📜 Event Timeline</h1>
+        
+        <div class="nav-links">
+            <a href="/map">🗺️ Map</a>
+            <a href="/admin/test-panel">🕵️ Test Panel</a>
+            <a href="/admin/locations-secret">📍 Locations</a>
+            <a href="/admin/events" class="active">📜 Events</a>
+        </div>
+
+        <div class="event-list" id="event-list">
+            <div class="empty-state">Loading events...</div>
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-secondary" id="btn-first" onclick="goToFirst()">⏮️ First</button>
+            <button class="btn btn-secondary" id="btn-prev" onclick="goToPrev()">◀️ Prev</button>
+            <span class="event-counter" id="event-counter">0 / 0</span>
+            <button class="btn btn-secondary" id="btn-next" onclick="goToNext()">Next ▶️</button>
+            <button class="btn btn-secondary" id="btn-last" onclick="goToLast()">Last ⏭️</button>
+            <input type="number" id="jump-to" min="0" style="width: 80px; padding: 8px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;" placeholder="#">
+            <button class="btn btn-primary" onclick="jumpToEvent()">Go</button>
+        </div>
+
+        <div class="boards-section" id="boards-section">
+            <div class="empty-state">Select an event to view boards</div>
+        </div>
+    </div>
+
+    <script>
+        const EVENT_ICONS = {
+            'team_joined': '👥',
+            'ship_placed': '🚢',
+            'bomb_thrown': '💥',
+            'code_redeemed': '🔑',
+            'location_added': '📍',
+            'bombs_added': '💣',
+            'team_reset': '🔄'
+        };
+
+        let eventsData = null;
+        let currentIndex = -1;
+
+        function formatPayload(ev) {
+            const p = ev.payload;
+            const type = ev.event_type;
+            
+            if (type === 'team_joined') {
+                return `${p.name} joined as ${p.color}`;
+            } else if (type === 'ship_placed') {
+                const dir = p.direction === 'horizontal' ? '→' : '↓';
+                return `${p.color} placed ${p.ship_type} at ${String.fromCharCode(65 + p.row)}${p.col + 1} ${dir}`;
+            } else if (type === 'bomb_thrown') {
+                const result = p.result === 'hit' ? 'HIT!' : 'miss';
+                return `${p.attacker_color} → ${p.target_color} at ${String.fromCharCode(65 + p.row)}${p.col + 1}: ${result}`;
+            } else if (type === 'code_redeemed') {
+                return `${p.color} redeemed code ${p.code} at location ${p.location_number} (+${p.bombs_earned} bombs)`;
+            } else if (type === 'location_added') {
+                return `Location ${p.number}: ${p.code} (${p.latitude.toFixed(4)}, ${p.longitude.toFixed(4)})`;
+            } else if (type === 'bombs_added') {
+                return `${p.color} +${p.count} bombs`;
+            } else if (type === 'team_reset') {
+                return `${p.color} reset`;
+            }
+            return JSON.stringify(p);
+        }
+
+        async function apiCall(url, method = 'GET', body = null) {
+            try {
+                const options = { method };
+                if (body) {
+                    options.headers = { 'Content-Type': 'application/json' };
+                    options.body = JSON.stringify(body);
+                }
+                const resp = await fetch(url, options);
+                if (!resp.ok) {
+                    return { success: false, message: `HTTP error: ${resp.status}` };
+                }
+                return await resp.json();
+            } catch (error) {
+                return { success: false, message: `Network error: ${error.message}` };
+            }
+        }
+
+        async function loadEvents() {
+            const data = await apiCall('/api/admin/events');
+            eventsData = data;
+            
+            const listEl = document.getElementById('event-list');
+            if (!data.events || data.events.length === 0) {
+                listEl.innerHTML = '<div class="empty-state">No events found</div>';
+                return;
+            }
+            
+            listEl.innerHTML = data.events.map((ev, i) => {
+                const icon = EVENT_ICONS[ev.event_type] || '❓';
+                return `
+                    <div class="event-item" data-index="${i}" onclick="selectEvent(${i})">
+                        <span class="event-index">#${i}</span>
+                        <span class="event-icon">${icon}</span>
+                        <span class="event-type ${ev.event_type}">${ev.event_type.replace('_', ' ')}</span>
+                        <span class="event-payload">${formatPayload(ev)}</span>
+                    </div>
+                `;
+            }).join('');
+            
+            if (data.events.length > 0) {
+                selectEvent(data.events.length - 1);
+            }
+            
+            updateControls();
+        }
+
+        async function selectEvent(index) {
+            if (!eventsData || index < 0 || index >= eventsData.events.length) return;
+            
+            currentIndex = index;
+            
+            document.querySelectorAll('.event-item').forEach((el, i) => {
+                el.classList.toggle('selected', i === index);
+            });
+            
+            await loadStateAtEvent(index);
+            updateControls();
+        }
+
+        async function loadStateAtEvent(index) {
+            const data = await apiCall(`/api/admin/events/${index}/state`);
+            
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+            
+            document.getElementById('event-counter').textContent = `${index + 1} / ${data.total_events}`;
+            
+            const teamsEl = document.getElementById('boards-section');
+            const teams = data.state.teams;
+            const teamColors = Object.keys(teams);
+            
+            if (teamColors.length === 0) {
+                teamsEl.innerHTML = '<div class="empty-state">No teams yet</div>';
+                return;
+            }
+            
+            let html = '<h3>🎯 Boards</h3>';
+            html += '<table class="board-table">';
+            
+            // Header row - team names and bomb counts
+            html += '<tr>';
+            html += '<td></td>'; // Empty corner cell
+            for (const color of teamColors) {
+                const team = teams[color];
+                html += `<th>
+                    <div class="team-header">
+                        <span class="team-color-dot" style="background: ${color}"></span>
+                        <span class="team-name">${team.name} (${color})</span>
+                        <span class="team-bombs">💣 ${team.bombs} bombs</span>
+                        <span class="team-bombs">🚢 ${team.ships_placed}/10</span>
+                        <span class="team-bombs">💥 ${team.sunk_ships} sunk</span>
+                    </div>
+                </th>`;
+            }
+            html += '</tr>';
+            
+            // Public boards row
+            html += '<tr>';
+            html += '<td class="row-label">Public</td>';
+            for (const color of teamColors) {
+                html += `<td class="board-cell">
+                    <img src="/api/admin/events/${index}/board/public.png?team=${color}&_=${Date.now()}" alt="${color} public">
+                </td>`;
+            }
+            html += '</tr>';
+            
+            // Private boards row
+            html += '<tr>';
+            html += '<td class="row-label">Private</td>';
+            for (const color of teamColors) {
+                html += `<td class="board-cell">
+                    <img src="/api/admin/events/${index}/board/${color}/private.png?_=${Date.now()}" alt="${color} private">
+                </td>`;
+            }
+            html += '</tr>';
+            
+            html += '</table>';
+            teamsEl.innerHTML = html;
+        }
+
+        function updateControls() {
+            if (!eventsData) return;
+            
+            const total = eventsData.events.length;
+            const idx = currentIndex;
+            
+            document.getElementById('btn-first').disabled = idx <= 0;
+            document.getElementById('btn-prev').disabled = idx <= 0;
+            document.getElementById('btn-next').disabled = idx >= total - 1;
+            document.getElementById('btn-last').disabled = idx >= total - 1;
+            
+            document.getElementById('jump-to').max = total - 1;
+        }
+
+        function goToFirst() {
+            if (eventsData && eventsData.events.length > 0) {
+                selectEvent(0);
+            }
+        }
+
+        function goToPrev() {
+            if (currentIndex > 0) {
+                selectEvent(currentIndex - 1);
+            }
+        }
+
+        function goToNext() {
+            if (eventsData && currentIndex < eventsData.events.length - 1) {
+                selectEvent(currentIndex + 1);
+            }
+        }
+
+        function goToLast() {
+            if (eventsData && eventsData.events.length > 0) {
+                selectEvent(eventsData.events.length - 1);
+            }
+        }
+
+        function jumpToEvent() {
+            const idx = parseInt(document.getElementById('jump-to').value);
+            if (!isNaN(idx)) {
+                selectEvent(idx);
+            }
+        }
+
+        document.getElementById('jump-to').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                jumpToEvent();
+            }
+        });
+
+        loadEvents();
+    </script>
+</body>
+</html>
