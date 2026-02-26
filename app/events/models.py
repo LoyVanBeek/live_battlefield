@@ -4,7 +4,13 @@ from app.events.types import EventType
 from app.database import GameEvent
 
 if TYPE_CHECKING:
-    from app.game.state import GameState, TeamState, BombResult, _copy_team
+    from app.game.state import (
+        GameState,
+        TeamState,
+        BombResult,
+        _copy_team,
+        GameStatusField,
+    )
 
 
 @dataclass
@@ -367,6 +373,62 @@ class TeamResetEvent:
             payload={
                 "color": self.color,
                 "success": self.success,
+            },
+            player_id=player_id,
+        )
+
+
+@dataclass
+class GameStartedEvent:
+    event_type: EventType = EventType.GAME_STARTED
+    timestamp: str = ""
+
+    def apply(self, state: "GameState") -> tuple["GameState", "GameStartedEvent"]:
+        from app.game.state import GameStatusField
+        from datetime import datetime
+
+        if self.timestamp:
+            ts = self.timestamp
+        else:
+            ts = datetime.utcnow().isoformat()
+
+        new_state = replace(state, status=GameStatusField.STARTED)
+        return new_state, replace(self, timestamp=ts)
+
+    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.GAME_STARTED,
+            payload={
+                "timestamp": self.timestamp,
+            },
+            player_id=player_id,
+        )
+
+
+@dataclass
+class GameEndedEvent:
+    event_type: EventType = EventType.GAME_ENDED
+    winner: str = ""
+    timestamp: str = ""
+
+    def apply(self, state: "GameState") -> tuple["GameState", "GameEndedEvent"]:
+        from app.game.state import GameStatusField
+        from datetime import datetime
+
+        if self.timestamp:
+            ts = self.timestamp
+        else:
+            ts = datetime.utcnow().isoformat()
+
+        new_state = replace(state, status=GameStatusField.ENDED)
+        return new_state, replace(self, timestamp=ts)
+
+    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.GAME_ENDED,
+            payload={
+                "winner": self.winner,
+                "timestamp": self.timestamp,
             },
             player_id=player_id,
         )

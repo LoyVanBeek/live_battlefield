@@ -9,6 +9,8 @@ from app.events.models import (
     LocationAddedEvent,
     BombsAddedEvent,
     TeamResetEvent,
+    GameStartedEvent,
+    GameEndedEvent,
 )
 
 
@@ -48,6 +50,12 @@ def create_event(db_event) -> Optional[object]:
 
     elif event_type_value == "team_reset":
         return TeamResetEvent(**payload_dict)
+
+    elif event_type_value == "game_started":
+        return GameStartedEvent(**payload_dict)
+
+    elif event_type_value == "game_ended":
+        return GameEndedEvent(**payload_dict)
 
     return None
 

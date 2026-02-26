@@ -24,6 +24,12 @@ from app.events.models import (
 TEAM_COLORS = ["red", "blue", "green", "purple", "orange", "yellow"]
 
 
+class GameStatusField(str, Enum):
+    PREPARING = "preparing"
+    STARTED = "started"
+    ENDED = "ended"
+
+
 class BombResult(Enum):
     HIT = "hit"
     MISS = "miss"
@@ -213,6 +219,7 @@ class GameState:
     teams: dict[str, TeamState] = field(default_factory=dict)
     location_codes: dict[int, str] = field(default_factory=dict)
     location_counter: int = 0
+    status: GameStatusField = GameStatusField.PREPARING
 
     @classmethod
     def from_events(cls, events: list) -> "GameState":
@@ -314,4 +321,5 @@ class GameState:
             "teams": {color: team.to_dict() for color, team in self.teams.items()},
             "location_codes": self.location_codes,
             "location_counter": self.location_counter,
+            "status": self.status.value,
         }

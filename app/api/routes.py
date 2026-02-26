@@ -25,7 +25,7 @@ from app.game.ships import (
     VALID_SHIP_TYPES,
     coordinate_to_string,
 )
-from app.game.state import BombResult
+from app.game.state import BombResult, GameState, GameStatusField
 from app.events import (
     EventType,
     TeamJoinedEvent,
@@ -36,6 +36,8 @@ from app.events import (
     LocationAddedEvent,
     BombsAddedEvent,
     TeamResetEvent,
+    GameStartedEvent,
+    GameEndedEvent,
     save_event,
 )
 
@@ -372,9 +374,18 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
     events = await get_all_events(db)
     state = GameState.from_events(events)
 
+    # Status-based checks
+    if state.status == GameStatusField.ENDED:
+        return {"success": False, "message": "Game has ended! No more actions allowed."}
+
     result = {"success": False, "message": ""}
 
     if cmd.command == "join":
+        # Join is only allowed during PREPARING
+        if state.status != GameStatusField.PREPARING:
+            result["message"] = "Cannot join - game already started!"
+            return result
+
         if cmd.team_color in state.teams:
             result["message"] = f"Team {cmd.team_color} already exists!"
             return result
@@ -392,6 +403,11 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
         result["message"] = f"Joined {team_name} as {cmd.team_color} team!"
 
     elif cmd.command == "place":
+        # Place is only allowed during PREPARING
+        if state.status != GameStatusField.PREPARING:
+            result["message"] = "Cannot place ships - game already started!"
+            return result
+
         if cmd.team_color not in state.teams:
             result["message"] = f"Team {cmd.team_color} doesn't exist!"
             return result
@@ -422,6 +438,11 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
             result["message"] = f"Cannot place ship: check bounds and no-touching rule"
 
     elif cmd.command == "bomb":
+        # Bomb is only allowed during STARTED
+        if state.status != GameStatusField.STARTED:
+            result["message"] = "Cannot bomb - game hasn't started yet!"
+            return result
+
         if cmd.team_color not in state.teams:
             result["message"] = f"Team {cmd.team_color} doesn't exist!"
             return result
@@ -520,6 +541,11 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
                     print(f"Failed to send notification: {e}")
 
     elif cmd.command == "code":
+        # Code redemption is only allowed during STARTED
+        if state.status != GameStatusField.STARTED:
+            result["message"] = "Cannot redeem codes - game hasn't started yet!"
+            return result
+
         if cmd.team_color not in state.teams:
             result["message"] = f"Team {cmd.team_color} doesn't exist!"
             return result
@@ -594,6 +620,9 @@ async def quick_add_bombs(action: QuickAction, db: AsyncSession = Depends(get_ap
     events = await get_all_events(db)
     state = GameState.from_events(events)
 
+    if state.status != GameStatusField.PREPARING:
+        return {"success": False, "message": "Cannot add bombs - game already started!"}
+
     if action.team_color not in state.teams:
         return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
 
@@ -618,6 +647,12 @@ async def quick_place_all_ships(
 ):
     events = await get_all_events(db)
     state = GameState.from_events(events)
+
+    if state.status != GameStatusField.PREPARING:
+        return {
+            "success": False,
+            "message": "Cannot place ships - game already started!",
+        }
 
     if action.team_color not in state.teams:
         return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
@@ -691,18 +726,14 @@ async def quick_reset_team(action: QuickAction, db: AsyncSession = Depends(get_a
 async def quick_remove_ship(
     action: RemoveShipAction, db: AsyncSession = Depends(get_api_db)
 ):
-    from app.models import get_or_create_game_settings
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
 
-    settings = await get_or_create_game_settings(db)
-
-    if settings.status.value != "waiting":
+    if state.status != GameStatusField.PREPARING:
         return {
             "success": False,
             "message": "Cannot remove ships - game has already started!",
         }
-
-    events = await get_all_events(db)
-    state = GameState.from_events(events)
 
     if action.team_color not in state.teams:
         return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
@@ -712,7 +743,7 @@ async def quick_remove_ship(
         row=action.row,
         col=action.col,
     )
-    new_state, updated_event = event.apply(state, game_status=settings.status.value)
+    new_state, updated_event = event.apply(state)
 
     if not updated_event.success:
         return {
@@ -741,6 +772,15 @@ async def create_locations(
 ):
     from app.models import get_all_locations, get_next_location_number
     from app.database import Location
+
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if state.status != GameStatusField.PREPARING:
+        return {
+            "success": False,
+            "message": "Cannot create locations - game already started!",
+        }
 
     # Check existing locations
     existing_locations = await get_all_locations(db)
@@ -893,19 +933,50 @@ async def start_game(db: AsyncSession = Depends(get_api_db)):
     from app.models import get_or_create_game_settings
     from app.database import GameStatus
 
-    settings = await get_or_create_game_settings(db)
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
 
-    if settings.status == GameStatus.STARTED:
+    if state.status == GameStatusField.STARTED:
         return {"success": False, "message": "Game has already started!"}
 
-    if settings.status == GameStatus.ENDED:
+    if state.status == GameStatusField.ENDED:
         return {"success": False, "message": "Game has ended! Reset first."}
+
+    event = GameStartedEvent()
+    new_state, updated_event = event.apply(state)
+    await save_event(db, updated_event)
 
     await update_game_settings(db, status=GameStatus.STARTED)
 
     return {
         "success": True,
         "message": "Game started! Teams can now bomb and redeem codes.",
+    }
+
+
+@app.post("/api/quick/end-game")
+async def end_game(winner: str = "", db: AsyncSession = Depends(get_api_db)):
+    from app.models import get_or_create_game_settings
+    from app.database import GameStatus
+
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if state.status == GameStatusField.PREPARING:
+        return {"success": False, "message": "Game hasn't started yet!"}
+
+    if state.status == GameStatusField.ENDED:
+        return {"success": False, "message": "Game has already ended!"}
+
+    event = GameEndedEvent(winner=winner)
+    new_state, updated_event = event.apply(state)
+    await save_event(db, updated_event)
+
+    await update_game_settings(db, status=GameStatus.ENDED)
+
+    return {
+        "success": True,
+        "message": f"Game ended! Winner: {winner if winner else 'No winner'}",
     }
 
 

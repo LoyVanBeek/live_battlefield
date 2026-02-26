@@ -267,6 +267,12 @@
             <button class="btn btn-danger" onclick="resetTeam()">Reset Team</button>
         </div>
 
+        <div class="quick-actions">
+            <h3>🎮 Game Control</h3>
+            <button class="btn btn-primary" onclick="startGame()">Start Game</button>
+            <button class="btn btn-danger" onclick="endGame()">End Game</button>
+        </div>
+
         <div class="command-box" style="margin-bottom: 20px;">
             <h3>🚢 Remove Ship</h3>
             <div class="input-row">
@@ -474,6 +480,15 @@
 
         async function startGame() {
             const result = await apiCall('/api/quick/start-game', 'POST', {});
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
+        async function endGame() {
+            if (!confirm('End the game? This will stop all actions.')) return;
+            
+            const winner = prompt('Enter winner team name (optional):', '');
+            const result = await apiCall(`/api/quick/end-game?winner=${encodeURIComponent(winner || '')}`, 'POST', {});
             showOutput(result.message, !result.success);
             await refreshAll();
         }
