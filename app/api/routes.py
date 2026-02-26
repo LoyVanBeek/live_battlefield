@@ -857,6 +857,76 @@ async def create_locations(
     }
 
 
+class RemoveLocation(BaseModel):
+    location_number: int
+
+
+@app.post("/api/quick/remove_location")
+async def remove_location(
+    action: RemoveLocation, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_location_by_number, get_all_locations
+    from app.database import Location
+    from app.events.models import LocationRemovedEvent
+
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if state.status == GameStatusField.ENDED:
+        return {
+            "success": False,
+            "message": "Cannot remove location - game has ended!",
+        }
+
+    location = await get_location_by_number(db, action.location_number)
+    if not location:
+        return {
+            "success": False,
+            "message": f"Location {action.location_number} doesn't exist!",
+        }
+
+    existing_locations = await get_all_locations(db)
+    remaining_count = len(existing_locations) - 1
+
+    was_visited = False
+    for event in events:
+        if event.event_type == EventType.CODE_REDEEMED:
+            payload = event.payload
+            if payload.get("location_number") == action.location_number:
+                was_visited = True
+                break
+
+    await db.delete(location)
+
+    if remaining_count > 0:
+        new_bomb_value = max(1, 100 // remaining_count)
+        for loc in existing_locations:
+            if loc.number != action.location_number:
+                loc.bomb_value = new_bomb_value
+    else:
+        new_bomb_value = 0
+
+    event = LocationRemovedEvent(
+        number=action.location_number,
+        bomb_value=location.bomb_value,
+    )
+    await save_event(db, event)
+
+    await db.commit()
+
+    warning = ""
+    if was_visited:
+        warning = "Warning: This location had already been visited!"
+
+    return {
+        "success": True,
+        "message": f"Location {action.location_number} removed. All locations now worth {new_bomb_value} bombs (Total: {100 if remaining_count > 0 else 0}). {warning}".strip(),
+        "locations_remaining": remaining_count,
+        "bomb_value": new_bomb_value,
+        "was_visited": was_visited,
+    }
+
+
 @app.post("/api/quick/reset-game")
 async def reset_game(db: AsyncSession = Depends(get_api_db)):
     from app.models import delete_all_events

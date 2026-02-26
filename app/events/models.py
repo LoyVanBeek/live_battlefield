@@ -317,6 +317,38 @@ class LocationAddedEvent:
 
 
 @dataclass
+class LocationRemovedEvent:
+    event_type: EventType = EventType.LOCATION_REMOVED
+    number: int = 0
+    bomb_value: int = 1
+
+    def apply(self, state: "GameState") -> tuple["GameState", "LocationRemovedEvent"]:
+        number = self.number
+
+        new_location_codes = {
+            k: v for k, v in state.location_codes.items() if k != number
+        }
+
+        return (
+            replace(
+                state,
+                location_codes=new_location_codes,
+            ),
+            self,
+        )
+
+    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.LOCATION_REMOVED,
+            payload={
+                "number": self.number,
+                "bomb_value": self.bomb_value,
+            },
+            player_id=player_id,
+        )
+
+
+@dataclass
 class BombsAddedEvent:
     event_type: EventType = EventType.BOMBS_ADDED
     color: str = ""

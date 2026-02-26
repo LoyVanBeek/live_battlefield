@@ -103,6 +103,18 @@
         .color-purple { background: #a03cdc; }
         .color-orange { background: #ff9800; }
         .color-yellow { background: #dcdc3c; color: #000; }
+        .btn-remove {
+            background: #dc3c3c;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-remove:hover {
+            background: #c42c2c;
+        }
     </style>
 </head>
 <body>
@@ -121,11 +133,12 @@
                         <th>Bombs</th>
                         <th>Visited By</th>
                         <th>Map</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="locations-body">
                     <tr>
-                        <td colspan="5" style="text-align: center;">Loading...</td>
+                        <td colspan="7" style="text-align: center;">Loading...</td>
                     </tr>
                 </tbody>
             </table>
@@ -154,7 +167,7 @@
                 const tbody = document.getElementById('locations-body');
                 
                 if (data.locations.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No locations found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No locations found</td></tr>';
                     return;
                 }
                 
@@ -180,13 +193,39 @@
                             <td>💣 ${loc.bomb_value || 1}</td>
                             <td class="visited">${visitedHtml}</td>
                             <td><a href="${mapUrl}" target="_blank" class="map-link">Map</a></td>
+                            <td><button class="btn-remove" onclick="removeLocation(${loc.number}, '${loc.code}')">Remove</button></td>
                         </tr>
                     `;
                 }).join('');
             } catch (e) {
                 console.error('Error loading locations:', e);
                 document.getElementById('locations-body').innerHTML = 
-                    '<tr><td colspan="6" style="text-align: center; color: #f44336;">Error loading locations</td></tr>';
+                    '<tr><td colspan="7" style="text-align: center; color: #f44336;">Error loading locations</td></tr>';
+            }
+        }
+
+        async function removeLocation(locationNumber, code) {
+            if (!confirm(`Remove location ${locationNumber} (code: ${code})?`)) {
+                return;
+            }
+            
+            try {
+                const resp = await fetch('/api/quick/remove_location', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ location_number: locationNumber })
+                });
+                const data = await resp.json();
+                
+                if (data.success) {
+                    alert(data.message);
+                    loadLocations();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (e) {
+                console.error('Error removing location:', e);
+                alert('Error removing location');
             }
         }
 
