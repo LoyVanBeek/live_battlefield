@@ -158,6 +158,13 @@ async def locations_page(request: Request):
     return templates.TemplateResponse("locations.html", {"request": request})
 
 
+@app.get("/team/{team_color}", response_class=HTMLResponse)
+async def team_page(request: Request, team_color: str):
+    return templates.TemplateResponse(
+        "team.html", {"request": request, "team_color": team_color}
+    )
+
+
 @app.get("/api/admin/locations")
 async def get_admin_locations(db: AsyncSession = Depends(get_api_db)):
     from app.models import get_all_locations

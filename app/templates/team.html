@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Battlefield - Team Play</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 { text-align: center; margin-bottom: 20px; color: #00d9ff; }
+        h2 { color: #00d9ff; margin-bottom: 15px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .btn {
+            padding: 10px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-primary { background: #00d9ff; color: #1a1a2e; }
+        .btn-primary:hover:not(:disabled) { background: #00b8d4; }
+        .btn-success { background: #4caf50; color: white; }
+        .btn-success:hover:not(:disabled) { background: #45a049; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-danger:hover:not(:disabled) { background: #da190b; }
+        
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            background: #16213e;
+            color: #00d9ff;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .nav-link:hover { background: #0f3460; }
+
+        /* Team Header */
+        .team-header {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .team-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .team-color-dot {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+        .team-name { font-size: 24px; font-weight: bold; }
+        .team-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 18px;
+        }
+        .team-stats span { display: flex; align-items: center; gap: 5px; }
+
+        /* Game Status */
+        .game-status {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 18px;
+        }
+        .game-status.started { border-left: 4px solid #4caf50; }
+        .game-status.waiting { border-left: 4px solid #ff9800; }
+        .game-status.ended { border-left: 4px solid #f44336; }
+
+        /* Board */
+        .board-section {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .board-section img {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+
+        /* Actions */
+        .actions {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .actions h3 { margin-bottom: 15px; }
+        .action-group {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #0f3460;
+        }
+        .action-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .action-group .btn { margin-right: 10px; margin-bottom: 10px; }
+        .action-inputs {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        .action-inputs input, .action-inputs select {
+            padding: 10px;
+            font-size: 14px;
+            border: 2px solid #0f3460;
+            border-radius: 5px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .action-inputs input:focus, .action-inputs select:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            display: none;
+            z-index: 1000;
+        }
+        #toast.success { background: #4caf50; color: white; }
+        #toast.error { background: #f44336; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/admin" class="nav-link">← Back to Admin</a>
+        
+        <h1>🎮 Team Play</h1>
+
+        <!-- Team Header -->
+        <div class="team-header" id="team-header">
+            <div class="team-info">
+                <span class="team-color-dot" id="team-color-dot"></span>
+                <span class="team-name" id="team-name">Loading...</span>
+            </div>
+            <div class="team-stats">
+                <span>💣 <span id="bomb-count">-</span></span>
+                <span>🚢 <span id="ship-count">-</span>/10</span>
+                <span>💥 <span id="sunk-count">-</span> sunk</span>
+            </div>
+        </div>
+
+        <!-- Game Status -->
+        <div class="game-status waiting" id="game-status">
+            Loading...
+        </div>
+
+        <!-- Private Board -->
+        <div class="board-section">
+            <h2>🚢 Your Private Board</h2>
+            <img id="private-board" src="" alt="Private board">
+        </div>
+
+        <!-- Actions -->
+        <div class="actions" id="actions">
+            Loading actions...
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <script>
+        const TEAM_COLOR = '{{ team_color }}';
+        let gameStatus = 'waiting';
+
+        async function apiCall(url, method = 'GET', body = null) {
+            try {
+                const options = { method };
+                if (body) {
+                    options.headers = { 'Content-Type': 'application/json' };
+                    options.body = JSON.stringify(body);
+                }
+                const resp = await fetch(url, options);
+                return await resp.json();
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+                return null;
+            }
+        }
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = type;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 3000);
+        }
+
+        async function loadGameStatus() {
+            const status = await apiCall('/api/game-status');
+            if (!status) return;
+
+            gameStatus = status.status;
+            
+            const statusEl = document.getElementById('game-status');
+            
+            if (status.status === 'started') {
+                statusEl.textContent = '🎮 Game Started - Bombs away!';
+                statusEl.className = 'game-status started';
+            } else if (status.status === 'ended') {
+                statusEl.textContent = '🏁 Game Ended';
+                statusEl.className = 'game-status ended';
+            } else {
+                statusEl.textContent = '⏳ Waiting to Start';
+                statusEl.className = 'game-status waiting';
+            }
+
+            renderActions();
+        }
+
+        async function loadTeam() {
+            const state = await apiCall('/api/state');
+            if (!state) return;
+
+            const team = state.teams?.find(t => t.color === TEAM_COLOR);
+            
+            if (!team) {
+                document.getElementById('team-header').innerHTML = `
+                    <div class="team-info">
+                        <span class="team-color-dot" style="background: ${TEAM_COLOR}"></span>
+                        <span class="team-name">Team ${TEAM_COLOR} (not joined)</span>
+                    </div>
+                `;
+                renderActions();
+                return;
+            }
+
+            document.getElementById('team-color-dot').style.background = TEAM_COLOR;
+            document.getElementById('team-name').textContent = team.name;
+            document.getElementById('bomb-count').textContent = team.bombs;
+            document.getElementById('ship-count').textContent = team.ships_placed;
+            document.getElementById('sunk-count').textContent = team.ships_sunk;
+
+            document.getElementById('private-board').src = `/api/board/${TEAM_COLOR}/private.png?${Date.now()}`;
+
+            renderActions();
+        }
+
+        function renderActions() {
+            const actionsEl = document.getElementById('actions');
+            
+            if (gameStatus === 'ended') {
+                actionsEl.innerHTML = '<p>Game has ended. No actions available.</p>';
+                return;
+            }
+
+            let html = '';
+
+            if (gameStatus === 'waiting') {
+                // PREPARING phase
+                html += `
+                    <div class="action-group">
+                        <h3>🚢 Ship Placement</h3>
+                        <button class="btn btn-primary" onclick="placeAllShips()">Place All Ships (Auto)</button>
+                        <div class="action-inputs">
+                            <input type="text" id="coord-input" placeholder="A1">
+                            <select id="ship-type">
+                                <option value="airplane_carrier">airplane_carrier (6)</option>
+                                <option value="battleship">battleship (4)</option>
+                                <option value="torpedo_hunter">torpedo_hunter (3)</option>
+                                <option value="patrol_boat">patrol_boat (2)</option>
+                            </select>
+                            <select id="direction">
+                                <option value="horizontal">horizontal</option>
+                                <option value="vertical">vertical</option>
+                            </select>
+                            <button class="btn btn-primary" onclick="placeShip()">Place Ship</button>
+                        </div>
+                        <div class="action-inputs">
+                            <input type="text" id="remove-coord" placeholder="A1 (remove)">
+                            <button class="btn btn-danger" onclick="removeShip()">Remove Ship</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Both phases can have bombs added
+            html += `
+                <div class="action-group">
+                    <h3>💣 Bombs</h3>
+                    <button class="btn btn-success" onclick="addBombs()">+5 Bombs</button>
+                </div>
+            `;
+
+            if (gameStatus === 'started') {
+                // STARTED phase
+                html += `
+                    <div class="action-group">
+                        <h3>💥 Bomb Enemy</h3>
+                        <div class="action-inputs">
+                            <select id="target-team">
+                                <option value="">Select target</option>
+                            </select>
+                            <input type="text" id="bomb-coord" placeholder="A1">
+                            <button class="btn btn-primary" onclick="throwBomb()">Throw Bomb</button>
+                        </div>
+                    </div>
+                    <div class="action-group">
+                        <h3>🔑 Redeem Code</h3>
+                        <div class="action-inputs">
+                            <input type="number" id="code-loc" placeholder="Location #">
+                            <input type="text" id="code-val" placeholder="ABCD">
+                            <button class="btn btn-primary" onclick="redeemCode()">Redeem</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            actionsEl.innerHTML = html;
+
+            // Populate target team dropdown
+            if (gameStatus === 'started') {
+                loadTargetTeams();
+            }
+        }
+
+        async function loadTargetTeams() {
+            const state = await apiCall('/api/state');
+            if (!state || !state.teams) return;
+
+            const select = document.getElementById('target-team');
+            select.innerHTML = '<option value="">Select target</option>';
+            
+            state.teams.forEach(team => {
+                if (team.color !== TEAM_COLOR) {
+                    const opt = document.createElement('option');
+                    opt.value = team.color;
+                    opt.textContent = team.name + ' (' + team.color + ')';
+                    select.appendChild(opt);
+                }
+            });
+        }
+
+        async function addBombs() {
+            const result = await apiCall('/api/quick/add_bombs', 'POST', { team_color: TEAM_COLOR, count: 5 });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeam();
+        }
+
+        async function placeAllShips() {
+            const result = await apiCall('/api/quick/place_all_ships', 'POST', { team_color: TEAM_COLOR });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeam();
+        }
+
+        async function placeShip() {
+            const coord = document.getElementById('coord-input').value || 'A1';
+            const shipType = document.getElementById('ship-type').value;
+            const direction = document.getElementById('direction').value;
+
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'place',
+                args: { ship_type: shipType, coordinate: coord, direction: direction }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeam();
+        }
+
+        async function removeShip() {
+            const coord = document.getElementById('remove-coord').value;
+            if (!coord) {
+                showToast('Enter a coordinate!', 'error');
+                return;
+            }
+
+            const coordUpper = coord.toUpperCase().trim();
+            const colLetter = coordUpper.charAt(0);
+            const col = colLetter.charCodeAt(0) - 65;
+            const row = parseInt(coordUpper.substring(1)) - 1;
+
+            if (col < 0 || col > 9 || row < 0 || row > 9) {
+                showToast('Invalid coordinate! Use A1-J10', 'error');
+                return;
+            }
+
+            const result = await apiCall('/api/quick/remove_ship', 'POST', {
+                team_color: TEAM_COLOR,
+                row: row,
+                col: col
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeam();
+        }
+
+        async function throwBomb() {
+            const target = document.getElementById('target-team').value;
+            const coord = document.getElementById('bomb-coord').value;
+
+            if (!target) {
+                showToast('Select a target!', 'error');
+                return;
+            }
+            if (!coord) {
+                showToast('Enter a coordinate!', 'error');
+                return;
+            }
+
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'bomb',
+                args: { target: target, coordinate: coord }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeam();
+        }
+
+        async function redeemCode() {
+            const locNum = document.getElementById('code-loc').value;
+            const code = document.getElementById('code-val').value;
+
+            if (!locNum) {
+                showToast('Enter location number!', 'error');
+                return;
+            }
+            if (!code) {
+                showToast('Enter code!', 'error');
+                return;
+            }
+
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'code',
+                args: { location_number: parseInt(locNum), code: code }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeam();
+        }
+
+        // Auto-refresh every 5 seconds
+        setInterval(() => {
+            loadGameStatus();
+            loadTeam();
+        }, 5000);
+
+        // Initial load
+        loadGameStatus();
+        loadTeam();
+    </script>
+</body>
+</html>
