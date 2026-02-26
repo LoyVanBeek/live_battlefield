@@ -30,6 +30,7 @@ from app.events import (
     EventType,
     TeamJoinedEvent,
     ShipPlacedEvent,
+    ShipRemovedEvent,
     BombThrownEvent,
     CodeRedeemedEvent,
     LocationAddedEvent,
@@ -72,6 +73,12 @@ class ExecuteCommand(BaseModel):
 class QuickAction(BaseModel):
     team_color: str
     count: Optional[int] = 1
+
+
+class RemoveShipAction(BaseModel):
+    team_color: str
+    row: int
+    col: int
 
 
 @app.get("/")
@@ -671,6 +678,47 @@ async def quick_reset_team(action: QuickAction, db: AsyncSession = Depends(get_a
     await save_event(db, event)
 
     return {"success": True, "message": f"Reset team {action.team_color}!"}
+
+
+@app.post("/api/quick/remove_ship")
+async def quick_remove_ship(
+    action: RemoveShipAction, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_or_create_game_settings
+
+    settings = await get_or_create_game_settings(db)
+
+    if settings.status.value != "waiting":
+        return {
+            "success": False,
+            "message": "Cannot remove ships - game has already started!",
+        }
+
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if action.team_color not in state.teams:
+        return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
+
+    event = ShipRemovedEvent(
+        color=action.team_color,
+        row=action.row,
+        col=action.col,
+    )
+    new_state, updated_event = event.apply(state, game_status=settings.status.value)
+
+    if not updated_event.success:
+        return {
+            "success": False,
+            "message": f"Failed to remove ship: {updated_event.reason}",
+        }
+
+    await save_event(db, updated_event)
+
+    return {
+        "success": True,
+        "message": f"Removed {updated_event.ship_type} from {action.team_color}!",
+    }
 
 
 class CreateLocations(BaseModel):

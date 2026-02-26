@@ -4,7 +4,7 @@ from app.events.types import EventType
 from app.database import GameEvent
 
 if TYPE_CHECKING:
-    from app.game.state import GameState, TeamState, BombResult
+    from app.game.state import GameState, TeamState, BombResult, _copy_team
 
 
 @dataclass
@@ -82,6 +82,78 @@ class ShipPlacedEvent:
                 "col": self.col,
                 "direction": self.direction,
                 "success": self.success,
+            },
+            player_id=player_id,
+        )
+
+
+@dataclass
+class ShipRemovedEvent:
+    event_type: EventType = EventType.SHIP_REMOVED
+    color: str = ""
+    ship_type: str = ""
+    row: int = 0
+    col: int = 0
+    success: bool = False
+    reason: str = ""
+
+    def apply(
+        self, state: "GameState", game_status: str = "waiting"
+    ) -> tuple["GameState", "ShipRemovedEvent"]:
+        from app.game.state import TeamState, _copy_team
+
+        if game_status != "waiting":
+            return state, replace(self, success=False, reason="Game already started")
+
+        color = self.color
+        if color not in state.teams:
+            return state, replace(self, success=False, reason="Team not found")
+
+        team = state.teams[color]
+        ship = team.get_ship_at(self.row, self.col)
+
+        if not ship:
+            return state, replace(self, success=False, reason="No ship at position")
+
+        ship_type = ship.ship_type
+        cells = ship.cells
+
+        new_ships = [s for s in team.ships if s is not ship]
+        new_private_board = [row[:] for row in team.private_board]
+        new_public_board = [row[:] for row in team.public_board]
+
+        for r, c in cells:
+            new_private_board[r][c] = False
+            new_public_board[r][c] = None
+
+        new_placed_types = dict(team.placed_ship_types)
+        new_placed_types[ship_type] = max(0, new_placed_types.get(ship_type, 1) - 1)
+        if new_placed_types[ship_type] == 0:
+            del new_placed_types[ship_type]
+
+        new_team = _copy_team(
+            team,
+            ships=new_ships,
+            private_board=new_private_board,
+            public_board=new_public_board,
+            placed_ship_types=new_placed_types,
+        )
+
+        new_teams = {**state.teams, color: new_team}
+        return replace(state, teams=new_teams), replace(
+            self, success=True, ship_type=ship_type
+        )
+
+    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.SHIP_REMOVED,
+            payload={
+                "color": self.color,
+                "ship_type": self.ship_type,
+                "row": self.row,
+                "col": self.col,
+                "success": self.success,
+                "reason": self.reason,
             },
             player_id=player_id,
         )

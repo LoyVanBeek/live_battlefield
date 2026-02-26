@@ -268,6 +268,15 @@
         </div>
 
         <div class="command-box" style="margin-bottom: 20px;">
+            <h3>🚢 Remove Ship</h3>
+            <div class="input-row">
+                <input type="text" id="remove-coord" placeholder="A1" style="width: 80px;">
+                <button class="btn btn-danger" onclick="removeShip()">Remove at Coordinate</button>
+            </div>
+            <p style="color: #888; font-size: 12px; margin-top: 5px;">Only works when game hasn't started</p>
+        </div>
+
+        <div class="command-box" style="margin-bottom: 20px;">
             <h3>📍 Create Random Locations</h3>
             <div class="input-row">
                 <input type="number" id="loc-count" placeholder="Count" value="10" style="width: 80px;">
@@ -557,6 +566,35 @@
             await refreshAll();
         }
 
+        async function removeShip() {
+            const color = document.getElementById('team-select').value;
+            if (!color) return showOutput('Select a team first!', true);
+            
+            const coord = document.getElementById('remove-coord').value || 'A1';
+            
+            // Parse coordinate (e.g., A1 -> row 0, col 0)
+            const coordUpper = coord.toUpperCase().trim();
+            if (coordUpper.length < 2) {
+                return showOutput('Invalid coordinate! Use format like A1', true);
+            }
+            
+            const colLetter = coordUpper.charAt(0);
+            const col = colLetter.charCodeAt(0) - 65; // A=0, B=1, etc.
+            const row = parseInt(coordUpper.substring(1)) - 1; // 1-based to 0-based
+            
+            if (col < 0 || col > 9 || row < 0 || row > 9) {
+                return showOutput('Invalid coordinate! Use A1-J10', true);
+            }
+            
+            const result = await apiCall('/api/quick/remove_ship', 'POST', { 
+                team_color: color,
+                row: row,
+                col: col
+            });
+            showOutput(result.message, !result.success);
+            await refreshAll();
+        }
+
         async function createLocations() {
             const count = parseInt(document.getElementById('loc-count').value) || 10;
             const lat = parseFloat(document.getElementById('loc-lat').value);
@@ -669,6 +707,7 @@
                     'place-coord': executePlace,
                     'bomb-coord': executeBomb,
                     'code-val': executeCode,
+                    'remove-coord': removeShip,
                 };
                 
                 const action = enterActions[focusedId];

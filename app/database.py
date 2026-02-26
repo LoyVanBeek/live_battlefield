@@ -59,6 +59,7 @@ class Player(Base):
 class EventType(str, enum.Enum):
     TEAM_JOINED = "team_joined"
     SHIP_PLACED = "ship_placed"
+    SHIP_REMOVED = "ship_removed"
     BOMB_THROWN = "bomb_thrown"
     CODE_REDEEMED = "code_redeemed"
     LOCATION_ADDED = "location_added"

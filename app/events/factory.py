@@ -3,6 +3,7 @@ from app.events.types import EventType
 from app.events.models import (
     TeamJoinedEvent,
     ShipPlacedEvent,
+    ShipRemovedEvent,
     BombThrownEvent,
     CodeRedeemedEvent,
     LocationAddedEvent,
@@ -29,6 +30,9 @@ def create_event(db_event) -> Optional[object]:
 
     elif event_type_value == "ship_placed":
         return ShipPlacedEvent(**payload_dict)
+
+    elif event_type_value == "ship_removed":
+        return ShipRemovedEvent(**payload_dict)
 
     elif event_type_value == "bomb_thrown":
         return BombThrownEvent(**payload_dict)

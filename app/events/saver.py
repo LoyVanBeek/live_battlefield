@@ -4,6 +4,7 @@ from app.database import GameEvent
 from app.events.models import (
     TeamJoinedEvent,
     ShipPlacedEvent,
+    ShipRemovedEvent,
     BombThrownEvent,
     CodeRedeemedEvent,
     LocationAddedEvent,
@@ -17,6 +18,7 @@ async def save_event(
     event: Union[
         TeamJoinedEvent,
         ShipPlacedEvent,
+        ShipRemovedEvent,
         BombThrownEvent,
         CodeRedeemedEvent,
         LocationAddedEvent,
