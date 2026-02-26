@@ -65,6 +65,8 @@ class EventType(str, enum.Enum):
     LOCATION_ADDED = "location_added"
     GAME_STARTED = "game_started"
     GAME_ENDED = "game_ended"
+    BOMBS_ADDED = "bombs_added"
+    TEAM_RESET = "team_reset"
 
 
 class GameEvent(Base):

@@ -473,7 +473,7 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
             return result
 
         team.bombs -= 1
-        bomb_result, ship = target.receive_bomb(row, col, cmd.team_color)
+        bomb_result, ship, _ = target.receive_bomb(row, col, cmd.team_color)
 
         from app.game.ships import parse_coordinate
 
