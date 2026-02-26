@@ -620,8 +620,8 @@ async def quick_add_bombs(action: QuickAction, db: AsyncSession = Depends(get_ap
     events = await get_all_events(db)
     state = GameState.from_events(events)
 
-    if state.status != GameStatusField.PREPARING:
-        return {"success": False, "message": "Cannot add bombs - game already started!"}
+    if state.status == GameStatusField.ENDED:
+        return {"success": False, "message": "Cannot add bombs - game has ended!"}
 
     if action.team_color not in state.teams:
         return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
