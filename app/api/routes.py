@@ -648,10 +648,10 @@ async def quick_place_all_ships(
     events = await get_all_events(db)
     state = GameState.from_events(events)
 
-    if state.status != GameStatusField.PREPARING:
+    if state.status == GameStatusField.ENDED:
         return {
             "success": False,
-            "message": "Cannot place ships - game already started!",
+            "message": "Cannot place ships - game has ended!",
         }
 
     if action.team_color not in state.teams:
@@ -660,47 +660,60 @@ async def quick_place_all_ships(
     team = state.teams[action.team_color]
 
     import random
+    from app.game.state import TeamState, _copy_team
+    from app.game.ships import SHIP_COUNTS, coordinate_to_string
 
-    placed = []
-    failed = []
-
+    ships_to_place = []
     for ship_type, count in SHIP_COUNTS.items():
-        for i in range(count):
-            attempts = 0
-            while attempts < 5000:
-                row = random.randint(0, 9)
-                col = random.randint(0, 9)
-                direction = random.choice(["horizontal", "vertical"])
+        already_placed = team.placed_ship_types.get(ship_type, 0)
+        for i in range(count - already_placed):
+            ships_to_place.append(ship_type)
 
-                if team.place_ship(ship_type, row, col, direction):
-                    from app.game.ships import coordinate_to_string
-
-                    coord = coordinate_to_string(row, col)
-                    placed.append(f"{ship_type} at {coord} {direction}")
-
-                    event = ShipPlacedEvent(
-                        color=action.team_color,
-                        ship_type=ship_type,
-                        row=row,
-                        col=col,
-                        direction=direction,
-                    )
-                    await save_event(db, event)
-                    break
-                attempts += 1
-            else:
-                failed.append(ship_type)
-
-    if failed:
+    if not ships_to_place:
         return {
-            "success": False,
-            "message": f"Placed {len(placed)} ships. Failed: {failed}",
+            "success": True,
+            "message": "All ships already placed!",
             "ships_placed": sum(team.placed_ship_types.values()),
         }
+
+    placements = []
+    team_copy = _copy_team(team)
+
+    for ship_type in ships_to_place:
+        found = False
+        for attempt in range(5000):
+            row = random.randint(0, 9)
+            col = random.randint(0, 9)
+            direction = random.choice(["horizontal", "vertical"])
+
+            success, updated_team = team_copy.place_ship(ship_type, row, col, direction)
+            if success:
+                placements.append((ship_type, row, col, direction))
+                team_copy = updated_team
+                found = True
+                break
+
+        if not found:
+            return {
+                "success": False,
+                "message": f"Could not find placement for {ship_type}",
+                "ships_placed": sum(team.placed_ship_types.values()),
+            }
+
+    for ship_type, row, col, direction in placements:
+        event = ShipPlacedEvent(
+            color=action.team_color,
+            ship_type=ship_type,
+            row=row,
+            col=col,
+            direction=direction,
+        )
+        await save_event(db, event)
+
     return {
         "success": True,
-        "message": f"Placed all {len(placed)} ships successfully!",
-        "ships_placed": sum(team.placed_ship_types.values()),
+        "message": f"Placed all {len(placements)} ships successfully!",
+        "ships_placed": sum(SHIP_COUNTS.values()),
     }
 
 
