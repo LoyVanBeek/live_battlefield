@@ -59,7 +59,9 @@ async def handle_join(
 
     existing_player = await get_player_by_chat(db, chat_id)
     if existing_player:
-        return "You have already joined the game!"
+        if existing_player.role != Role.GAMEMASTER:
+            return "You have already joined as a team! To start fresh, use /resetgame or contact a Game Master."
+        # If GM, allow them to also play as a team - continue with join logic
 
     events = await get_all_events(db)
     state = GameState.from_events(events)
@@ -424,7 +426,12 @@ async def handle_register_gm(db, update: Update, context: ContextTypes.DEFAULT_T
     if existing_player:
         if existing_player.role.value == "gamemaster":
             return "You are already registered as a game master!"
-        return "You are already registered as a team!"
+        # Allow team players to also be GMs
+        existing_player.role = Role.GAMEMASTER
+        await db.commit()
+        return (
+            "You are now also registered as a game master! You can now use GM commands."
+        )
 
     player = await create_player(db, "GameMaster", "gm", chat_id, Role.GAMEMASTER)
 
