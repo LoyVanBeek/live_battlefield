@@ -183,7 +183,7 @@
         <div class="status-bar">
             <div>
                 <span class="status waiting" id="game-status">⏳ WAITING</span>
-                <span class="locations" id="location-progress">Locations: 0/33</span>
+                <span class="locations" id="location-progress">0 locations</span>
             </div>
             <div class="buttons">
                 <button class="btn btn-success" id="btn-start" onclick="startGame()">Start Game</button>
@@ -270,6 +270,7 @@
             const statusEl = document.getElementById('game-status');
             const btnStart = document.getElementById('btn-start');
             const btnEnd = document.getElementById('btn-end');
+            const btnNew = document.getElementById('btn-new');
 
             if (status.status === 'started') {
                 statusEl.textContent = '🎮 STARTED';
@@ -291,7 +292,7 @@
             }
 
             document.getElementById('location-progress').textContent = 
-                `Locations: ${status.locations_placed}/${status.total_locations_needed}`;
+                `${status.locations_placed} locations`;
         }
 
         async function loadPublicBoards() {
