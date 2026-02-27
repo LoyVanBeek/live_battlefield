@@ -115,6 +115,45 @@
         .btn-remove:hover {
             background: #c42c2c;
         }
+        .btn-add {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .btn-add:hover {
+            background: #45a049;
+        }
+        .location-form {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .location-form input {
+            padding: 8px;
+            font-size: 14px;
+            border: 2px solid #0f3460;
+            border-radius: 5px;
+            background: #1a1a2e;
+            color: #eee;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        .location-form input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
@@ -122,6 +161,19 @@
         <a href="/admin" class="nav-link">← Back to Admin Panel</a>
         
         <h1>📍 Locations Overview (Secret)</h1>
+        
+        <!-- Add Location Form -->
+        <div class="location-form">
+            <h3 style="margin-bottom: 10px; color: #00d9ff;">➕ Add Locations</h3>
+            <div class="form-row">
+                <input type="number" id="loc-lat" placeholder="Latitude" step="0.0001" style="width: 120px;">
+                <input type="number" id="loc-lon" placeholder="Longitude" step="0.0001" style="width: 120px;">
+                <input type="number" id="loc-count" placeholder="Count" value="1" min="1" max="100" style="width: 80px;">
+                <input type="number" id="loc-radius" placeholder="Radius km" value="2" step="0.1" style="width: 100px;">
+                <button class="btn-add" onclick="addLocations()">Add</button>
+            </div>
+            <p style="color: #888; font-size: 12px; margin-top: 5px;">Leave count=1 for single location, or set higher for random batch.</p>
+        </div>
         
         <div class="table-container">
             <table>
@@ -219,7 +271,47 @@
                 
                 if (data.success) {
                     alert(data.message);
+        async function addLocations() {
+            const lat = parseFloat(document.getElementById('loc-lat').value);
+            const lon = parseFloat(document.getElementById('loc-lon').value);
+            const count = parseInt(document.getElementById('loc-count').value) || 1;
+            const radius = parseFloat(document.getElementById('loc-radius').value) || 2;
+            
+            if (isNaN(lat) || isNaN(lon)) {
+                alert('Please enter latitude and longitude!');
+                return;
+            }
+            
+            if (!confirm(`Create ${count} location(s) at (${lat}, ${lon})?`)) {
+                return;
+            }
+            
+            try {
+                const resp = await fetch('/api/quick/create_locations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        latitude: lat,
+                        longitude: lon,
+                        count: count,
+                        radius_km: radius
+                    })
+                });
+                const data = await resp.json();
+                
+                if (data.success) {
+                    alert(data.message);
                     loadLocations();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (e) {
+                console.error('Error adding locations:', e);
+                alert('Error adding locations');
+            }
+        }
+
+        loadLocations();
                 } else {
                     alert('Error: ' + data.message);
                 }

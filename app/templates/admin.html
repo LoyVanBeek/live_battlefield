@@ -188,6 +188,7 @@
             <div class="buttons">
                 <button class="btn btn-success" id="btn-start" onclick="startGame()">Start Game</button>
                 <button class="btn btn-danger" id="btn-end" onclick="endGame()">End Game</button>
+                <button class="btn btn-primary" id="btn-new" onclick="startNewGame()">Start New Game</button>
             </div>
         </div>
 
@@ -202,6 +203,19 @@
         <!-- Teams -->
         <div class="section">
             <h2>🚢 Teams</h2>
+            
+            <!-- Join Team -->
+            <div style="margin-bottom: 20px; padding: 15px; background: #0f3460; border-radius: 8px;">
+                <h3 style="margin-bottom: 10px;">➕ Join Team</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                    <select id="join-color" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                        <option value="">Select color...</option>
+                    </select>
+                    <input type="text" id="join-name" placeholder="Team name" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                    <button class="btn btn-success" onclick="joinTeam()">Join</button>
+                </div>
+            </div>
+            
             <div class="teams-grid" id="teams-grid">
                 Loading...
             </div>
@@ -267,11 +281,13 @@
                 statusEl.className = 'status ended';
                 btnStart.disabled = true;
                 btnEnd.disabled = true;
+                btnNew.disabled = false;
             } else {
                 statusEl.textContent = '⏳ WAITING';
                 statusEl.className = 'status waiting';
                 btnStart.disabled = false;
                 btnEnd.disabled = true;
+                btnNew.disabled = true;
             }
 
             document.getElementById('location-progress').textContent = 
@@ -292,7 +308,7 @@
             grid.innerHTML = state.teams.map(team => `
                 <div class="public-board-item">
                     <h4>${team.name} (${team.color})</h4>
-                    <img src="/api/board/public.png?${Date.now()}" alt="${team.color}">
+                    <img src="/api/admin/events/latest/board/${team.color}/public.png?${Date.now()}" alt="${team.color}">
                 </div>
             `).join('');
         }
@@ -301,32 +317,90 @@
             const state = await apiCall('/api/state');
             if (!state) return;
 
+            // Populate available colors dropdown
+            const joinColorSelect = document.getElementById('join-color');
+            joinColorSelect.innerHTML = '<option value="">Select color...</option>';
+            if (state.available_colors) {
+                state.available_colors.forEach(color => {
+                    const opt = document.createElement('option');
+                    opt.value = color;
+                    opt.textContent = color.toUpperCase();
+                    joinColorSelect.appendChild(opt);
+                });
+            }
+
             const grid = document.getElementById('teams-grid');
             
-            if (!state.teams || state.teams.length === 0) {
-                grid.innerHTML = '<div class="no-teams">No teams yet. Join a team to start.</div>';
+            if ((!state.teams || state.teams.length === 0) && (!state.available_colors || state.available_colors.length === 0)) {
+                grid.innerHTML = '<div class="no-teams">No teams available</div>';
                 return;
             }
 
-            grid.innerHTML = state.teams.map(team => `
-                <div class="team-card">
-                    <div class="team-card-header">
-                        <span class="team-name">
-                            <span class="team-color-dot" style="background: ${team.color}"></span>
-                            ${team.name}
-                        </span>
+            let html = '';
+
+            // Show joined teams
+            if (state.teams && state.teams.length > 0) {
+                html += state.teams.map(team => `
+                    <div class="team-card">
+                        <div class="team-card-header">
+                            <span class="team-name">
+                                <span class="team-color-dot" style="background: ${team.color}"></span>
+                                ${team.name}
+                            </span>
+                        </div>
+                        <div class="team-stats">
+                            <span>💣 ${team.bombs}</span>
+                            <span>🚢 ${team.ships_placed}/${team.total_ships}</span>
+                            <span>💥 ${team.ships_sunk} sunk</span>
+                        </div>
+                        <div class="team-board">
+                            <img src="/api/board/${team.color}/private.png?${Date.now()}" alt="${team.color} board">
+                        </div>
+                        <a href="/team/${team.color}" class="team-play-link">🎮 Play as ${team.color}</a>
                     </div>
-                    <div class="team-stats">
-                        <span>💣 ${team.bombs}</span>
-                        <span>🚢 ${team.ships_placed}/${team.total_ships}</span>
-                        <span>💥 ${team.ships_sunk} sunk</span>
+                `).join('');
+            }
+
+            // Show available team slots
+            if (state.available_colors && state.available_colors.length > 0) {
+                html += state.available_colors.map(color => `
+                    <div class="team-card" style="opacity: 0.6;">
+                        <div class="team-card-header">
+                            <span class="team-name">
+                                <span class="team-color-dot" style="background: ${color}"></span>
+                                Available: ${color.toUpperCase()}
+                            </span>
+                        </div>
+                        <div class="team-stats">
+                            <span>Not joined</span>
+                        </div>
+                        <p style="color: #888; text-align: center; padding: 20px;">Select "${color.toUpperCase()}" above to join</p>
                     </div>
-                    <div class="team-board">
-                        <img src="/api/board/${team.color}/private.png?${Date.now()}" alt="${team.color} board">
-                    </div>
-                    <a href="/team/${team.color}" class="team-play-link">🎮 Play as ${team.color}</a>
-                </div>
-            `).join('');
+                `).join('');
+            }
+
+            grid.innerHTML = html;
+        }
+
+        async function joinTeam() {
+            const color = document.getElementById('join-color').value;
+            const name = document.getElementById('join-name').value || color;
+            
+            if (!color) {
+                showToast('Select a color first!', 'error');
+                return;
+            }
+            
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: color,
+                command: 'join',
+                args: { name: name }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success) {
+                document.getElementById('join-name').value = '';
+            }
+            loadTeams();
         }
 
         async function startGame() {
@@ -341,6 +415,16 @@
         async function endGame() {
             if (!confirm('End the game?')) return;
             const result = await apiCall('/api/quick/end-game', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadGameStatus();
+            loadPublicBoards();
+            loadTeams();
+        }
+
+        async function startNewGame() {
+            if (!confirm('Start a new game? This will clear ALL data (teams, locations, events).')) return;
+            if (!confirm('Are you REALLY sure? Everything will be deleted!')) return;
+            const result = await apiCall('/api/quick/clear-database', 'POST', {});
             showToast(result.message, result.success ? 'success' : 'error');
             loadGameStatus();
             loadPublicBoards();
@@ -379,6 +463,20 @@
             loadPublicBoards();
             loadTeams();
         }, 10000);
+
+        // Handle Enter key for join form
+        document.getElementById('join-name').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                joinTeam();
+            }
+        });
+        document.getElementById('join-color').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                joinTeam();
+            }
+        });
 
         // Initial load
         loadGameStatus();
