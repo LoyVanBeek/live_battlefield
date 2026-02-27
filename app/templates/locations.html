@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Locations Overview - Live Battlefield</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -154,6 +156,19 @@
             gap: 10px;
             align-items: center;
         }
+        #map {
+            height: 400px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 2px solid #0f3460;
+        }
+        .leaflet-popup-content-wrapper {
+            background: #16213e;
+            color: #eee;
+        }
+        .leaflet-popup-tip {
+            background: #16213e;
+        }
     </style>
 </head>
 <body>
@@ -184,7 +199,15 @@
                 </div>
                 <button class="btn-add" onclick="addLocations()" style="margin-top: 18px;">Add</button>
             </div>
-            <p style="color: #888; font-size: 12px; margin-top: 5px;">Leave count=1 for single location, or set higher for random batch.</p>
+            <p style="color: #888; font-size: 12px; margin-top: 5px;">Leave count=1 for single location, or set higher for random batch. Or click on the map below to pick a location.</p>
+        </div>
+        
+        <!-- Map -->
+        <div style="position: relative;">
+            <div id="map"></div>
+            <div style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(22, 33, 62, 0.9); padding: 8px 12px; border-radius: 4px; font-size: 12px; color: #00d9ff;">
+                🖱️ Click map to add location
+            </div>
         </div>
         
         <div class="table-container">
@@ -210,6 +233,10 @@
     </div>
 
     <script>
+        let map;
+        let markers = [];
+        const BOXTEL_CENTER = [51.59, 5.33];
+        
         const colorClasses = {
             'red': 'color-red',
             'blue': 'color-blue',
@@ -223,7 +250,62 @@
             return colorClasses[color] || 'color-red';
         }
 
+        function initMap() {
+            map = L.map('map').setView(BOXTEL_CENTER, 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+            
+            map.on('click', async function(e) {
+                try {
+                    const resp = await fetch('/api/quick/create_locations', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            latitude: e.latlng.lat,
+                            longitude: e.latlng.lng,
+                            count: 1,
+                            radius_km: 0
+                        })
+                    });
+                    const data = await resp.json();
+                    
+                    if (data.success && data.locations && data.locations.length > 0) {
+                        const loc = data.locations[0];
+                        const marker = L.marker([e.latlng.lat, e.latlng.lng])
+                            .addTo(map)
+                            .bindPopup(`<b>Location ${loc.number}</b><br>Code: ${loc.code}<br>Bombs: ${loc.bomb_value || 1}`)
+                            .openPopup();
+                        markers.push(marker);
+                        loadLocations();
+                    } else {
+                        alert(data.message || 'Error adding location');
+                    }
+                } catch (err) {
+                    console.error('Error adding location:', err);
+                    alert('Error adding location');
+                }
+            });
+        }
+
+        function updateMarkers(locations) {
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            
+            locations.forEach(loc => {
+                const marker = L.marker([loc.latitude, loc.longitude])
+                    .addTo(map)
+                    .bindPopup(`<b>Location ${loc.number}</b><br>Code: ${loc.code}<br>Bombs: ${loc.bomb_value || 1}`);
+                markers.push(marker);
+            });
+        }
+
         async function loadLocations() {
+            if (!map) {
+                initMap();
+            }
+            
             try {
                 const resp = await fetch('/api/admin/locations');
                 const data = await resp.json();
@@ -234,6 +316,8 @@
                     tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No locations found</td></tr>';
                     return;
                 }
+                
+                updateMarkers(data.locations);
                 
                 tbody.innerHTML = data.locations.map(loc => {
                     const lat = loc.latitude.toFixed(4);

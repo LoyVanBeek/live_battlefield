@@ -821,14 +821,17 @@ async def create_locations(
     created = []
 
     for i in range(action.count):
-        lat_offset = random.uniform(-action.radius_km / 111, action.radius_km / 111)
-        lon_offset = random.uniform(
-            -action.radius_km / (111 * math.cos(action.latitude * math.pi / 180)),
-            action.radius_km / (111 * math.cos(action.latitude * math.pi / 180)),
-        )
-
-        lat = action.latitude + lat_offset
-        lon = action.longitude + lon_offset
+        if action.radius_km > 0:
+            lat_offset = random.uniform(-action.radius_km / 111, action.radius_km / 111)
+            lon_offset = random.uniform(
+                -action.radius_km / (111 * math.cos(action.latitude * math.pi / 180)),
+                action.radius_km / (111 * math.cos(action.latitude * math.pi / 180)),
+            )
+            lat = action.latitude + lat_offset
+            lon = action.longitude + lon_offset
+        else:
+            lat = action.latitude
+            lon = action.longitude
 
         code = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
 
