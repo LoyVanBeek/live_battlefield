@@ -12,7 +12,7 @@ import asyncio
 
 from app.config import settings
 from app.models import get_all_events
-from app.game.state import GameState, TEAM_COLORS
+from app.game.state import GameState, TEAM_COLORS, TeamState
 from app.game.board import (
     render_all_public_boards,
     render_private_board,
@@ -289,6 +289,80 @@ async def get_game_state(db: AsyncSession = Depends(get_api_db)):
         "locations": locations,
         "available_colors": [c for c in TEAM_COLORS if c not in state.teams],
     }
+
+
+@app.get("/api/board/{team_color}/public.json")
+async def get_public_board_json(
+    team_color: str, db: AsyncSession = Depends(get_api_db)
+):
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if team_color not in state.teams:
+        return {"error": "Team not found"}
+
+    team = state.teams[team_color]
+    return _team_to_json(team, include_ships=False)
+
+
+@app.get("/api/board/{team_color}/private.json")
+async def get_private_board_json(
+    team_color: str, db: AsyncSession = Depends(get_api_db)
+):
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if team_color not in state.teams:
+        return {"error": "Team not found"}
+
+    team = state.teams[team_color]
+    return _team_to_json(team, include_ships=True)
+
+
+def _team_to_json(team: "TeamState", include_ships: bool) -> dict:
+    from app.game.ships import BOARD_SIZE
+
+    grid = []
+    for row in range(BOARD_SIZE):
+        grid_row = []
+        for col in range(BOARD_SIZE):
+            cell_data = {"row": row, "col": col}
+
+            public = team.public_board[row][col]
+            if public:
+                attacker_color, is_hit = public
+                cell_data["attacker_color"] = attacker_color
+                cell_data["is_hit"] = is_hit
+                cell_data["status"] = "hit" if is_hit else "miss"
+            else:
+                cell_data["status"] = "clear"
+
+            if include_ships:
+                has_ship = team.private_board[row][col]
+                if has_ship:
+                    cell_data["has_ship"] = True
+                    ship = team.get_ship_at(row, col)
+                    if ship:
+                        cell_data["ship_type"] = ship.ship_type
+                        cell_data["ship_sunk"] = ship.is_sunk()
+                else:
+                    cell_data["has_ship"] = False
+
+            grid_row.append(cell_data)
+        grid.append(grid_row)
+
+    result = {
+        "team": {"name": team.name, "color": team.color},
+        "grid": grid,
+    }
+
+    if include_ships:
+        result["bombs"] = team.bombs
+        result["ships"] = [s.to_dict() for s in team.ships]
+        result["ships_sunk"] = len(team.get_sunk_ships())
+        result["is_destroyed"] = team.is_destroyed()
+
+    return result
 
 
 @app.get("/api/board/public.png")
