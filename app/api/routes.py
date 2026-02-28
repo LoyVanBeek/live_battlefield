@@ -310,6 +310,20 @@ async def get_private_board(team_color: str, db: AsyncSession = Depends(get_api_
     return Response(content=img_bytes, media_type="image/png")
 
 
+@app.get("/api/board/{team_color}/public.png")
+async def get_public_board(team_color: str, db: AsyncSession = Depends(get_api_db)):
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if team_color not in state.teams:
+        return {"error": "Team not found"}
+
+    team = state.teams[team_color]
+    img = render_board(team, show_private=False)
+    img_bytes = boards_to_bytes(img)
+    return Response(content=img_bytes, media_type="image/png")
+
+
 @app.get("/api/admin/events/{event_index}/board/public.png")
 async def get_public_boards_at_event(
     event_index: int, db: AsyncSession = Depends(get_api_db)
