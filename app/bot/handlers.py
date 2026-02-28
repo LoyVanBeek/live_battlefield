@@ -247,7 +247,8 @@ async def handle_bomb(
         return f"That coordinate has already been bombed!"
 
     attacker.bombs -= 1
-    result, ship = target.receive_bomb(row, col, player.color)
+    result, ship, new_target = target.receive_bomb(row, col, player.color)
+    state.teams[target_color] = new_target
 
     event = BombThrownEvent(
         attacker_color=player.color,
