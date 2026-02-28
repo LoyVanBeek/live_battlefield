@@ -19,6 +19,7 @@ from app.bot.handlers import (
     handle_join,
     handle_leave,
     handle_place,
+    handle_place_all,
     handle_bomb,
     handle_code,
     handle_overview,
@@ -49,6 +50,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/leave - Leave the game\n"
         "/registergm - Register as game master\n"
         "/place <ship_type> <coordinate> <direction> - Place a ship\n"
+        "/placeall - Auto-place all your ships\n"
         "/bomb <team_color> <coordinate> - Throw a bomb\n"
         "/code <location_number> <code> - Redeem a code\n"
         "/overview - View your boards\n"
@@ -72,6 +74,7 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /join <team_name> - Join the game
 /leave - Leave the game
 /place <ship_type> <coordinate> <direction> - Place a ship
+/placeall - Auto-place all your ships
 /bomb <team_color> <coordinate> - Throw a bomb
 /code <location_number> <code> - Redeem a location code
 /overview - View your boards
@@ -164,6 +167,22 @@ async def place_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             logger.info(
                 f'RESPONSE: chat_id={chat_id} command=/place response="success"'
+            )
+
+
+async def place_all_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    async with async_session_maker() as db:
+        result = await handle_place_all(db, update, context)
+        if result:
+            logger.info(
+                f'RESPONSE: chat_id={chat_id} command=/placeall response="{result}"'
+            )
+            await safe_reply(update, result)
+        else:
+            logger.info(
+                f'RESPONSE: chat_id={chat_id} command=/placeall response="success"'
             )
 
 
@@ -366,6 +385,7 @@ def run_bot():
     app.add_handler(CommandHandler("join", join_handler))
     app.add_handler(CommandHandler("leave", leave_handler))
     app.add_handler(CommandHandler("place", place_handler))
+    app.add_handler(CommandHandler("placeall", place_all_handler))
     app.add_handler(CommandHandler("bomb", bomb_handler))
     app.add_handler(CommandHandler("code", code_handler))
     app.add_handler(CommandHandler("overview", overview_handler))

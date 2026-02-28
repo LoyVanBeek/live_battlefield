@@ -199,6 +199,33 @@ async def handle_place(
     return None
 
 
+async def handle_place_all(
+    db,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+    from app.services.ship_placement import place_all_ships
+    from app.models import get_or_create_game_settings
+
+    chat_id = update.effective_chat.id
+
+    player = await get_player_by_chat(db, chat_id)
+    if not player:
+        return "You need to join the game first! Use /join <team name>"
+
+    settings = await get_or_create_game_settings(db)
+
+    if settings.status.value == "started":
+        return "Cannot place ships - the game has already started!"
+
+    success, message = await place_all_ships(db, player.color)
+
+    if not success:
+        return message
+
+    return f"🚢 {message}"
+
+
 async def handle_bomb(
     db,
     update: Update,
