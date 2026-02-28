@@ -309,7 +309,7 @@
             grid.innerHTML = state.teams.map(team => `
                 <div class="public-board-item">
                     <h4>${team.name} (${team.color})</h4>
-                    <img src="/api/admin/events/latest/board/${team.color}/public.png?${Date.now()}" alt="${team.color}">
+                    <img src="/api/board/${team.color}/public.png?${Date.now()}" alt="${team.color}">
                 </div>
             `).join('');
         }
@@ -464,13 +464,6 @@
             loadPublicBoards();
             loadTeams();
         }
-
-        // Auto-refresh every 10 seconds
-        setInterval(() => {
-            loadGameStatus();
-            loadPublicBoards();
-            loadTeams();
-        }, 10000);
 
         // Handle Enter key for join form
         document.getElementById('join-name').addEventListener('keydown', function(event) {
