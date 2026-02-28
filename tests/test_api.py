@@ -243,3 +243,254 @@ class TestLocations:
         assert response.status_code == 200
         data = response.json()
         assert "locations" in data
+
+
+class TestBoardJson:
+    """Tests for /api/board/*/public.json and /api/board/*/private.json endpoints"""
+
+    def test_team_to_json_public_board(self):
+        from app.api.routes import _team_to_json
+        from app.game.state import TeamState
+
+        team = TeamState(name="Red Team", color="red", chat_id=123, bombs=5)
+        team.place_ship("patrol_boat", 0, 0, "horizontal")
+        team.place_ship("destroyer", 2, 2, "vertical")
+        team.receive_bomb(0, 0, "blue")
+        team.receive_bomb(5, 5, "blue")
+        team.receive_bomb(5, 6, "green")
+
+        result = _team_to_json(team, include_ships=False)
+
+        assert "team" in result
+        assert "grid" in result
+        assert "bombs" not in result
+        assert "ships" not in result
+
+        assert result["team"]["name"] == "Red Team"
+        assert result["team"]["color"] == "red"
+
+        grid = result["grid"]
+        assert len(grid) == 10
+        assert len(grid[0]) == 10
+
+    def test_team_to_json_private_board(self):
+        from app.api.routes import _team_to_json
+        from app.game.state import TeamState
+
+        team = TeamState(name="Blue Team", color="blue", chat_id=456, bombs=3)
+        _, team = team.place_ship("patrol_boat", 0, 0, "horizontal")
+        _, team = team.place_ship("torpedo_hunter", 5, 5, "vertical")
+        _, _, team = team.receive_bomb(0, 0, "red")
+
+        result = _team_to_json(team, include_ships=True)
+
+        assert "team" in result
+        assert "grid" in result
+        assert "bombs" in result
+        assert "ships" in result
+        assert "ships_sunk" in result
+        assert "is_destroyed" in result
+
+        assert result["bombs"] == 3
+        assert len(result["ships"]) == 2
+
+    def test_team_to_json_grid_structure(self):
+        from app.api.routes import _team_to_json
+        from app.game.state import TeamState
+
+        team = TeamState(name="Test", color="red", chat_id=123)
+        result = _team_to_json(team, include_ships=False)
+
+        for row in result["grid"]:
+            for cell in row:
+                assert "row" in cell
+                assert "col" in cell
+                assert "status" in cell
+
+    def test_team_to_json_hit_miss_clear(self):
+        from app.api.routes import _team_to_json
+        from app.game.state import TeamState
+
+        team = TeamState(name="Test", color="red", chat_id=123)
+        team.place_ship("patrol_boat", 0, 0, "horizontal")
+
+        team.receive_bomb(0, 0, "blue")
+        team.receive_bomb(5, 5, "blue")
+        result = _team_to_json(team, include_ships=False)
+
+        hit_cell = result["grid"][0][0]
+        assert hit_cell["status"] == "hit"
+        assert hit_cell["attacker_color"] == "blue"
+        assert hit_cell["is_hit"] == True
+
+        miss_cell = result["grid"][5][5]
+        assert miss_cell["status"] == "miss"
+        assert miss_cell["attacker_color"] == "blue"
+        assert miss_cell["is_hit"] == False
+
+        clear_cell = result["grid"][9][9]
+        assert clear_cell["status"] == "clear"
+
+    def test_team_to_json_private_ship_info(self):
+        from app.api.routes import _team_to_json
+        from app.game.state import TeamState
+
+        team = TeamState(name="Test", color="red", chat_id=123)
+        team.place_ship("patrol_boat", 0, 0, "horizontal")
+
+        result = _team_to_json(team, include_ships=True)
+
+        ship_cell = result["grid"][0][0]
+        assert ship_cell["has_ship"] == True
+        assert ship_cell["ship_type"] == "patrol_boat"
+
+        empty_cell = result["grid"][5][5]
+        assert empty_cell["has_ship"] == False
+
+    def test_team_to_json_sunk_ship(self):
+        from app.api.routes import _team_to_json
+        from app.game.state import TeamState
+
+        team = TeamState(name="Test", color="red", chat_id=123)
+        team.place_ship("patrol_boat", 0, 0, "horizontal")
+
+        team.receive_bomb(0, 0, "blue")
+        team.receive_bomb(0, 1, "blue")
+
+        result = _team_to_json(team, include_ships=True)
+
+        assert result["ships_sunk"] == 1
+        assert result["is_destroyed"] == True
+
+        sunk_cell = result["grid"][0][0]
+        assert sunk_cell["ship_sunk"] == True
+
+    def test_api_public_board_json_endpoint(self):
+        from app.api.routes import app, get_api_db
+        from app.game.state import GameState
+        from app.events.models import TeamJoinedEvent
+
+        state = GameState()
+        event = TeamJoinedEvent(name="Red Team", color="red", chat_id=123, bombs=3)
+        state.handle_team_joined(event)
+
+        async def override_get_db():
+            class MockSession:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *args):
+                    pass
+
+                async def execute(self, *args, **kwargs):
+                    return MagicMock()
+
+                async def commit(self):
+                    pass
+
+                async def refresh(self, *args):
+                    pass
+
+            yield MockSession()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.api.routes.get_all_events", return_value=[]):
+                    client = TestClient(app)
+                    response = client.get("/api/board/red/public.json")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "team" in data
+            assert "grid" in data
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_api_private_board_json_endpoint(self):
+        from app.api.routes import app, get_api_db
+        from app.game.state import GameState
+        from app.events.models import TeamJoinedEvent
+
+        state = GameState()
+        event = TeamJoinedEvent(name="Blue Team", color="blue", chat_id=456, bombs=3)
+        state.handle_team_joined(event)
+
+        async def override_get_db():
+            class MockSession:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *args):
+                    pass
+
+                async def execute(self, *args, **kwargs):
+                    return MagicMock()
+
+                async def commit(self):
+                    pass
+
+                async def refresh(self, *args):
+                    pass
+
+            yield MockSession()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.api.routes.get_all_events", return_value=[]):
+                    client = TestClient(app)
+                    response = client.get("/api/board/blue/private.json")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "team" in data
+            assert "grid" in data
+            assert "bombs" in data
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_api_board_json_team_not_found(self):
+        from app.api.routes import app, get_api_db
+        from app.game.state import GameState
+        from app.events.models import TeamJoinedEvent
+
+        state = GameState()
+        event = TeamJoinedEvent(name="Red Team", color="red", chat_id=123, bombs=3)
+        state.handle_team_joined(event)
+
+        async def override_get_db():
+            class MockSession:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *args):
+                    pass
+
+                async def execute(self, *args, **kwargs):
+                    return MagicMock()
+
+                async def commit(self):
+                    pass
+
+                async def refresh(self, *args):
+                    pass
+
+            yield MockSession()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.api.routes.get_all_events", return_value=[]):
+                    client = TestClient(app)
+                    response = client.get("/api/board/nonexistent/private.json")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "error" in data
+            assert data["error"] == "Team not found"
+        finally:
+            app.dependency_overrides.clear()
