@@ -147,6 +147,77 @@
         }
         #toast.success { background: #4caf50; color: white; }
         #toast.error { background: #f44336; color: white; }
+
+        /* Public Boards Grid */
+        .public-boards-section {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .public-boards-section h2 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+        }
+        .public-boards-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+        .public-board-item {
+            flex: 0 0 auto;
+            text-align: center;
+        }
+        .public-board-item p {
+            margin-bottom: 8px;
+            color: #aaa;
+            font-size: 14px;
+        }
+        .public-board-item img {
+            max-width: 250px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .public-board-item img:hover {
+            transform: scale(1.05);
+        }
+
+        /* Modal for zoom */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .modal.active { display: flex; }
+        .modal img {
+            max-width: 90%;
+            max-height: 80%;
+            border-radius: 8px;
+        }
+        .modal p {
+            color: #fff;
+            margin-top: 15px;
+            font-size: 18px;
+        }
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 40px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -179,6 +250,14 @@
             <img id="private-board" src="" alt="Private board">
         </div>
 
+        <!-- Public Boards -->
+        <div class="public-boards-section">
+            <h2>💥 Public Boards (All Teams)</h2>
+            <div class="public-boards-grid" id="public-boards-grid">
+                Loading...
+            </div>
+        </div>
+
         <!-- Actions -->
         <div class="actions" id="actions">
             Loading actions...
@@ -187,6 +266,13 @@
 
     <!-- Toast -->
     <div id="toast"></div>
+
+    <!-- Modal for zoom -->
+    <div class="modal" id="modal" onclick="closeModal()">
+        <span class="modal-close">&times;</span>
+        <img id="modal-img" src="" alt="">
+        <p id="modal-caption"></p>
+    </div>
 
     <script>
         const TEAM_COLOR = '{{ team_color }}';
@@ -262,7 +348,71 @@
 
             document.getElementById('private-board').src = `/api/board/${TEAM_COLOR}/private.png?${Date.now()}`;
 
+            // Load public boards
+            loadPublicBoards();
+
             renderActions();
+        }
+
+        async function updateStats() {
+            const state = await apiCall('/api/state');
+            if (!state) return;
+
+            const team = state.teams?.find(t => t.color === TEAM_COLOR);
+            
+            if (!team) {
+                document.getElementById('team-header').innerHTML = `
+                    <div class="team-info">
+                        <span class="team-color-dot" style="background: ${TEAM_COLOR}"></span>
+                        <span class="team-name">Team ${TEAM_COLOR} (not joined)</span>
+                    </div>
+                `;
+                return;
+            }
+
+            document.getElementById('team-color-dot').style.background = TEAM_COLOR;
+            document.getElementById('team-name').textContent = team.name;
+            document.getElementById('bomb-count').textContent = team.bombs;
+            document.getElementById('ship-count').textContent = team.ships_placed;
+            document.getElementById('sunk-count').textContent = team.ships_sunk;
+        }
+
+        function refreshBoards() {
+            document.getElementById('private-board').src = `/api/board/${TEAM_COLOR}/private.png?${Date.now()}`;
+            loadPublicBoards();
+        }
+
+        async function loadPublicBoards() {
+            const state = await apiCall('/api/state');
+            if (!state || !state.teams) return;
+
+            const grid = document.getElementById('public-boards-grid');
+            grid.innerHTML = '';
+
+            state.teams.forEach(team => {
+                const item = document.createElement('div');
+                item.className = 'public-board-item';
+                item.innerHTML = `
+                    <p>${team.name} (${team.color})</p>
+                    <img src="/api/board/${team.color}/public.png?${Date.now()}" 
+                         alt="${team.color} public board"
+                         onclick="showModal(this, '${team.name} (${team.color})')">
+                `;
+                grid.appendChild(item);
+            });
+        }
+
+        function showModal(imgEl, caption) {
+            const modal = document.getElementById('modal');
+            const modalImg = document.getElementById('modal-img');
+            const modalCaption = document.getElementById('modal-caption');
+            modalImg.src = imgEl.src;
+            modalCaption.textContent = caption;
+            modal.classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
         }
 
         function renderActions() {
@@ -363,13 +513,14 @@
         async function addBombs() {
             const result = await apiCall('/api/quick/add_bombs', 'POST', { team_color: TEAM_COLOR, count: 5 });
             showToast(result.message, result.success ? 'success' : 'error');
-            loadTeam();
+            updateStats();
         }
 
         async function placeAllShips() {
             const result = await apiCall('/api/quick/place_all_ships', 'POST', { team_color: TEAM_COLOR });
             showToast(result.message, result.success ? 'success' : 'error');
-            loadTeam();
+            updateStats();
+            refreshBoards();
         }
 
         async function placeShip() {
@@ -383,7 +534,8 @@
                 args: { ship_type: shipType, coordinate: coord, direction: direction }
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            loadTeam();
+            updateStats();
+            refreshBoards();
         }
 
         async function removeShip() {
@@ -409,7 +561,8 @@
                 col: col
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            loadTeam();
+            updateStats();
+            refreshBoards();
         }
 
         async function throwBomb() {
@@ -431,7 +584,8 @@
                 args: { target: target, coordinate: coord }
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            loadTeam();
+            updateStats();
+            refreshBoards();
         }
 
         async function redeemCode() {
@@ -453,14 +607,8 @@
                 args: { location_number: parseInt(locNum), code: code }
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            loadTeam();
+            updateStats();
         }
-
-        // Auto-refresh every 5 seconds
-        setInterval(() => {
-            loadGameStatus();
-            loadTeam();
-        }, 5000);
 
         // Initial load
         loadGameStatus();
