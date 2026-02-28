@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 from app.game.ships import (
     SHIP_SIZES,
     SHIP_COUNTS,
@@ -56,15 +60,20 @@ async def handle_join(
     db, update: Update, context: ContextTypes.DEFAULT_TYPE, team_name: str
 ):
     chat_id = update.effective_chat.id
+    logger.info(f"handle_join: chat_id={chat_id} team_name={team_name}")
 
     try:
         existing_player = await get_player_by_chat(db, chat_id)
+        logger.info(f"handle_join: existing_player={existing_player}")
         if existing_player:
-            if existing_player.role != Role.GAMEMASTER:
-                # Delete old player record to allow rejoining with new team
+            if existing_player.role == Role.GAMEMASTER:
+                # GM can also play as a team - delete old record and create fresh
                 await db.delete(existing_player)
                 await db.commit()
-            # If GM, allow them to also play as a team - continue with join logic
+            else:
+                # Team player wants to rejoin - delete old record
+                await db.delete(existing_player)
+                await db.commit()
 
         events = await get_all_events(db)
         state = GameState.from_events(events)
@@ -86,14 +95,19 @@ async def handle_join(
         if not color:
             return "No more colors available! The game is full."
 
+        logger.info(f"handle_join: creating player team={team_name} color={color}")
         player = await create_player(db, team_name, color, chat_id)
+        logger.info(f"handle_join: player created id={player.id}")
 
         event = TeamJoinedEvent(name=team_name, color=color, chat_id=chat_id, bombs=3)
         await save_event(db, event)
+        logger.info(f"handle_join: event saved")
 
         return f"Welcome {team_name}! You are the {color} team.\nYou have 0 bombs to start. Visit locations to earn bombs!"
     except Exception as e:
-        print(f"Error in handle_join: {e}")
+        logger.exception(
+            f"handle_join: ERROR chat_id={chat_id} team_name={team_name}: {e}"
+        )
         return "Something went wrong! Please try again or contact a Game Master."
 
 
@@ -628,4 +642,9 @@ async def handle_reset_game(db, update: Update, context: ContextTypes.DEFAULT_TY
 
     await update_game_settings(db, status=GameStatus.WAITING, started_at=None)
 
-    return "🔄 The game has been reset! Teams can now join again."
+    all_gms = await get_all_game_masters(db)
+    for gm in all_gms:
+        await db.delete(gm)
+    await db.commit()
+
+    return "🔄 The game has been reset! All Game Masters have been removed. Use /registergm to become a GM again."
