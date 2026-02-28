@@ -17,6 +17,7 @@ from app.database import init_db, async_session_maker
 from app.api.routes import app as fastapi_app
 from app.bot.handlers import (
     handle_join,
+    handle_leave,
     handle_place,
     handle_bomb,
     handle_code,
@@ -30,6 +31,8 @@ from app.bot.handlers import (
     handle_reset_game,
 )
 
+logger = logging.getLogger(__name__)
+
 
 async def safe_reply(update: Update, text: str):
     """Safely reply to an update, handling cases where message might be None"""
@@ -38,11 +41,12 @@ async def safe_reply(update: Update, text: str):
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await safe_reply(
-        update,
+    chat_id = update.effective_chat.id
+    response = (
         "Welcome to Live Battlefield!\n\n"
         "Commands:\n"
         "/join <team_name> - Join the game\n"
+        "/leave - Leave the game\n"
         "/registergm - Register as game master\n"
         "/place <ship_type> <coordinate> <direction> - Place a ship\n"
         "/bomb <team_color> <coordinate> - Throw a bomb\n"
@@ -55,8 +59,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Ship types: airplane_carrier, battleship, torpedo_hunter, patrol_boat\n"
         "Coordinates: A1-J10\n"
         "Directions: horizontal, vertical\n\n"
-        "Example: /place battleship B2 horizontal",
+        "Example: /place battleship B2 horizontal"
     )
+    logger.info(f'RESPONSE: chat_id={chat_id} command=/start response="help text sent"')
+    await safe_reply(update, response)
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -64,6 +70,7 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 📝 For Players:
 /join <team_name> - Join the game
+/leave - Leave the game
 /place <ship_type> <coordinate> <direction> - Place a ship
 /bomb <team_color> <coordinate> - Throw a bomb
 /code <location_number> <code> - Redeem a location code
@@ -81,22 +88,62 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ↔️ Directions: horizontal, vertical
 
 Example: /place battleship B2 horizontal"""
+    logger.info(
+        f'RESPONSE: chat_id={update.effective_chat.id} command=/help response="help text sent"'
+    )
     await safe_reply(update, help_text)
 
 
 async def join_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
     if not context.args:
         await update.message.reply_text("Usage: /join <team_name>")
         return
 
     team_name = " ".join(context.args)
     async with async_session_maker() as db:
-        result = await handle_join(db, update, context, team_name)
-        if result:
-            await update.message.reply_text(result)
+        try:
+            result = await handle_join(db, update, context, team_name)
+            if result:
+                logger.info(
+                    f'RESPONSE: chat_id={chat_id} command=/join response="{result}"'
+                )
+                await update.message.reply_text(result)
+            else:
+                logger.info(
+                    f'RESPONSE: chat_id={chat_id} command=/join response="success"'
+                )
+        except Exception as e:
+            logger.error(f'RESPONSE: chat_id={chat_id} command=/join error="{str(e)}"')
+            print(f"Error in join_handler: {e}")
+            await update.message.reply_text(
+                "Something went wrong! Please try again or contact a Game Master."
+            )
+
+
+async def leave_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    async with async_session_maker() as db:
+        try:
+            result = await handle_leave(db, update, context)
+            if result:
+                logger.info(
+                    f'RESPONSE: chat_id={chat_id} command=/leave response="{result}"'
+                )
+                await update.message.reply_text(result)
+        except Exception as e:
+            logger.error(f'RESPONSE: chat_id={chat_id} command=/leave error="{str(e)}"')
+            print(f"Error in leave_handler: {e}")
+            await update.message.reply_text(
+                "Something went wrong! Please try again or contact a Game Master."
+            )
 
 
 async def place_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
     if len(context.args) < 3:
         await update.message.reply_text(
             "Usage: /place <ship_type> <coordinate> <direction>"
@@ -110,10 +157,19 @@ async def place_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session_maker() as db:
         result = await handle_place(db, update, context, ship_type, coord, direction)
         if result:
+            logger.info(
+                f'RESPONSE: chat_id={chat_id} command=/place response="{result}"'
+            )
             await safe_reply(update, result)
+        else:
+            logger.info(
+                f'RESPONSE: chat_id={chat_id} command=/place response="success"'
+            )
 
 
 async def bomb_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
     if len(context.args) < 2:
         await safe_reply(update, "Usage: /bomb <team_color> <coordinate>")
         return
@@ -124,7 +180,12 @@ async def bomb_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session_maker() as db:
         result = await handle_bomb(db, update, context, target_color, coord)
         if result:
+            logger.info(
+                f'RESPONSE: chat_id={chat_id} command=/bomb response="{result}"'
+            )
             await safe_reply(update, result)
+        else:
+            logger.info(f'RESPONSE: chat_id={chat_id} command=/bomb response="success"')
 
 
 async def code_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -139,30 +200,55 @@ async def code_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     code = context.args[1]
+    chat_id = update.effective_chat.id
 
     async with async_session_maker() as db:
         result = await handle_code(db, update, context, location_number, code)
+        logger.info(f'RESPONSE: chat_id={chat_id} command=/code response="{result}"')
         await safe_reply(update, result)
 
 
 async def overview_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
     async with async_session_maker() as db:
-        await handle_overview(db, update, context)
+        result = await handle_overview(db, update, context)
+        if result:
+            logger.info(
+                f'RESPONSE: chat_id={chat_id} command=/overview response="{result}"'
+            )
+            await safe_reply(update, result)
+        else:
+            logger.info(
+                f'RESPONSE: chat_id={chat_id} command=/overview response="success (images sent)"'
+            )
 
 
 async def locations_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
     async with async_session_maker() as db:
         result = await handle_locations_list(db, update, context)
+        logger.info(
+            f'RESPONSE: chat_id={chat_id} command=/locations response="{result}"'
+        )
         await safe_reply(update, result)
 
 
 async def register_gm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
     async with async_session_maker() as db:
         result = await handle_register_gm(db, update, context)
+        logger.info(
+            f'RESPONSE: chat_id={chat_id} command=/registergm response="{result}"'
+        )
         await safe_reply(update, result)
 
 
 async def create_locations_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
     if len(context.args) < 3:
         await safe_reply(
             update,
@@ -186,12 +272,17 @@ async def create_locations_handler(update: Update, context: ContextTypes.DEFAULT
         result = await handle_create_locations(
             db, update, context, count, latitude, longitude, radius
         )
+        logger.info(
+            f'RESPONSE: chat_id={chat_id} command=/create_locations response="{result}"'
+        )
         await safe_reply(update, result)
 
 
 async def set_location_bombs_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
+    chat_id = update.effective_chat.id
+
     if len(context.args) < 2:
         await safe_reply(
             update, "Usage: /setlocationbombs <location_number> <bomb_count>"
@@ -212,22 +303,37 @@ async def set_location_bombs_handler(
         result = await handle_set_location_bombs(
             db, update, context, location_number, bomb_count
         )
+        logger.info(
+            f'RESPONSE: chat_id={chat_id} command=/setlocationbombs response="{result}"'
+        )
         await safe_reply(update, result)
 
 
 async def start_game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
     async with async_session_maker() as db:
         result = await handle_start_game(db, update, context)
+        logger.info(
+            f'RESPONSE: chat_id={chat_id} command=/startgame response="{result}"'
+        )
         await safe_reply(update, result)
 
 
 async def reset_game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
     async with async_session_maker() as db:
         result = await handle_reset_game(db, update, context)
+        logger.info(
+            f'RESPONSE: chat_id={chat_id} command=/resetgame response="{result}"'
+        )
         await safe_reply(update, result)
 
 
 async def location_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
     if not update.message.location:
         return
 
@@ -237,6 +343,9 @@ async def location_message_handler(update: Update, context: ContextTypes.DEFAULT
 
     async with async_session_maker() as db:
         result = await handle_location(db, update, context, lat, lon, code)
+        logger.info(
+            f'RESPONSE: chat_id={chat_id} command=location_message response="{result}"'
+        )
         await safe_reply(update, result)
 
 
@@ -255,6 +364,7 @@ def run_bot():
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_handler))
     app.add_handler(CommandHandler("join", join_handler))
+    app.add_handler(CommandHandler("leave", leave_handler))
     app.add_handler(CommandHandler("place", place_handler))
     app.add_handler(CommandHandler("bomb", bomb_handler))
     app.add_handler(CommandHandler("code", code_handler))

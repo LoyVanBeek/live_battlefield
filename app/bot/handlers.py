@@ -57,38 +57,70 @@ async def handle_join(
 ):
     chat_id = update.effective_chat.id
 
-    existing_player = await get_player_by_chat(db, chat_id)
-    if existing_player:
-        if existing_player.role != Role.GAMEMASTER:
-            return "You have already joined as a team! To start fresh, use /resetgame or contact a Game Master."
-        # If GM, allow them to also play as a team - continue with join logic
+    try:
+        existing_player = await get_player_by_chat(db, chat_id)
+        if existing_player:
+            if existing_player.role != Role.GAMEMASTER:
+                # Delete old player record to allow rejoining with new team
+                await db.delete(existing_player)
+                await db.commit()
+            # If GM, allow them to also play as a team - continue with join logic
 
-    events = await get_all_events(db)
-    state = GameState.from_events(events)
+        events = await get_all_events(db)
+        state = GameState.from_events(events)
 
-    from app.models import get_or_create_game_settings
+        from app.models import get_or_create_game_settings
 
-    settings = await get_or_create_game_settings(db)
+        settings = await get_or_create_game_settings(db)
 
-    if settings.status.value == "started":
-        return "The game has already started! No new teams can join."
+        if settings.status.value == "started":
+            return "The game has already started! No new teams can join."
 
-    if settings.status.value == "ended":
-        return "The game has ended! Use /resetgame to start a new game."
+        if settings.status.value == "ended":
+            return "The game has ended! Use /resetgame to start a new game."
 
-    if state.is_team_name_taken(team_name):
-        return f"Team name '{team_name}' is already taken!"
+        if state.is_team_name_taken(team_name):
+            return f"Team name '{team_name}' is already taken!"
 
-    color = state.get_next_color()
-    if not color:
-        return "No more colors available! The game is full."
+        color = state.get_next_color()
+        if not color:
+            return "No more colors available! The game is full."
 
-    player = await create_player(db, team_name, color, chat_id)
+        player = await create_player(db, team_name, color, chat_id)
 
-    event = TeamJoinedEvent(name=team_name, color=color, chat_id=chat_id, bombs=3)
-    await save_event(db, event)
+        event = TeamJoinedEvent(name=team_name, color=color, chat_id=chat_id, bombs=3)
+        await save_event(db, event)
 
-    return f"Welcome {team_name}! You are the {color} team.\nYou have 0 bombs to start. Visit locations to earn bombs!"
+        return f"Welcome {team_name}! You are the {color} team.\nYou have 0 bombs to start. Visit locations to earn bombs!"
+    except Exception as e:
+        print(f"Error in handle_join: {e}")
+        return "Something went wrong! Please try again or contact a Game Master."
+
+
+async def handle_leave(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    try:
+        from app.models import get_or_create_game_settings
+
+        settings = await get_or_create_game_settings(db)
+        if settings.status.value == "started":
+            return "Cannot leave - the game has already started!"
+
+        existing_player = await get_player_by_chat(db, chat_id)
+        if not existing_player:
+            return "You are not in the game yet!"
+
+        if existing_player.role == Role.GAMEMASTER:
+            return "Game Masters cannot leave the game. Contact another GM to reset."
+
+        await db.delete(existing_player)
+        await db.commit()
+
+        return "You have left the game. Use /join <team_name> to rejoin."
+    except Exception as e:
+        print(f"Error in handle_leave: {e}")
+        return "Something went wrong! Please try again or contact a Game Master."
 
 
 async def handle_place(

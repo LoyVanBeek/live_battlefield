@@ -12,7 +12,7 @@ Battleship game played via Telegram with real-life location quests.
 
 2. Start the application with Docker Compose:
    ```bash
-   docker-compose up --build
+   docker compose up --build
    ```
 
 3. The bot will be running and the web API at `http://localhost:8000`

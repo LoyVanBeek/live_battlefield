@@ -38,6 +38,8 @@ async def save_event(
     await db.commit()
     await db.refresh(game_event)
 
-    logger.info(f"EVENT: {game_event.event_type.value} - {game_event.payload}")
+    logger.info(
+        f"EVENT: chat_id={game_event.player.chat_id if game_event.player else 'unknown'} event={game_event.event_type.value} payload={game_event.payload}"
+    )
 
     return game_event
