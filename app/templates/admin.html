@@ -92,6 +92,7 @@
             padding: 10px;
             border-radius: 8px;
             text-align: center;
+            min-height: 280px; /* Prevent layout shift during refresh */
         }
         .public-board-item h4 { margin-bottom: 10px; }
         .public-board-item img { max-width: 100%; border-radius: 4px; }
@@ -136,6 +137,9 @@
             background: white;
             border: 1px solid #333;
             margin: 10px 0;
+            /* Fixed dimensions to prevent layout shifts */
+            width: 222px;  /* 1px border + 11 header + 10*20 cells */
+            height: 222px;
         }
         .team-board-cell {
             width: 20px;
@@ -145,6 +149,7 @@
             align-items: center;
             justify-content: center;
             box-sizing: border-box;
+            transition: background-color 0.2s ease; /* Smooth transitions */
         }
         .team-board-cell.header {
             background: #e0e0e0;
@@ -330,6 +335,9 @@
             'yellow': 'rgb(220, 200, 60)'
         };
         const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+        
+        // Cache for board grids to avoid rebuilding
+        const boardGridCache = new Map();
 
         async function renderBoard(containerId, jsonUrl) {
             try {
@@ -339,42 +347,72 @@
                     document.getElementById(containerId).innerHTML = '<p>' + data.error + '</p>';
                     return;
                 }
-                renderBoardFromData(containerId, data, true);
+                updateBoardFromData(containerId, data, true);
             } catch (err) {
                 console.error('Failed to load board:', err);
             }
         }
 
-        function renderBoardFromData(containerId, data, includeShips) {
+        function updateBoardFromData(containerId, data, includeShips) {
             const container = document.getElementById(containerId);
-            const grid = document.createElement('div');
-            grid.className = 'team-board-grid';
             
-            // Top-left corner (empty)
-            const corner = document.createElement('div');
-            corner.className = 'team-board-cell header';
-            grid.appendChild(corner);
-            
-            // Column headers A-J
-            for (let c = 0; c < 10; c++) {
-                const header = document.createElement('div');
-                header.className = 'team-board-cell header';
-                header.textContent = COLS[c];
-                grid.appendChild(header);
+            // Check if we already have a grid for this container
+            let grid = boardGridCache.get(containerId);
+            if (!grid) {
+                // Create new grid
+                grid = document.createElement('div');
+                grid.className = 'team-board-grid';
+                grid.dataset.containerId = containerId; // Store reference
+                
+                // Create header row
+                const corner = document.createElement('div');
+                corner.className = 'team-board-cell header';
+                grid.appendChild(corner);
+                
+                // Column headers A-J
+                for (let c = 0; c < 10; c++) {
+                    const header = document.createElement('div');
+                    header.className = 'team-board-cell header';
+                    header.textContent = COLS[c];
+                    header.style.fontSize = '9px';
+                    grid.appendChild(header);
+                }
+                
+                // Create cell placeholders for rows 1-10
+                for (let r = 0; r < 10; r++) {
+                    // Row header
+                    const rowHeader = document.createElement('div');
+                    rowHeader.className = 'team-board-cell header';
+                    rowHeader.textContent = r + 1;
+                    rowHeader.style.fontSize = '9px';
+                    grid.appendChild(rowHeader);
+                    
+                    // Cells
+                    for (let c = 0; c < 10; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'team-board-cell';
+                        cell.dataset.row = r;
+                        cell.dataset.col = c;
+                        grid.appendChild(cell);
+                    }
+                }
+                
+                container.innerHTML = '';
+                container.appendChild(grid);
+                boardGridCache.set(containerId, grid);
             }
             
-            // Rows 1-10
+            // Update cell content without recreating elements
             for (let r = 0; r < 10; r++) {
-                // Row header
-                const rowHeader = document.createElement('div');
-                rowHeader.className = 'team-board-cell header';
-                rowHeader.textContent = r + 1;
-                grid.appendChild(rowHeader);
-                
-                // Cells
                 for (let c = 0; c < 10; c++) {
                     const cellData = data.grid[r][c];
-                    const cell = document.createElement('div');
+                    // Find the cell (skip 11 elements per row: 1 header + 10 column headers for first row, then 1 row header)
+                    const cellIndex = 11 + r * 11 + c; // 11 header elements + row offset + column offset
+                    const cell = grid.children[cellIndex];
+                    
+                    if (!cell) continue;
+                    
+                    // Reset cell classes
                     cell.className = 'team-board-cell';
                     
                     // Private board: show ships
@@ -383,6 +421,11 @@
                         if (cellData.ship_sunk) {
                             cell.classList.add('sunk');
                         }
+                    }
+                    
+                    // Clear any existing markers
+                    while (cell.firstChild) {
+                        cell.removeChild(cell.firstChild);
                     }
                     
                     // Show hit/miss markers (both public and private)
@@ -399,13 +442,8 @@
                         marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
                         cell.appendChild(marker);
                     }
-                    
-                    grid.appendChild(cell);
                 }
             }
-            
-            container.innerHTML = '';
-            container.appendChild(grid);
         }
 
         async function apiCall(url, method = 'GET', body = null) {
@@ -475,18 +513,58 @@
                 grid.innerHTML = '<div class="no-teams">No teams yet</div>';
                 return;
             }
-
-            grid.innerHTML = state.teams.map(team => `
-                <div class="public-board-item">
-                    <h4>${team.name} (${team.color})</h4>
-                    <div id="public-board-${team.color}"></div>
-                </div>
-            `).join('');
             
-            // Render each public board
+            // Keep track of existing boards to avoid rebuilding
+            const existingBoards = new Set();
+            for (let i = 0; i < grid.children.length; i++) {
+                const child = grid.children[i];
+                const boardDiv = child.querySelector('[id^="public-board-"]');
+                if (boardDiv) {
+                    const id = boardDiv.id;
+                    existingBoards.add(id);
+                }
+            }
+
+            // Create or update boards for each team
             state.teams.forEach(team => {
-                renderBoard('public-board-' + team.color, '/api/board/' + team.color + '/public.json');
+                const boardId = `public-board-${team.color}`;
+                
+                // Check if board element already exists
+                let boardItem = document.getElementById(`public-board-item-${team.color}`);
+                if (!boardItem) {
+                    // Create new board item
+                    boardItem = document.createElement('div');
+                    boardItem.className = 'public-board-item';
+                    boardItem.id = `public-board-item-${team.color}`;
+                    boardItem.innerHTML = `
+                        <h4>${team.name} (${team.color})</h4>
+                        <div id="${boardId}"></div>
+                    `;
+                    grid.appendChild(boardItem);
+                } else {
+                    // Update team name if needed
+                    const nameElement = boardItem.querySelector('h4');
+                    if (nameElement && nameElement.textContent !== `${team.name} (${team.color})`) {
+                        nameElement.textContent = `${team.name} (${team.color})`;
+                    }
+                }
+                
+                // Render the board
+                renderBoard(boardId, '/api/board/' + team.color + '/public.json');
             });
+            
+            // Remove boards for teams that no longer exist
+            const currentTeams = new Set(state.teams.map(t => t.color));
+            for (let i = grid.children.length - 1; i >= 0; i--) {
+                const child = grid.children[i];
+                const match = child.id && child.id.match(/^public-board-item-(.+)$/);
+                if (match) {
+                    const color = match[1];
+                    if (!currentTeams.has(color)) {
+                        grid.removeChild(child);
+                    }
+                }
+            }
         }
 
         async function loadTeams() {
@@ -512,60 +590,138 @@
                 return;
             }
 
-            let html = '';
-
-            // Show joined teams
-            if (state.teams && state.teams.length > 0) {
-                html += state.teams.map(team => `
-                    <div class="team-card">
-                        <div class="team-card-header">
-                            <span class="team-name">
-                                <span class="team-color-dot" style="background: ${team.color}"></span>
-                                ${team.name}
-                            </span>
-                        </div>
-                        <div class="team-stats">
-                            <span>💣 ${team.bombs}</span>
-                            <span>🚢 ${team.ships_placed}/${team.total_ships}</span>
-                            <span>💥 ${team.ships_sunk} sunk</span>
-                        </div>
-                        <div class="team-board" id="team-board-${team.color}">
-                        </div>
-                        <a href="/team/${team.color}" class="team-play-link">🎮 Play as ${team.color}</a>
-                        <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')">💣 +5 Bombs</button>
-                        ${team.is_ai ? `
-                        <button class="btn btn-primary" style="margin-top: 5px;" onclick="triggerAIMove('${team.color}')">⚡ Next Move</button>
-                        <button class="btn btn-danger" style="margin-top: 5px;" onclick="removeAI('${team.color}')">🤖 Remove AI</button>
-                        ` : ''}
-                    </div>
-                `).join('');
+            // Keep track of existing team cards to avoid rebuilding
+            const existingCards = new Set();
+            for (let i = 0; i < grid.children.length; i++) {
+                const child = grid.children[i];
+                const match = child.id && child.id.match(/^team-card-(.+)$/);
+                if (match) {
+                    existingCards.add(match[1]);
+                }
             }
 
-            // Show available team slots
-            if (state.available_colors && state.available_colors.length > 0) {
-                html += state.available_colors.map(color => `
-                    <div class="team-card" style="opacity: 0.6;">
+            // Update or create team cards
+            if (state.teams && state.teams.length > 0) {
+                state.teams.forEach(team => {
+                    const cardId = `team-card-${team.color}`;
+                    let card = document.getElementById(cardId);
+                    
+                    if (!card) {
+                        // Create new card
+                        card = document.createElement('div');
+                        card.className = 'team-card';
+                        card.id = cardId;
+                        card.innerHTML = `
+                            <div class="team-card-header">
+                                <span class="team-name">
+                                    <span class="team-color-dot" style="background: ${team.color}"></span>
+                                    <span class="team-name-text">${team.name}</span>
+                                </span>
+                            </div>
+                            <div class="team-stats">
+                                <span class="team-bombs">💣 <span class="bombs-count">${team.bombs}</span></span>
+                                <span class="team-ships">🚢 <span class="ships-count">${team.ships_placed}</span>/${team.total_ships}</span>
+                                <span class="team-sunk">💥 <span class="sunk-count">${team.ships_sunk}</span> sunk</span>
+                            </div>
+                            <div class="team-board" id="team-board-${team.color}">
+                            </div>
+                            <a href="/team/${team.color}" class="team-play-link">🎮 Play as ${team.color}</a>
+                            <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')">💣 +5 Bombs</button>
+                            <div class="ai-buttons" id="ai-buttons-${team.color}"></div>
+                        `;
+                        grid.appendChild(card);
+                    } else {
+                        // Update existing card content
+                        const nameElement = card.querySelector('.team-name-text');
+                        if (nameElement && nameElement.textContent !== team.name) {
+                            nameElement.textContent = team.name;
+                        }
+                        
+                        const bombsElement = card.querySelector('.bombs-count');
+                        if (bombsElement && bombsElement.textContent !== String(team.bombs)) {
+                            bombsElement.textContent = team.bombs;
+                        }
+                        
+                        const shipsElement = card.querySelector('.ships-count');
+                        if (shipsElement && shipsElement.textContent !== String(team.ships_placed)) {
+                            shipsElement.textContent = team.ships_placed;
+                        }
+                        
+                        const sunkElement = card.querySelector('.sunk-count');
+                        if (sunkElement && sunkElement.textContent !== String(team.ships_sunk)) {
+                            sunkElement.textContent = team.ships_sunk;
+                        }
+                        
+                        // Update AI buttons
+                        const aiButtonsContainer = card.querySelector(`#ai-buttons-${team.color}`);
+                        if (aiButtonsContainer) {
+                            if (team.is_ai) {
+                                aiButtonsContainer.innerHTML = `
+                                    <button class="btn btn-primary" style="margin-top: 5px; margin-right: 5px;" onclick="triggerAIMove('${team.color}')">⚡ Next Move</button>
+                                    <button class="btn btn-danger" style="margin-top: 5px;" onclick="removeAI('${team.color}')">🤖 Remove AI</button>
+                                `;
+                            } else {
+                                aiButtonsContainer.innerHTML = '';
+                            }
+                        }
+                    }
+                    
+                    // Render the board
+                    renderBoard('team-board-' + team.color, '/api/board/' + team.color + '/private.json');
+                });
+            }
+
+            // Handle available colors (teams not yet joined)
+            const availableColors = state.available_colors || [];
+            availableColors.forEach(color => {
+                const cardId = `team-card-available-${color}`;
+                let card = document.getElementById(cardId);
+                
+                if (!card) {
+                    // Create new available team card
+                    card = document.createElement('div');
+                    card.className = 'team-card';
+                    card.id = cardId;
+                    card.style.opacity = '0.6';
+                    card.innerHTML = `
                         <div class="team-card-header">
                             <span class="team-name">
                                 <span class="team-color-dot" style="background: ${color}"></span>
-                                Available: ${color.toUpperCase()}
+                                <span class="team-name-text">Available: ${color.toUpperCase()}</span>
                             </span>
                         </div>
                         <div class="team-stats">
                             <span>Not joined</span>
                         </div>
                         <p style="color: #888; text-align: center; padding: 20px;">Select "${color.toUpperCase()}" above to join</p>
-                    </div>
-                `).join('');
-            }
+                    `;
+                    grid.appendChild(card);
+                }
+            });
 
-            grid.innerHTML = html;
+            // Remove cards for teams that no longer exist
+            const currentTeams = new Set((state.teams || []).map(t => t.color));
+            const currentAvailable = new Set(availableColors);
             
-            // Render private boards for each team
-            if (state.teams) {
-                state.teams.forEach(team => {
-                    renderBoard('team-board-' + team.color, '/api/board/' + team.color + '/private.json');
-                });
+            for (let i = grid.children.length - 1; i >= 0; i--) {
+                const child = grid.children[i];
+                const match = child.id && child.id.match(/^team-card-(.+)$/);
+                if (match) {
+                    const idParts = match[1].split('-');
+                    if (idParts[0] === 'available') {
+                        // This is an available team card
+                        const color = idParts[1];
+                        if (!currentAvailable.has(color)) {
+                            grid.removeChild(child);
+                        }
+                    } else {
+                        // This is a joined team card
+                        const color = match[1];
+                        if (!currentTeams.has(color)) {
+                            grid.removeChild(child);
+                        }
+                    }
+                }
             }
         }
 
@@ -720,11 +876,11 @@
         loadPublicBoards();
         loadTeams();
 
-        // Refresh boards every second
+        // Refresh boards every 2 seconds (reduced from 1 second to reduce flickering)
         setInterval(() => {
             loadPublicBoards();
             loadTeams();
-        }, 1000);
+        }, 2000);
     </script>
 </body>
 </html>

@@ -94,6 +94,7 @@
             border-radius: 8px;
             margin-bottom: 20px;
             text-align: center;
+            min-height: 350px; /* Prevent layout shift during refresh */
         }
         .board-section img {
             max-width: 100%;
@@ -169,6 +170,7 @@
         .public-board-item {
             flex: 0 0 auto;
             text-align: center;
+            min-height: 380px; /* Prevent layout shift during refresh */
         }
         .public-board-item p {
             margin-bottom: 8px;
@@ -226,6 +228,9 @@
             grid-template-rows: 30px repeat(10, 30px);
             background: white;
             border: 2px solid #333;
+            /* Fixed dimensions to prevent layout shifts */
+            width: 332px;  /* 2px border + 12 header + 10*30 cells */
+            height: 332px;
         }
         .board-cell {
             width: 30px;
@@ -235,6 +240,7 @@
             align-items: center;
             justify-content: center;
             box-sizing: border-box;
+            transition: background-color 0.2s ease; /* Smooth transitions */
         }
         .board-cell.header {
             background: #e0e0e0;
@@ -351,6 +357,9 @@
         };
         const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
+        // Cache for board grids to avoid rebuilding
+        const boardGridCache = new Map();
+
         function renderBoard(containerId, jsonUrl) {
             return new Promise((resolve, reject) => {
                 fetch(jsonUrl)
@@ -361,7 +370,7 @@
                             resolve();
                             return;
                         }
-                        renderBoardFromData(containerId, data, true);
+                        updateBoardFromData(containerId, data, true);
                         resolve();
                     })
                     .catch(err => {
@@ -371,36 +380,64 @@
             });
         }
 
-        function renderBoardFromData(containerId, data, includeShips) {
+        function updateBoardFromData(containerId, data, includeShips) {
             const container = document.getElementById(containerId);
-            const grid = document.createElement('div');
-            grid.className = 'board-grid';
             
-            // Top-left corner (empty)
-            const corner = document.createElement('div');
-            corner.className = 'board-cell header';
-            grid.appendChild(corner);
-            
-            // Column headers A-J
-            for (let c = 0; c < 10; c++) {
-                const header = document.createElement('div');
-                header.className = 'board-cell header';
-                header.textContent = COLS[c];
-                grid.appendChild(header);
+            // Check if we already have a grid for this container
+            let grid = boardGridCache.get(containerId);
+            if (!grid) {
+                // Create new grid
+                grid = document.createElement('div');
+                grid.className = 'board-grid';
+                grid.dataset.containerId = containerId; // Store reference
+                
+                // Create header row
+                const corner = document.createElement('div');
+                corner.className = 'board-cell header';
+                grid.appendChild(corner);
+                
+                // Column headers A-J
+                for (let c = 0; c < 10; c++) {
+                    const header = document.createElement('div');
+                    header.className = 'board-cell header';
+                    header.textContent = COLS[c];
+                    grid.appendChild(header);
+                }
+                
+                // Create cell placeholders for rows 1-10
+                for (let r = 0; r < 10; r++) {
+                    // Row header
+                    const rowHeader = document.createElement('div');
+                    rowHeader.className = 'board-cell header';
+                    rowHeader.textContent = r + 1;
+                    grid.appendChild(rowHeader);
+                    
+                    // Cells
+                    for (let c = 0; c < 10; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'board-cell';
+                        cell.dataset.row = r;
+                        cell.dataset.col = c;
+                        grid.appendChild(cell);
+                    }
+                }
+                
+                container.innerHTML = '';
+                container.appendChild(grid);
+                boardGridCache.set(containerId, grid);
             }
             
-            // Rows 1-10
+            // Update cell content without recreating elements
             for (let r = 0; r < 10; r++) {
-                // Row header
-                const rowHeader = document.createElement('div');
-                rowHeader.className = 'board-cell header';
-                rowHeader.textContent = r + 1;
-                grid.appendChild(rowHeader);
-                
-                // Cells
                 for (let c = 0; c < 10; c++) {
                     const cellData = data.grid[r][c];
-                    const cell = document.createElement('div');
+                    // Find the cell (skip 11 elements per row: 1 header + 10 column headers for first row, then 1 row header)
+                    const cellIndex = 11 + r * 11 + c; // 11 header elements + row offset + column offset
+                    const cell = grid.children[cellIndex];
+                    
+                    if (!cell) continue;
+                    
+                    // Reset cell classes
                     cell.className = 'board-cell';
                     
                     // Private board: show ships
@@ -409,6 +446,11 @@
                         if (cellData.ship_sunk) {
                             cell.classList.add('sunk');
                         }
+                    }
+                    
+                    // Clear any existing markers
+                    while (cell.firstChild) {
+                        cell.removeChild(cell.firstChild);
                     }
                     
                     // Show hit/miss markers (both public and private)
@@ -425,13 +467,8 @@
                         marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
                         cell.appendChild(marker);
                     }
-                    
-                    grid.appendChild(cell);
                 }
             }
-            
-            container.innerHTML = '';
-            container.appendChild(grid);
         }
 
         function renderPrivateBoard() {
@@ -551,18 +588,58 @@
             if (!state || !state.teams) return;
 
             const grid = document.getElementById('public-boards-grid');
-            grid.innerHTML = '';
+            
+            // Keep track of existing boards to avoid rebuilding
+            const existingBoards = new Set();
+            for (let i = 0; i < grid.children.length; i++) {
+                const child = grid.children[i];
+                const boardDiv = child.querySelector('[id^="public-board-"]');
+                if (boardDiv) {
+                    const id = boardDiv.id;
+                    existingBoards.add(id);
+                }
+            }
 
+            // Create or update boards for each team
             state.teams.forEach(team => {
-                const item = document.createElement('div');
-                item.className = 'public-board-item';
-                item.innerHTML = `
-                    <p>${team.name} (${team.color})</p>
-                    <div id="public-board-${team.color}"></div>
-                `;
-                grid.appendChild(item);
+                const boardId = `public-board-${team.color}`;
+                
+                // Check if board element already exists
+                let boardItem = document.getElementById(`public-board-item-${team.color}`);
+                if (!boardItem) {
+                    // Create new board item
+                    boardItem = document.createElement('div');
+                    boardItem.className = 'public-board-item';
+                    boardItem.id = `public-board-item-${team.color}`;
+                    boardItem.innerHTML = `
+                        <p>${team.name} (${team.color})</p>
+                        <div id="${boardId}"></div>
+                    `;
+                    grid.appendChild(boardItem);
+                } else {
+                    // Update team name if needed
+                    const nameElement = boardItem.querySelector('p');
+                    if (nameElement && nameElement.textContent !== `${team.name} (${team.color})`) {
+                        nameElement.textContent = `${team.name} (${team.color})`;
+                    }
+                }
+                
+                // Render the board
                 renderPublicBoard(team.color);
             });
+            
+            // Remove boards for teams that no longer exist
+            const currentTeams = new Set(state.teams.map(t => t.color));
+            for (let i = grid.children.length - 1; i >= 0; i--) {
+                const child = grid.children[i];
+                const match = child.id && child.id.match(/^public-board-item-(.+)$/);
+                if (match) {
+                    const color = match[1];
+                    if (!currentTeams.has(color)) {
+                        grid.removeChild(child);
+                    }
+                }
+            }
         }
 
         function showModal(imgEl, caption) {
@@ -763,8 +840,8 @@
         loadGameStatus();
         loadTeam();
 
-        // Refresh boards every second
-        setInterval(refreshBoards, 1000);
+        // Refresh boards every 2 seconds (reduced from 1 second to reduce flickering)
+        setInterval(refreshBoards, 2000);
     </script>
 </body>
 </html>
