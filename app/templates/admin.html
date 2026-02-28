@@ -129,6 +129,69 @@
         }
         .team-stats span { display: flex; align-items: center; gap: 5px; }
         .team-board img { width: 100%; border-radius: 4px; }
+        .team-board-grid {
+            display: inline-grid;
+            grid-template-columns: 20px repeat(10, 20px);
+            grid-template-rows: 20px repeat(10, 20px);
+            background: white;
+            border: 1px solid #333;
+            margin: 10px 0;
+        }
+        .team-board-cell {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+        .team-board-cell.header {
+            background: #e0e0e0;
+            font-size: 9px;
+            font-weight: bold;
+            color: #333;
+        }
+        .team-board-cell.ship {
+            background: #222;
+        }
+        .team-board-cell.ship.sunk {
+            background: #8B0000;
+        }
+        .team-board-cell .marker {
+            width: 14px;
+            height: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .team-board-cell .hit {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .team-board-cell .miss {
+            width: 12px;
+            height: 12px;
+            position: relative;
+        }
+        .team-board-cell .miss::before,
+        .team-board-cell .miss::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 2px;
+            background-color: inherit;
+            border-radius: 1px;
+        }
+        .team-board-cell .miss::before {
+            transform: translate(-50%, -50%) rotate(45deg);
+        }
+        .team-board-cell .miss::after {
+            transform: translate(-50%, -50%) rotate(-45deg);
+        }
         .team-play-link {
             display: block;
             text-align: center;
@@ -258,6 +321,92 @@
 
     <script>
         let gameStatus = 'waiting';
+        const TEAM_COLORS_RGB = {
+            'red': 'rgb(220, 60, 60)',
+            'blue': 'rgb(60, 100, 220)',
+            'green': 'rgb(60, 180, 80)',
+            'purple': 'rgb(160, 60, 180)',
+            'orange': 'rgb(255, 150, 50)',
+            'yellow': 'rgb(220, 200, 60)'
+        };
+        const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+
+        async function renderBoard(containerId, jsonUrl) {
+            try {
+                const resp = await fetch(jsonUrl);
+                const data = await resp.json();
+                if (data.error) {
+                    document.getElementById(containerId).innerHTML = '<p>' + data.error + '</p>';
+                    return;
+                }
+                renderBoardFromData(containerId, data, true);
+            } catch (err) {
+                console.error('Failed to load board:', err);
+            }
+        }
+
+        function renderBoardFromData(containerId, data, includeShips) {
+            const container = document.getElementById(containerId);
+            const grid = document.createElement('div');
+            grid.className = 'team-board-grid';
+            
+            // Top-left corner (empty)
+            const corner = document.createElement('div');
+            corner.className = 'team-board-cell header';
+            grid.appendChild(corner);
+            
+            // Column headers A-J
+            for (let c = 0; c < 10; c++) {
+                const header = document.createElement('div');
+                header.className = 'team-board-cell header';
+                header.textContent = COLS[c];
+                grid.appendChild(header);
+            }
+            
+            // Rows 1-10
+            for (let r = 0; r < 10; r++) {
+                // Row header
+                const rowHeader = document.createElement('div');
+                rowHeader.className = 'team-board-cell header';
+                rowHeader.textContent = r + 1;
+                grid.appendChild(rowHeader);
+                
+                // Cells
+                for (let c = 0; c < 10; c++) {
+                    const cellData = data.grid[r][c];
+                    const cell = document.createElement('div');
+                    cell.className = 'team-board-cell';
+                    
+                    // Private board: show ships
+                    if (includeShips && cellData.has_ship) {
+                        cell.classList.add('ship');
+                        if (cellData.ship_sunk) {
+                            cell.classList.add('sunk');
+                        }
+                    }
+                    
+                    // Show hit/miss markers (both public and private)
+                    if (cellData.status === 'hit') {
+                        const marker = document.createElement('div');
+                        marker.className = 'hit';
+                        const color = cellData.attacker_color || 'gray';
+                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
+                        cell.appendChild(marker);
+                    } else if (cellData.status === 'miss') {
+                        const marker = document.createElement('div');
+                        marker.className = 'miss';
+                        const color = cellData.attacker_color || 'gray';
+                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
+                        cell.appendChild(marker);
+                    }
+                    
+                    grid.appendChild(cell);
+                }
+            }
+            
+            container.innerHTML = '';
+            container.appendChild(grid);
+        }
 
         async function apiCall(url, method = 'GET', body = null) {
             try {
@@ -330,9 +479,14 @@
             grid.innerHTML = state.teams.map(team => `
                 <div class="public-board-item">
                     <h4>${team.name} (${team.color})</h4>
-                    <img src="/api/board/${team.color}/public.png?${Date.now()}" alt="${team.color}">
+                    <div id="public-board-${team.color}"></div>
                 </div>
             `).join('');
+            
+            // Render each public board
+            state.teams.forEach(team => {
+                renderBoard('public-board-' + team.color, '/api/board/' + team.color + '/public.json');
+            });
         }
 
         async function loadTeams() {
@@ -375,8 +529,7 @@
                             <span>🚢 ${team.ships_placed}/${team.total_ships}</span>
                             <span>💥 ${team.ships_sunk} sunk</span>
                         </div>
-                        <div class="team-board">
-                            <img src="/api/board/${team.color}/private.png?${Date.now()}" alt="${team.color} board">
+                        <div class="team-board" id="team-board-${team.color}">
                         </div>
                         <a href="/team/${team.color}" class="team-play-link">🎮 Play as ${team.color}</a>
                         <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')">💣 +5 Bombs</button>
@@ -407,6 +560,13 @@
             }
 
             grid.innerHTML = html;
+            
+            // Render private boards for each team
+            if (state.teams) {
+                state.teams.forEach(team => {
+                    renderBoard('team-board-' + team.color, '/api/board/' + team.color + '/private.json');
+                });
+            }
         }
 
         async function joinTeam() {

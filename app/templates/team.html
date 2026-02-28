@@ -218,6 +218,70 @@
             font-size: 40px;
             cursor: pointer;
         }
+
+        /* Board Grid Styling */
+        .board-grid {
+            display: inline-grid;
+            grid-template-columns: 30px repeat(10, 30px);
+            grid-template-rows: 30px repeat(10, 30px);
+            background: white;
+            border: 2px solid #333;
+        }
+        .board-cell {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+        .board-cell.header {
+            background: #e0e0e0;
+            font-weight: bold;
+            font-size: 12px;
+            color: #333;
+        }
+        .board-cell.ship {
+            background: #222;
+        }
+        .board-cell.ship.sunk {
+            background: #8B0000;
+        }
+        .board-cell .marker {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .board-cell .hit {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+        }
+        .board-cell .miss {
+            width: 18px;
+            height: 18px;
+            position: relative;
+        }
+        .board-cell .miss::before,
+        .board-cell .miss::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 14px;
+            height: 3px;
+            background-color: inherit;
+            border-radius: 1px;
+        }
+        .board-cell .miss::before {
+            transform: translate(-50%, -50%) rotate(45deg);
+        }
+        .board-cell .miss::after {
+            transform: translate(-50%, -50%) rotate(-45deg);
+        }
     </style>
 </head>
 <body>
@@ -247,7 +311,7 @@
         <!-- Private Board -->
         <div class="board-section">
             <h2>🚢 Your Private Board</h2>
-            <img id="private-board" src="" alt="Private board">
+            <div id="private-board"></div>
         </div>
 
         <!-- Public Boards -->
@@ -277,6 +341,106 @@
     <script>
         const TEAM_COLOR = '{{ team_color }}';
         let gameStatus = 'waiting';
+        const TEAM_COLORS_RGB = {
+            'red': 'rgb(220, 60, 60)',
+            'blue': 'rgb(60, 100, 220)',
+            'green': 'rgb(60, 180, 80)',
+            'purple': 'rgb(160, 60, 180)',
+            'orange': 'rgb(255, 150, 50)',
+            'yellow': 'rgb(220, 200, 60)'
+        };
+        const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+
+        function renderBoard(containerId, jsonUrl) {
+            return new Promise((resolve, reject) => {
+                fetch(jsonUrl)
+                    .then(resp => resp.json())
+                    .then(data => {
+                        if (data.error) {
+                            document.getElementById(containerId).innerHTML = '<p>' + data.error + '</p>';
+                            resolve();
+                            return;
+                        }
+                        renderBoardFromData(containerId, data, true);
+                        resolve();
+                    })
+                    .catch(err => {
+                        console.error('Failed to load board:', err);
+                        reject(err);
+                    });
+            });
+        }
+
+        function renderBoardFromData(containerId, data, includeShips) {
+            const container = document.getElementById(containerId);
+            const grid = document.createElement('div');
+            grid.className = 'board-grid';
+            
+            // Top-left corner (empty)
+            const corner = document.createElement('div');
+            corner.className = 'board-cell header';
+            grid.appendChild(corner);
+            
+            // Column headers A-J
+            for (let c = 0; c < 10; c++) {
+                const header = document.createElement('div');
+                header.className = 'board-cell header';
+                header.textContent = COLS[c];
+                grid.appendChild(header);
+            }
+            
+            // Rows 1-10
+            for (let r = 0; r < 10; r++) {
+                // Row header
+                const rowHeader = document.createElement('div');
+                rowHeader.className = 'board-cell header';
+                rowHeader.textContent = r + 1;
+                grid.appendChild(rowHeader);
+                
+                // Cells
+                for (let c = 0; c < 10; c++) {
+                    const cellData = data.grid[r][c];
+                    const cell = document.createElement('div');
+                    cell.className = 'board-cell';
+                    
+                    // Private board: show ships
+                    if (includeShips && cellData.has_ship) {
+                        cell.classList.add('ship');
+                        if (cellData.ship_sunk) {
+                            cell.classList.add('sunk');
+                        }
+                    }
+                    
+                    // Show hit/miss markers (both public and private)
+                    if (cellData.status === 'hit') {
+                        const marker = document.createElement('div');
+                        marker.className = 'hit';
+                        const color = cellData.attacker_color || 'gray';
+                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
+                        cell.appendChild(marker);
+                    } else if (cellData.status === 'miss') {
+                        const marker = document.createElement('div');
+                        marker.className = 'miss';
+                        const color = cellData.attacker_color || 'gray';
+                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
+                        cell.appendChild(marker);
+                    }
+                    
+                    grid.appendChild(cell);
+                }
+            }
+            
+            container.innerHTML = '';
+            container.appendChild(grid);
+        }
+
+        function renderPrivateBoard() {
+            renderBoard('private-board', `/api/board/${TEAM_COLOR}/private.json`);
+        }
+
+        function renderPublicBoard(color) {
+            return renderBoard(`public-board-${color}`, `/api/board/${color}/public.json`);
+        }
 
         async function apiCall(url, method = 'GET', body = null) {
             try {
@@ -346,7 +510,7 @@
             document.getElementById('ship-count').textContent = team.ships_placed;
             document.getElementById('sunk-count').textContent = team.ships_sunk;
 
-            document.getElementById('private-board').src = `/api/board/${TEAM_COLOR}/private.png?${Date.now()}`;
+            renderPrivateBoard();
 
             // Load public boards
             loadPublicBoards();
@@ -378,7 +542,7 @@
         }
 
         function refreshBoards() {
-            document.getElementById('private-board').src = `/api/board/${TEAM_COLOR}/private.png?${Date.now()}`;
+            renderPrivateBoard();
             loadPublicBoards();
         }
 
@@ -394,11 +558,10 @@
                 item.className = 'public-board-item';
                 item.innerHTML = `
                     <p>${team.name} (${team.color})</p>
-                    <img src="/api/board/${team.color}/public.png?${Date.now()}" 
-                         alt="${team.color} public board"
-                         onclick="showModal(this, '${team.name} (${team.color})')">
+                    <div id="public-board-${team.color}"></div>
                 `;
                 grid.appendChild(item);
+                renderPublicBoard(team.color);
             });
         }
 
