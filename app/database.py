@@ -43,6 +43,7 @@ class Base(DeclarativeBase):
 class Role(str, enum.Enum):
     TEAM = "team"
     GAMEMASTER = "gamemaster"
+    AI = "ai"
 
 
 class Player(Base):
@@ -51,7 +52,7 @@ class Player(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     color = Column(String(20), nullable=False, unique=True)
-    chat_id = Column(Integer, nullable=False, unique=True)
+    chat_id = Column(Integer, nullable=True)  # Nullable for AI players
     role = Column(Enum(Role), nullable=False, default=Role.TEAM)
     created_at = Column(DateTime, default=datetime.utcnow)
 

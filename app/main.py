@@ -26,6 +26,9 @@ from app.bot.handlers import (
     handle_location,
     handle_locations_list,
     handle_register_gm,
+    handle_add_ai,
+    handle_remove_ai,
+    handle_ai_status,
     handle_create_locations,
     handle_set_location_bombs,
     handle_start_game,
@@ -55,6 +58,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/code <location_number> <code> - Redeem a code\n"
         "/overview - View your boards\n"
         "/locations - View all locations\n"
+        "/addai <color> [name] - Add AI player (GM)\n"
+        "/removeai <color> - Remove AI player (GM)\n"
+        "/aistatus - Show AI status (GM)\n"
         "/startgame - Start the game (GM)\n"
         "/resetgame - Reset the game (GM)\n"
         "/help - Show this help message\n\n"
@@ -82,6 +88,9 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 👮 For Game Masters:
 /registergm - Register as game master
+/addai <color> [name] - Add AI player (e.g., /addai red)
+/removeai <color> - Remove AI player
+/aistatus - Show AI player status
 /create_locations <count> <lat> <lon> [radius] - Create locations
 /startgame - Start the game
 /resetgame - Reset the game
@@ -265,6 +274,53 @@ async def register_gm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await safe_reply(update, result)
 
 
+async def add_ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    if not context.args:
+        await safe_reply(
+            update,
+            "Usage: /addai <color> [name]\nExample: /addai red\nExample: /addai blue 'Blue Bot'",
+        )
+        return
+
+    color = context.args[0].lower()
+    name = " ".join(context.args[1:]) if len(context.args) > 1 else None
+
+    async with async_session_maker() as db:
+        result = await handle_add_ai(db, update, context, color, name)
+        logger.info(f'RESPONSE: chat_id={chat_id} command=/addai response="{result}"')
+        await safe_reply(update, result)
+
+
+async def remove_ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    if not context.args:
+        await safe_reply(update, "Usage: /removeai <color>\nExample: /removeai red")
+        return
+
+    color = context.args[0].lower()
+
+    async with async_session_maker() as db:
+        result = await handle_remove_ai(db, update, context, color)
+        logger.info(
+            f'RESPONSE: chat_id={chat_id} command=/removeai response="{result}"'
+        )
+        await safe_reply(update, result)
+
+
+async def ai_status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    async with async_session_maker() as db:
+        result = await handle_ai_status(db, update, context)
+        logger.info(
+            f'RESPONSE: chat_id={chat_id} command=/aistatus response="status sent"'
+        )
+        await safe_reply(update, result)
+
+
 async def create_locations_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
@@ -391,6 +447,9 @@ def run_bot():
     app.add_handler(CommandHandler("overview", overview_handler))
     app.add_handler(CommandHandler("locations", locations_handler))
     app.add_handler(CommandHandler("registergm", register_gm_handler))
+    app.add_handler(CommandHandler("addai", add_ai_handler))
+    app.add_handler(CommandHandler("removeai", remove_ai_handler))
+    app.add_handler(CommandHandler("aistatus", ai_status_handler))
     app.add_handler(CommandHandler("create_locations", create_locations_handler))
     app.add_handler(CommandHandler("setlocationbombs", set_location_bombs_handler))
     app.add_handler(CommandHandler("startgame", start_game_handler))

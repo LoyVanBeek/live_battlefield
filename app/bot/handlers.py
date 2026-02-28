@@ -512,6 +512,103 @@ async def handle_register_gm(db, update: Update, context: ContextTypes.DEFAULT_T
     return "You are now registered as a game master!"
 
 
+async def handle_add_ai(
+    db, update: Update, context: ContextTypes.DEFAULT_TYPE, color: str, name: str = None
+):
+    from app.database import Role
+
+    chat_id = update.effective_chat.id
+
+    player = await get_player_by_chat(db, chat_id)
+    if not player:
+        return "You need to register as a game master first!"
+
+    if player.role != Role.GAMEMASTER:
+        return "Only game masters can add AI players!"
+
+    if not name:
+        name = f"{color.title()} AI"
+
+    from app.game.state import TEAM_COLORS
+
+    if color not in TEAM_COLORS:
+        return f"Invalid color! Choose from: {', '.join(TEAM_COLORS)}"
+
+    from app.models import get_all_players
+
+    all_players = await get_all_players(db)
+    existing_colors = [p.color for p in all_players]
+
+    if color in existing_colors:
+        return f"Team {color} already exists! Use /removeai {color} first, or choose a different color."
+
+    from app.services.ai_player import add_ai_player, get_ai_player
+
+    existing_ai = get_ai_player(color)
+    if existing_ai:
+        return f"AI player for {color} already exists!"
+
+    new_player = await create_player(db, name, color, None, Role.AI)
+
+    ai = add_ai_player(color, name)
+
+    from app.services.ship_placement import place_all_ships
+
+    await place_all_ships(db, color)
+
+    return f"🤖 Added AI player '{name}' ({color})! Ships auto-placed. Use /aistatus to see all AI players."
+
+
+async def handle_remove_ai(
+    db, update: Update, context: ContextTypes.DEFAULT_TYPE, color: str
+):
+    from app.database import Role
+
+    chat_id = update.effective_chat.id
+
+    player = await get_player_by_chat(db, chat_id)
+    if not player:
+        return "You need to register as a game master first!"
+
+    if player.role != Role.GAMEMASTER:
+        return "Only game masters can remove AI players!"
+
+    from app.services.ai_player import remove_ai_player, get_ai_player
+
+    ai = get_ai_player(color)
+    if not ai:
+        return f"No AI player with color {color}!"
+
+    player_to_remove = await get_player_by_color(db, color)
+    if player_to_remove:
+        await db.delete(player_to_remove)
+        await db.commit()
+
+    remove_ai_player(color)
+
+    return f"🤖 Removed AI player {color}!"
+
+
+async def handle_ai_status(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from app.services.ai_player import get_all_ai_players, is_all_ai_paused
+
+    all_ais = get_all_ai_players()
+
+    if not all_ais:
+        return "No AI players currently active. Use /addai <color> to add one."
+
+    status = "🤖 AI Players:\n\n"
+    global_paused = is_all_ai_paused()
+    if global_paused:
+        status += "⏸️ All AI players are PAUSED\n\n"
+
+    for color, ai in all_ais.items():
+        paused = "⏸️" if ai.is_paused else "▶️"
+        status += f"{paused} {ai.name} ({ai.color})\n"
+
+    return status
+
+
 async def handle_create_locations(
     db,
     update: Update,

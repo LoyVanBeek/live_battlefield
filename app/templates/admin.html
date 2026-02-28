@@ -221,6 +221,27 @@
             </div>
         </div>
 
+        <!-- AI Players -->
+        <div class="section">
+            <h2>🤖 AI Players</h2>
+            
+            <div style="margin-bottom: 15px; padding: 15px; background: #0f3460; border-radius: 8px;">
+                <h3 style="margin-bottom: 10px;">➕ Add AI Player</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                    <select id="ai-color" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                        <option value="">Select color...</option>
+                    </select>
+                    <input type="text" id="ai-name" placeholder="AI name (optional)" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                    <button class="btn btn-primary" onclick="addAI()">Add AI</button>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <button class="btn btn-warning" onclick="pauseAllAI()">⏸️ Pause All AI</button>
+                <button class="btn btn-success" onclick="resumeAllAI()">▶️ Resume All AI</button>
+            </div>
+        </div>
+
         <!-- Reset Buttons -->
         <div class="section">
             <h2>🔧 Reset</h2>
@@ -359,6 +380,10 @@
                         </div>
                         <a href="/team/${team.color}" class="team-play-link">🎮 Play as ${team.color}</a>
                         <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')">💣 +5 Bombs</button>
+                        ${team.is_ai ? `
+                        <button class="btn btn-primary" style="margin-top: 5px;" onclick="triggerAIMove('${team.color}')">⚡ Next Move</button>
+                        <button class="btn btn-danger" style="margin-top: 5px;" onclick="removeAI('${team.color}')">🤖 Remove AI</button>
+                        ` : ''}
                     </div>
                 `).join('');
             }
@@ -407,6 +432,57 @@
 
         async function addBombs(teamColor) {
             const result = await apiCall('/api/quick/add_bombs', 'POST', { team_color: teamColor, count: 5 });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
+        }
+
+        async function addAI() {
+            const color = document.getElementById('ai-color').value;
+            const name = document.getElementById('ai-name').value || color + ' AI';
+            
+            if (!color) {
+                showToast('Select a color first!', 'error');
+                return;
+            }
+            
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: color,
+                command: 'addai',
+                args: { name: name }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success) {
+                document.getElementById('ai-name').value = '';
+            }
+            loadTeams();
+        }
+
+        async function removeAI(color) {
+            if (!confirm(`Remove AI player ${color}?`)) return;
+            
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: color,
+                command: 'removeai',
+                args: {}
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
+        }
+
+        async function triggerAIMove(color) {
+            const result = await apiCall('/api/quick/trigger-ai-move', 'POST', { team_color: color });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
+        }
+
+        async function pauseAllAI() {
+            const result = await apiCall('/api/quick/pause-all-ai', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
+        }
+
+        async function resumeAllAI() {
+            const result = await apiCall('/api/quick/resume-all-ai', 'POST', {});
             showToast(result.message, result.success ? 'success' : 'error');
             loadTeams();
         }

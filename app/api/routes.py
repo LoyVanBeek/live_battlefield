@@ -125,6 +125,9 @@ async def get_public_state(db: AsyncSession = Depends(get_api_db)):
 
     teams = []
     for color, team in state.teams.items():
+        from app.services.ai_player import get_ai_player
+
+        ai = get_ai_player(color)
         teams.append(
             {
                 "name": team.name,
@@ -132,6 +135,7 @@ async def get_public_state(db: AsyncSession = Depends(get_api_db)):
                 "bombs": team.bombs,
                 "ships_placed": sum(team.placed_ship_types.values()),
                 "ships_sunk": len(team.get_sunk_ships()),
+                "is_ai": ai is not None,
             }
         )
 
@@ -673,6 +677,48 @@ async def quick_place_all_ships(
         "success": success,
         "message": message,
     }
+
+
+@app.post("/api/quick/trigger-ai-move")
+async def trigger_ai_move(action: QuickAction, db: AsyncSession = Depends(get_api_db)):
+    from app.services.ai_player import get_ai_player
+
+    ai = get_ai_player(action.team_color)
+    if not ai:
+        return {
+            "success": False,
+            "message": f"No AI player with color {action.team_color}",
+        }
+
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if state.status != GameStatusField.STARTED:
+        return {"success": False, "message": "Game not started!"}
+
+    success = await ai.execute_bomb(db, state)
+    if success:
+        return {"success": True, "message": f"AI {action.team_color} threw a bomb!"}
+    return {
+        "success": False,
+        "message": f"AI {action.team_color} couldn't throw a bomb (no targets or no bombs)",
+    }
+
+
+@app.post("/api/quick/pause-all-ai")
+async def pause_all_ai():
+    from app.services.ai_player import pause_all_ai as pause_all
+
+    pause_all()
+    return {"success": True, "message": "All AI players paused!"}
+
+
+@app.post("/api/quick/resume-all-ai")
+async def resume_all_ai():
+    from app.services.ai_player import resume_all_ai as resume_all
+
+    resume_all()
+    return {"success": True, "message": "All AI players resumed!"}
 
 
 @app.post("/api/quick/reset_team")
