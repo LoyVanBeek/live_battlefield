@@ -453,14 +453,6 @@
                 `;
             }
 
-            // Both phases can have bombs added
-            html += `
-                <div class="action-group">
-                    <h3>💣 Bombs</h3>
-                    <button class="btn btn-success" onclick="addBombs()">+5 Bombs</button>
-                </div>
-            `;
-
             if (gameStatus === 'started') {
                 // STARTED phase
                 html += `
@@ -470,15 +462,15 @@
                             <select id="target-team">
                                 <option value="">Select target</option>
                             </select>
-                            <input type="text" id="bomb-coord" placeholder="A1">
+                            <input type="text" id="bomb-coord" placeholder="A1" onkeypress="if(event.key==='Enter')throwBomb()">
                             <button class="btn btn-primary" onclick="throwBomb()">Throw Bomb</button>
                         </div>
                     </div>
                     <div class="action-group">
                         <h3>🔑 Redeem Code</h3>
                         <div class="action-inputs">
-                            <input type="number" id="code-loc" placeholder="Location #">
-                            <input type="text" id="code-val" placeholder="ABCD">
+                            <input type="number" id="code-loc" placeholder="Location #" onkeypress="if(event.key==='Enter')redeemCode()">
+                            <input type="text" id="code-val" placeholder="ABCD" onkeypress="if(event.key==='Enter')redeemCode()">
                             <button class="btn btn-primary" onclick="redeemCode()">Redeem</button>
                         </div>
                     </div>
@@ -508,12 +500,6 @@
                     select.appendChild(opt);
                 }
             });
-        }
-
-        async function addBombs() {
-            const result = await apiCall('/api/quick/add_bombs', 'POST', { team_color: TEAM_COLOR, count: 5 });
-            showToast(result.message, result.success ? 'success' : 'error');
-            updateStats();
         }
 
         async function placeAllShips() {

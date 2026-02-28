@@ -358,6 +358,7 @@
                             <img src="/api/board/${team.color}/private.png?${Date.now()}" alt="${team.color} board">
                         </div>
                         <a href="/team/${team.color}" class="team-play-link">🎮 Play as ${team.color}</a>
+                        <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')">💣 +5 Bombs</button>
                     </div>
                 `).join('');
             }
@@ -401,6 +402,12 @@
             if (result.success) {
                 document.getElementById('join-name').value = '';
             }
+            loadTeams();
+        }
+
+        async function addBombs(teamColor) {
+            const result = await apiCall('/api/quick/add_bombs', 'POST', { team_color: teamColor, count: 5 });
+            showToast(result.message, result.success ? 'success' : 'error');
             loadTeams();
         }
 
