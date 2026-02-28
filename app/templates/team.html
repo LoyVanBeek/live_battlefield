@@ -599,6 +599,9 @@
         // Initial load
         loadGameStatus();
         loadTeam();
+
+        // Refresh boards every second
+        setInterval(refreshBoards, 1000);
     </script>
 </body>
 </html>

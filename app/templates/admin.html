@@ -483,6 +483,12 @@
         loadGameStatus();
         loadPublicBoards();
         loadTeams();
+
+        // Refresh boards every second
+        setInterval(() => {
+            loadPublicBoards();
+            loadTeams();
+        }, 1000);
     </script>
 </body>
 </html>
