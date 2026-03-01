@@ -51,6 +51,11 @@ async def get_all_game_masters(db: AsyncSession) -> list[Player]:
     return list(result.scalars().all())
 
 
+async def get_all_players(db: AsyncSession) -> list[Player]:
+    result = await db.execute(select(Player))
+    return list(result.scalars().all())
+
+
 async def add_event(
     db: AsyncSession,
     event_type: EventType,

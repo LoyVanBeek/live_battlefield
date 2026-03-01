@@ -121,6 +121,15 @@
             display: inline-block;
         }
         .team-name { font-size: 18px; font-weight: bold; }
+        .ai-badge {
+            margin-left: 8px;
+            background: #6366f1;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: normal;
+        }
         .team-stats {
             display: flex;
             gap: 15px;
@@ -574,8 +583,9 @@
             const state = await apiCall('/api/state');
             if (!state) return;
 
-            // Populate available colors dropdown
+            // Populate available colors dropdown (preserve selection)
             const joinColorSelect = document.getElementById('join-color');
+            const joinSelectedValue = joinColorSelect.value;
             joinColorSelect.innerHTML = '<option value="">Select color...</option>';
             if (state.available_colors) {
                 state.available_colors.forEach(color => {
@@ -585,6 +595,21 @@
                     joinColorSelect.appendChild(opt);
                 });
             }
+            joinColorSelect.value = joinSelectedValue;
+
+            // Populate AI color dropdown (preserve selection)
+            const aiColorSelect = document.getElementById('ai-color');
+            const aiSelectedValue = aiColorSelect.value;
+            aiColorSelect.innerHTML = '<option value="">Select color...</option>';
+            if (state.available_colors) {
+                state.available_colors.forEach(color => {
+                    const opt = document.createElement('option');
+                    opt.value = color;
+                    opt.textContent = color.toUpperCase();
+                    aiColorSelect.appendChild(opt);
+                });
+            }
+            aiColorSelect.value = aiSelectedValue;
 
             const grid = document.getElementById('teams-grid');
             
@@ -614,6 +639,8 @@
                     const cardId = `team-card-${team.color}`;
                     let card = document.getElementById(cardId);
                     
+                    const aiIndicator = team.is_ai ? '<span class="ai-badge">🤖 AI</span>' : '';
+                    
                     if (!card) {
                         // Create new card
                         card = document.createElement('div');
@@ -624,6 +651,7 @@
                                 <span class="team-name">
                                     <span class="team-color-dot" style="background: ${team.color}"></span>
                                     <span class="team-name-text">${team.name}</span>
+                                    ${aiIndicator}
                                 </span>
                             </div>
                             <div class="team-stats">
@@ -643,6 +671,20 @@
                         const nameElement = card.querySelector('.team-name-text');
                         if (nameElement && nameElement.textContent !== team.name) {
                             nameElement.textContent = team.name;
+                        }
+                        
+                        // Update AI indicator
+                        const aiBadge = card.querySelector('.ai-badge');
+                        if (team.is_ai && !aiBadge) {
+                            // Add badge if AI and no badge exists
+                            const teamNameSpan = card.querySelector('.team-name');
+                            const existingBadge = document.createElement('span');
+                            existingBadge.className = 'ai-badge';
+                            existingBadge.textContent = '🤖 AI';
+                            teamNameSpan.appendChild(existingBadge);
+                        } else if (!team.is_ai && aiBadge) {
+                            // Remove badge if not AI but badge exists
+                            aiBadge.remove();
                         }
                         
                         const bombsElement = card.querySelector('.bombs-count');
@@ -769,10 +811,9 @@
                 return;
             }
             
-            const result = await apiCall('/api/execute', 'POST', {
+            const result = await apiCall('/api/quick/add-ai', 'POST', {
                 team_color: color,
-                command: 'addai',
-                args: { name: name }
+                name: name
             });
             showToast(result.message, result.success ? 'success' : 'error');
             if (result.success) {

@@ -1,5 +1,5 @@
 ---
-name: notify-via-telegram
+name: notify
 description: Notify the developer of some event
 license: MIT
 compatibility: opencode

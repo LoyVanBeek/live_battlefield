@@ -1,5 +1,5 @@
 ---
-name: docker-deploy-local
+name: deployment
 description: Deploy the application locally using Docker
 license: MIT
 compatibility: opencode

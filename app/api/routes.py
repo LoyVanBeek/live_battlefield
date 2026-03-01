@@ -77,6 +77,11 @@ class QuickAction(BaseModel):
     count: Optional[int] = 1
 
 
+class AddAIAction(BaseModel):
+    team_color: str
+    name: Optional[str] = None
+
+
 class RemoveShipAction(BaseModel):
     team_color: str
     row: int
@@ -261,6 +266,10 @@ async def get_game_state(db: AsyncSession = Depends(get_api_db)):
     events = await get_all_events(db)
     state = GameState.from_events(events)
 
+    from app.services.ai_player import get_all_ai_players
+
+    ai_players = get_all_ai_players()
+
     teams = []
     for color, team in state.teams.items():
         teams.append(
@@ -274,6 +283,7 @@ async def get_game_state(db: AsyncSession = Depends(get_api_db)):
                 "is_destroyed": team.is_destroyed(),
                 "has_all_ships": team.has_all_ships(),
                 "placed_ship_types": team.placed_ship_types,
+                "is_ai": color in ai_players,
             }
         )
 
@@ -793,6 +803,58 @@ async def resume_all_ai():
 
     resume_all()
     return {"success": True, "message": "All AI players resumed!"}
+
+
+@app.post("/api/quick/add-ai")
+async def quick_add_ai(action: AddAIAction, db: AsyncSession = Depends(get_api_db)):
+    from app.game.state import TEAM_COLORS
+    from app.events import TeamJoinedEvent, save_event
+
+    color = action.team_color.lower()
+    name = action.name or f"{color.title()} AI"
+
+    if color not in TEAM_COLORS:
+        return {
+            "success": False,
+            "message": f"Invalid color! Choose from: {', '.join(TEAM_COLORS)}",
+        }
+
+    from app.models import get_all_events
+    from app.game.state import GameState
+
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if color in state.teams:
+        return {
+            "success": False,
+            "message": f"Team {color} already exists in game!",
+        }
+
+    from app.services.ai_player import get_ai_player
+
+    existing_ai = get_ai_player(color)
+    if existing_ai:
+        return {"success": False, "message": f"AI player for {color} already exists!"}
+
+    # Emit TeamJoinedEvent to create the team (like human teams)
+    event = TeamJoinedEvent(name=name, color=color, chat_id=0, bombs=3)
+    await save_event(db, event)
+
+    # Add AI to in-memory player registry
+    from app.services.ai_player import add_ai_player
+
+    add_ai_player(color, name)
+
+    # Place ships (this emits ShipPlacedEvent events)
+    from app.services.ship_placement import place_all_ships
+
+    await place_all_ships(db, color)
+
+    return {
+        "success": True,
+        "message": f"🤖 Added AI player '{name}' ({color})! Ships auto-placed.",
+    }
 
 
 @app.post("/api/quick/reset_team")
