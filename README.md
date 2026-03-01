@@ -47,6 +47,9 @@ Battleship game played via Telegram with real-life location quests.
 ### Admin Panel
 ![Admin Panel](docs/screenshots/admin-panel.png)
 
+### Locations Admin
+![Locations Admin](docs/screenshots/locations-admin.png)
+
 ## Web Interface
 
 - `GET /` - API info
