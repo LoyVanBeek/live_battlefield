@@ -26,20 +26,47 @@ Battleship game played via Telegram with real-life location quests.
   - Ship types: `airplane_carrier`, `battleship`, `torpedo_hunter`, `patrol_boat`
   - Coordinates: A1-J10 (e.g., B2)
   - Directions: `horizontal` or `vertical`
+- `/placeall` - Place all ships randomly (convenience command)
 - `/bomb <team_color> <coordinate>` - Throw a bomb at another team
 - `/code <location_number> <code>` - Redeem a code from a location
 - `/overview` - View your private board and all public boards
 - `/locations` - View all quest locations
+- `/aistatus` - View AI player status
 
 ### For Game Masters
 - `/registergm` - Register as a game master
 - Send a location message to add a new quest location
+- `/addai <team_color>` - Add an AI player (e.g., `/addai red`)
+- `/removeai <team_color>` - Remove an AI player
 
-## Web API
+## Screenshots
+
+### Telegram Bot
+![Telegram Bot](docs/screenshots/telegram-bot.png)
+
+### Admin Panel
+![Admin Panel](docs/screenshots/admin-panel.png)
+
+## Web Interface
 
 - `GET /` - API info
+- `GET /team` - Team page with interactive board (select color from dropdown)
+- `GET /admin` - Admin panel for game control
+- `GET /events` - Game events log with timestamps
 - `GET /game-state.png` - Current game state as image
 - `GET /teams` - List all teams and their status
+- `GET /api/board/{color}/public.json` - Public board data as JSON
+- `GET /api/board/{color}/private.json` - Private board data as JSON
+
+### Team Page
+Players can view their own board and attack other teams through the web interface. Select your team color from the dropdown to see your private board with hit/miss markers.
+
+### Admin Panel
+Game masters can:
+- Start the game (requires at least 1 location and 2 teams)
+- Trigger AI moves
+- View all teams and their status
+- Monitor game events
 
 ## Database Management
 
