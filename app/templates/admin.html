@@ -264,7 +264,6 @@
         <div class="section">
             <h2>📺 All Public Boards</h2>
             <div class="public-boards-grid" id="public-boards">
-                Loading...
             </div>
         </div>
 
@@ -285,7 +284,6 @@
             </div>
             
             <div class="teams-grid" id="teams-grid">
-                Loading...
             </div>
         </div>
 
@@ -509,6 +507,11 @@
 
             const grid = document.getElementById('public-boards');
             
+            // Clear "Loading..." text on first load
+            if (grid.innerHTML.toLowerCase().includes('loading')) {
+                grid.innerHTML = '';
+            }
+            
             if (!state.teams || state.teams.length === 0) {
                 grid.innerHTML = '<div class="no-teams">No teams yet</div>';
                 return;
@@ -584,6 +587,11 @@
             }
 
             const grid = document.getElementById('teams-grid');
+            
+            // Clear "Loading..." text on first load
+            if (grid.innerHTML.toLowerCase().includes('loading')) {
+                grid.innerHTML = '';
+            }
             
             if ((!state.teams || state.teams.length === 0) && (!state.available_colors || state.available_colors.length === 0)) {
                 grid.innerHTML = '<div class="no-teams">No teams available</div>';
