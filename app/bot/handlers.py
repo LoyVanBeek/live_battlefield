@@ -10,7 +10,7 @@ from app.game.ships import (
     parse_coordinate,
     coordinate_to_string,
 )
-from app.game.state import GameState, BombResult
+from app.game.state import GameState, BombResult, TEAM_COLORS
 from app.game.board import (
     render_all_public_boards,
     render_private_board,
@@ -91,7 +91,25 @@ async def handle_join(
         if state.is_team_name_taken(team_name):
             return f"Team name '{team_name}' is already taken!"
 
-        color = state.get_next_color()
+        # Get colors already in game (from events)
+        colors_in_game = set(state.teams.keys())
+
+        # Also check database for existing players (including AI)
+        from app.models import get_all_players
+
+        all_players = await get_all_players(db)
+        colors_in_db = {p.color for p in all_players}
+
+        # Combine both sources
+        taken_colors = colors_in_game | colors_in_db
+
+        # Find next available color
+        color = None
+        for c in TEAM_COLORS:
+            if c not in taken_colors:
+                color = c
+                break
+
         if not color:
             return "No more colors available! The game is full."
 

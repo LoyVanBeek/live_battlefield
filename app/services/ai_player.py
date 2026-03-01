@@ -7,6 +7,7 @@ from app.models import get_all_events, get_player_by_color
 from app.game.state import GameState, GameStatusField
 from app.events import BombThrownEvent, save_event
 from app.game.ships import BOARD_SIZE
+from app.config import settings
 
 
 AI_BOMB_INTERVAL = 120  # 2 minutes between bombs
@@ -111,7 +112,7 @@ class AIPlayer:
 
         target_color, coord = target_info
 
-        from app.game.ships import parse_coordinate
+        from app.game.ships import parse_coordinate, coordinate_to_string
 
         row, col = parse_coordinate(coord)
 
@@ -123,6 +124,60 @@ class AIPlayer:
         )
 
         await save_event(db, event)
+
+        # Send notification to target player
+        from app.models import get_player_by_color
+        from app.config import settings
+
+        print(f"[AI] Looking for target player: {target_color}")
+        target_player = await get_player_by_color(db, target_color)
+        print(
+            f"[AI] Target player found: {target_player}, chat_id: {target_player.chat_id if target_player else None}"
+        )
+
+        if target_player and target_player.chat_id:
+            try:
+                # Check if this is a hit or miss by applying the event to game state
+                from app.game.state import GameState, GameStatusField
+
+                # Get fresh state with the new event
+                events = await get_all_events(db)
+                state = GameState.from_events(events)
+
+                # Find the target team
+                if target_color in state.teams:
+                    target_team = state.teams[target_color]
+                    target_cell = target_team.public_board[row][col]
+
+                    coord_display = coordinate_to_string(row, col)
+
+                    if target_cell and target_cell[1]:  # Hit
+                        # Check if ship was sunk
+                        ship = target_team.get_ship_at(row, col)
+                        notify_msg = f"💥 HIT! {self.name} ({self.color}) bombed you at {coord_display}!"
+                        if ship and ship.is_sunk():
+                            notify_msg = notify_msg.replace("was hit!", "was SUNK!")
+                    else:  # Miss
+                        notify_msg = f"💨 MISS! {self.name} ({self.color}) missed at {coord_display}!"
+
+                    print(
+                        f"[AI] Sending notification to chat_id={target_player.chat_id}: {notify_msg}"
+                    )
+
+                    # Send telegram notification
+                    from telegram import Bot
+
+                    bot = Bot(token=settings.telegram_bot_token)
+                    await bot.send_message(
+                        chat_id=target_player.chat_id, text=notify_msg
+                    )
+                    print(f"[AI] Notification sent successfully!")
+            except Exception as e:
+                print(f"[AI] Failed to send notification: {e}")
+                import traceback
+
+                traceback.print_exc()
+
         return True
 
 

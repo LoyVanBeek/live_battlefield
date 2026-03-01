@@ -267,11 +267,27 @@ async def get_game_state(db: AsyncSession = Depends(get_api_db)):
     state = GameState.from_events(events)
 
     from app.services.ai_player import get_all_ai_players
+    from app.database import Role
+    from app.models import get_all_players
 
     ai_players = get_all_ai_players()
 
+    # Also check database for AI players (for persistence across restarts)
+    all_players = await get_all_players(db)
+    db_ai_colors = {p.color for p in all_players if p.role == Role.AI}
+
     teams = []
     for color, team in state.teams.items():
+        is_ai = False
+        # Check in-memory first
+        if color in ai_players:
+            ai = ai_players.get(color)
+            if ai and hasattr(ai, "color") and ai.color == color:
+                is_ai = True
+        # Also check database
+        if not is_ai and color in db_ai_colors:
+            is_ai = True
+
         teams.append(
             {
                 "name": team.name,
@@ -283,7 +299,7 @@ async def get_game_state(db: AsyncSession = Depends(get_api_db)):
                 "is_destroyed": team.is_destroyed(),
                 "has_all_ships": team.has_all_ships(),
                 "placed_ship_types": team.placed_ship_types,
-                "is_ai": color in ai_players,
+                "is_ai": is_ai,
             }
         )
 
@@ -765,9 +781,22 @@ async def quick_place_all_ships(
 
 @app.post("/api/quick/trigger-ai-move")
 async def trigger_ai_move(action: QuickAction, db: AsyncSession = Depends(get_api_db)):
-    from app.services.ai_player import get_ai_player
+    from app.services.ai_player import get_ai_player, add_ai_player
+    from app.database import Role
 
     ai = get_ai_player(action.team_color)
+
+    # If not in memory, check database (container may have restarted)
+    if not ai:
+        from app.models import get_all_players
+
+        all_players = await get_all_players(db)
+        for p in all_players:
+            if p.color == action.team_color and p.role == Role.AI:
+                # Restore AI to memory
+                ai = add_ai_player(p.color, p.name)
+                break
+
     if not ai:
         return {
             "success": False,
@@ -809,6 +838,7 @@ async def resume_all_ai():
 async def quick_add_ai(action: AddAIAction, db: AsyncSession = Depends(get_api_db)):
     from app.game.state import TEAM_COLORS
     from app.events import TeamJoinedEvent, save_event
+    from app.database import Role
 
     color = action.team_color.lower()
     name = action.name or f"{color.title()} AI"
@@ -819,8 +849,18 @@ async def quick_add_ai(action: AddAIAction, db: AsyncSession = Depends(get_api_d
             "message": f"Invalid color! Choose from: {', '.join(TEAM_COLORS)}",
         }
 
-    from app.models import get_all_events
+    from app.models import get_all_events, get_all_players
     from app.game.state import GameState
+
+    # Check database for existing players
+    all_players = await get_all_players(db)
+    existing_colors = [p.color for p in all_players]
+
+    if color in existing_colors:
+        return {
+            "success": False,
+            "message": f"Color {color} already taken! Choose a different color.",
+        }
 
     events = await get_all_events(db)
     state = GameState.from_events(events)
@@ -836,6 +876,11 @@ async def quick_add_ai(action: AddAIAction, db: AsyncSession = Depends(get_api_d
     existing_ai = get_ai_player(color)
     if existing_ai:
         return {"success": False, "message": f"AI player for {color} already exists!"}
+
+    # Create Player record for AI (persists across restarts)
+    from app.models import create_player
+
+    await create_player(db, name, color, None, Role.AI)
 
     # Emit TeamJoinedEvent to create the team (like human teams)
     event = TeamJoinedEvent(name=name, color=color, chat_id=0, bombs=3)
