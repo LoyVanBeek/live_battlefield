@@ -849,6 +849,64 @@ async def quick_add_ai(action: AddAIAction, db: AsyncSession = Depends(get_api_d
             "message": f"Invalid color! Choose from: {', '.join(TEAM_COLORS)}",
         }
 
+    from app.models import get_all_events
+    from app.game.state import GameState
+
+    # Check game events first (current game state)
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if color in state.teams:
+        return {
+            "success": False,
+            "message": f"Team {color} already exists in game!",
+        }
+
+    from app.services.ai_player import get_ai_player
+
+    # Check in-memory AI players (current session)
+    existing_ai = get_ai_player(color)
+    if existing_ai:
+        return {"success": False, "message": f"AI player for {color} already exists!"}
+
+    # Check in-memory AI players (current session)
+    existing_ai = get_ai_player(color)
+    if existing_ai:
+        return {"success": False, "message": f"AI player for {color} already exists!"}
+
+    # Create or update Player record for AI
+    from app.models import create_player
+    from sqlalchemy import select
+    from app.database import Player
+
+    # Delete any old player record (any role) for this color
+    result = await db.execute(select(Player).where(Player.color == color))
+    old_player = result.scalar_one_or_none()
+    if old_player:
+        await db.delete(old_player)
+        await db.commit()
+
+    await create_player(db, name, color, None, Role.AI)
+
+    # Emit TeamJoinedEvent to create the team (like human teams)
+    event = TeamJoinedEvent(name=name, color=color, chat_id=0, bombs=3)
+    await save_event(db, event)
+
+    # Add AI to in-memory player registry
+    from app.services.ai_player import add_ai_player
+
+    add_ai_player(color, name)
+
+    # Place ships (this emits ShipPlacedEvent events)
+    from app.services.ship_placement import place_all_ships
+
+    await place_all_ships(db, color)
+
+    return {
+        "success": True,
+        "message": f"🤖 Added AI player '{name}' ({color})! Ships auto-placed.",
+    }
+
     from app.models import get_all_events, get_all_players
     from app.game.state import GameState
 
