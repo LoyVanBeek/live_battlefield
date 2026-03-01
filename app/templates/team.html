@@ -431,8 +431,8 @@
             for (let r = 0; r < 10; r++) {
                 for (let c = 0; c < 10; c++) {
                     const cellData = data.grid[r][c];
-                    // Find the cell (skip 11 elements per row: 1 header + 10 column headers for first row, then 1 row header)
-                    const cellIndex = 11 + r * 11 + c; // 11 header elements + row offset + column offset
+                    // Find the cell: 1 corner + 10 col headers + r*11 (row header + 10 cells per row) + c
+                    const cellIndex = 1 + 10 + r * 11 + 1 + c; // = 12 + r*11 + c
                     const cell = grid.children[cellIndex];
                     
                     if (!cell) continue;
