@@ -1201,17 +1201,31 @@ async def update_game_settings(db: AsyncSession, **kwargs):
 
 @app.post("/api/quick/start-game")
 async def start_game(db: AsyncSession = Depends(get_api_db)):
-    from app.models import get_or_create_game_settings
+    from app.models import get_or_create_game_settings, get_all_locations
     from app.database import GameStatus
 
     events = await get_all_events(db)
     state = GameState.from_events(events)
+
+    locations = await get_all_locations(db)
 
     if state.status == GameStatusField.STARTED:
         return {"success": False, "message": "Game has already started!"}
 
     if state.status == GameStatusField.ENDED:
         return {"success": False, "message": "Game has ended! Reset first."}
+
+    if len(locations) == 0:
+        return {
+            "success": False,
+            "message": "Cannot start game - no locations defined!",
+        }
+
+    if len(state.teams) < 2:
+        return {
+            "success": False,
+            "message": f"Cannot start game - need at least 2 teams, currently have {len(state.teams)}",
+        }
 
     event = GameStartedEvent()
     new_state, updated_event = event.apply(state)

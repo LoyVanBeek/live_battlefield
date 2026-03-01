@@ -501,7 +501,22 @@
             } else {
                 statusEl.textContent = '⏳ WAITING';
                 statusEl.className = 'status waiting';
-                btnStart.disabled = false;
+                
+                // Check preconditions
+                const hasLocations = status.locations_placed > 0;
+                const hasEnoughTeams = status.total_teams >= 2;
+                const canStart = hasLocations && hasEnoughTeams;
+                
+                btnStart.disabled = !canStart;
+                if (!canStart) {
+                    if (!hasLocations) {
+                        btnStart.title = `Need at least 1 location (currently ${status.locations_placed})`;
+                    } else {
+                        btnStart.title = `Need at least 2 teams (currently ${status.total_teams})`;
+                    }
+                } else {
+                    btnStart.title = 'Start the game';
+                }
                 btnEnd.disabled = true;
                 btnNew.disabled = true;
             }
