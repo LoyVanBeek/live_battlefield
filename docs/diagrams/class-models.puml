@@ -1,0 +1,143 @@
+@startuml
+
+package "Database Models" {
+    class Player {
+        +id: Integer
+        +name: String
+        +color: String
+        +chat_id: Integer
+        +role: Role
+        +created_at: DateTime
+    }
+
+    class GameEvent {
+        +id: Integer
+        +event_type: EventType
+        +payload: JSON
+        +player_id: Integer
+        +created_at: DateTime
+    }
+
+    class Location {
+        +id: Integer
+        +number: Integer
+        +latitude: Float
+        +longitude: Float
+        +code: String
+        +bomb_value: Integer
+        +created_at: DateTime
+    }
+
+    class GameSettings {
+        +id: Integer
+        +status: GameStatus
+        +total_locations_needed: Integer
+        +started_at: DateTime
+    }
+}
+
+package "Game State" {
+    class GameState {
+        +teams: dict[str, TeamState]
+        +location_codes: dict[int, str]
+        +location_counter: int
+        +status: GameStatusField
+        --
+        +from_events(events): GameState
+        +handle_team_joined(event): GameState
+        +handle_ship_placed(event): GameState
+        +handle_bomb_thrown(event): GameState
+        +handle_code_redeemed(event): GameState
+        +handle_location_added(event): GameState
+        +can_start(): bool
+        +get_winner(): Optional[TeamState]
+    }
+
+    class TeamState {
+        +name: str
+        +color: str
+        +chat_id: int
+        +bombs: int
+        +ships: list[Ship]
+        +placed_ship_types: dict
+        +private_board: list[list]
+        +public_board: list[list]
+        +bombed_cells: list
+        --
+        +place_ship(): tuple[bool, TeamState]
+        +receive_bomb(): tuple[BombResult, Ship, TeamState]
+        +has_all_ships(): bool
+        +is_destroyed(): bool
+    }
+
+    class Ship {
+        +ship_type: str
+        +cells: list[tuple]
+        +hits: int
+        --
+        +is_sunk(): bool
+    }
+
+    enum GameStatusField {
+        PREPARING
+        STARTED
+        ENDED
+    }
+
+    enum BombResult {
+        HIT
+        MISS
+        ALREADY_BOMBED
+    }
+}
+
+package "Event Models" {
+    class TeamJoinedEvent {
+        +name: str
+        +color: str
+        +chat_id: int
+        +bombs: int
+    }
+
+    class ShipPlacedEvent {
+        +color: str
+        +ship_type: str
+        +row: int
+        +col: int
+        +direction: str
+    }
+
+    class BombThrownEvent {
+        +attacker_color: str
+        +target_color: str
+        +row: int
+        +col: int
+        +result: str
+    }
+
+    class CodeRedeemedEvent {
+        +color: str
+        +location_number: int
+        +code: str
+        +bombs_earned: int
+    }
+
+    class LocationAddedEvent {
+        +number: int
+        +latitude: float
+        +longitude: float
+        +code: str
+    }
+
+    class GameStartedEvent
+    class GameEndedEvent
+}
+
+GameState "1" *-- "*" TeamState : contains
+TeamState "1" *-- "*" Ship : has
+GameState --> GameStatusField
+TeamState --> BombResult
+
+GameEvent "1" *-- "*" Player : references
+
+@enduml

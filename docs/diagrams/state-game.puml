@@ -1,0 +1,52 @@
+@startuml
+
+title Game State Diagram
+
+[*] --> WAITING : System Start
+
+state WAITING {
+    [*] --> PREPARING
+    PREPARING --> PREPARING : Team Joins\nShip Placed\nLocation Added
+    PREPARING --> READY : All teams have ships\nMin locations met
+    READY --> PREPARING : Team Leaves\nShip Removed\nLocation Removed
+}
+
+state STARTED {
+    [*] --> IN_PROGRESS
+    IN_PROGRESS --> IN_PROGRESS : Bomb Thrown\nCode Redeemed\nAI Move
+    IN_PROGRESS --> ENDED : One team remains\nor Manual End
+}
+
+state ENDED {
+    [*] --> GAME_OVER
+    GAME_OVER --> [*] : Reset Game
+}
+
+WAITING --> STARTED : Game Started\n(by Admin)
+
+STARTED --> ENDED : Game Ended\n(by Admin or Auto)
+
+ENDED --> WAITING : Reset Game
+
+note right of WAITING
+  - Teams can join/leave
+  - Ships can be placed
+  - Locations can be added
+  - Game settings editable
+end note
+
+note right of STARTED
+  - Teams locked
+  - Bombs can be thrown
+  - Codes can be redeemed
+  - AI moves trigger
+  - Locations locked
+end note
+
+note right of ENDED
+  - Winner determined
+  - No more actions
+  - Reset available
+end note
+
+@enduml
