@@ -1,0 +1,96 @@
+@startuml
+
+title AI Player Flow Sequence Diagram
+
+actor "Game Master" as GM
+participant "Telegram" as TG
+participant "Bot Handler" as BH
+participant "AI Player Service" as AI
+participant "Event Factory" as EF
+participant "Event Saver" as ES
+participant "GameState" as GS
+participant "Database" as DB
+
+== Adding AI Player ==
+
+GM -> TG: /addai <color>
+TG -> BH: handle_addai(color)
+BH -> DB: get_player_by_color(color)
+alt color available
+    BH -> AI: add_ai_player(color)
+    AI -> EF: create TeamJoinedEvent(color, chat_id=None)
+    AI -> ES: save_event(event)
+    ES -> DB: insert Player (role=AI)
+    ES -> DB: insert GameEvent
+    BH -> TG: "AI player <color> added!"
+else color taken
+    BH -> TG: "Color already taken!"
+end
+
+== Remove AI Player ==
+
+GM -> TG: /removeai <color>
+TG -> BH: handle_removeai(color)
+BH -> DB: get_player_by_color(color)
+BH -> DB: delete Player
+BH -> TG: "AI player removed!"
+
+== AI Status ==
+
+GM -> TG: /aistatus
+TG -> BH: handle_aistatus()
+BH -> DB: get_all_players() with role=AI
+BH -> TG: "Active AI players: <list>"
+
+== Trigger AI Move (via Admin Panel) ==
+
+GM -> Browser: Click "Trigger AI Move"
+Browser -> API: POST /api/trigger-ai
+API -> AI: execute_ai_moves()
+AI -> DB: get_all_events()
+AI -> DB: get_game_settings()
+AI -> GS: GameState.from_events(events)
+
+loop for each AI team
+    AI -> AI: select_target()
+    alt has bombs and targets available
+        AI -> EF: create BombThrownEvent
+        AI -> ES: save_event(event)
+        ES -> DB: insert GameEvent
+        
+        alt hit result
+            note right: Find target player's\nchat_id from database
+            AI -> TG: send_message(target_chat_id, "You were hit by AI!")
+        end
+    else no bombs
+        note right: Skip this AI
+    end
+end
+
+AI -> API: return success
+API -> Browser: 200 OK
+
+== AI Decision Logic ==
+
+'note right of AI
+'    AI Strategy:
+'    1. Load game state from events
+'    2. For each AI team with bombs:
+'       a. Find all valid targets (teams with ships)
+'       b. Analyze own public board to find ships
+'       c. Pick adjacent cell to found ship (hunt mode)
+'       d. If no ships found, pick random cell (search mode)
+'       e. Execute bomb
+'       f. If hit, notify target player
+'end
+
+== Game Restart (AI Restore) ==
+
+alt Bot/Server Restart
+    AI -> DB: get_all_players() where role=AI
+    AI -> DB: get_all_events()
+    AI -> GS: GameState.from_events(events)
+    note right: AI state restored from\ndatabase + events
+end
+
+@enduml

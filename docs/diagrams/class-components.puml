@@ -1,0 +1,76 @@
+@startuml
+
+package "Telegram Bot" {
+    class handlers {
+        +handle_join()
+        +handle_leave()
+        +handle_place()
+        +handle_placeall()
+        +handle_bomb()
+        +handle_code()
+        +handle_overview()
+        +handle_locations()
+        +handle_addai()
+        +handle_removeai()
+        +handle_aistatus()
+        +handle_registergm()
+    }
+}
+
+package "Services" {
+    class ai_player {
+        +add_ai_player()
+        +remove_ai_player()
+        +get_ai_status()
+        +execute_ai_moves()
+    }
+
+    class ship_placement {
+        +place_ship()
+        +place_all_ships()
+        +remove_ship()
+    }
+}
+
+package "API" {
+    class routes {
+        +root()
+        +teams()
+        +team_page()
+        +admin_page()
+        +events_page()
+        +api_board_public()
+        +api_board_private()
+        +api_start_game()
+        +api_trigger_ai()
+    }
+}
+
+package "Events" {
+    class factory {
+        +create_events()
+        +get_event_type_value()
+    }
+
+    class saver {
+        +save_event()
+    }
+}
+
+package "Board" {
+    class board {
+        +render_private_board()
+        +render_all_public_boards()
+        +boards_to_bytes()
+    }
+}
+
+handlers --> ai_player : uses
+handlers --> ship_placement : uses
+handlers --> factory : uses
+handlers --> saver : uses
+routes --> board : uses
+routes --> factory : uses
+routes --> ai_player : uses
+
+@enduml

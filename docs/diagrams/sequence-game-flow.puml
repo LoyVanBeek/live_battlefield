@@ -1,0 +1,108 @@
+@startuml
+
+title Game Flow Sequence Diagram
+
+actor Player
+participant "Telegram" as TG
+participant "Bot Handler" as BH
+participant "Event Factory" as EF
+participant "Event Saver" as ES
+participant "GameState" as GS
+participant "Database" as DB
+
+== Player Join Flow ==
+
+Player -> TG: /join <team_name>
+TG -> BH: handle_join(team_name)
+BH -> DB: get_player_by_chat(chat_id)
+BH -> DB: get_all_events()
+BH -> DB: get_or_create_game_settings()
+BH -> GS: GameState.from_events(events)
+alt game not started
+    BH -> EF: create TeamJoinedEvent
+    BH -> ES: save_event(event)
+    ES -> DB: insert GameEvent
+    BH -> TG: "Welcome to the game!"
+else game started
+    BH -> TG: "Game already started!"
+end
+
+== Ship Placement Flow ==
+
+Player -> TG: /place <ship_type> <coord> <direction>
+TG -> BH: handle_place(ship_type, coord, direction)
+BH -> EF: create ShipPlacedEvent
+BH -> ES: save_event(event)
+ES -> DB: insert GameEvent
+BH -> TG: "Ship placed successfully!"
+
+alt /placeall command
+    Player -> TG: /placeall
+    BH -> BH: place_all_ships()
+    loop for each ship
+        BH -> EF: create ShipPlacedEvent
+        BH -> ES: save_event(event)
+    end
+    BH -> TG: "All ships placed randomly!"
+end
+
+== Game Start Flow ==
+
+GM -> TG: /startgame (via Admin Panel)
+TG -> BH: start_game()
+BH -> DB: get_all_teams()
+BH -> DB: get_all_locations()
+BH -> GS: can_start()
+alt can start
+    BH -> EF: create GameStartedEvent
+    BH -> ES: save_event(event)
+    ES -> DB: update GameSettings status="started"
+    BH -> TG: "Game started!"
+else cannot start
+    BH -> TG: "Cannot start: need more locations/teams"
+end
+
+== Bomb Flow ==
+
+Player -> TG: /bomb <target_color> <coordinate>
+TG -> BH: handle_bomb(target_color, coordinate)
+BH -> DB: get_all_events()
+BH -> GS: GameState.from_events(events)
+BH -> EF: create BombThrownEvent
+BH -> ES: save_event(event)
+ES -> DB: insert GameEvent
+alt hit
+    BH -> TG: "HIT! You sunk their <ship_type>!"
+    note right: Notify target player\nvia Telegram
+else miss
+    BH -> TG: "Miss!"
+end
+
+== Code Redemption Flow ==
+
+Player -> TG: /code <location_number> <code>
+TG -> BH: handle_code(location_number, code)
+BH -> DB: get_all_events()
+BH -> GS: GameState.from_events(events)
+BH -> EF: create CodeRedeemedEvent
+BH -> ES: save_event(event)
+ES -> DB: insert GameEvent
+alt code valid
+    BH -> TG: "Code redeemed! +<bombs_earned> bombs"
+else code invalid
+    BH -> TG: "Invalid code!"
+end
+
+== Game End Flow ==
+
+BH -> GS: get_winner()
+alt winner exists
+    BH -> EF: create GameEndedEvent(winner)
+    BH -> ES: save_event(event)
+    ES -> DB: update GameSettings status="ended"
+    BH -> TG: "Game Over! Winner: <team_name>"
+else no winner
+    BH -> TG: "Game ended with no winner"
+end
+
+@enduml

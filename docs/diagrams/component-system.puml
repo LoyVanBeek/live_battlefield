@@ -1,0 +1,87 @@
+@startuml
+
+package "Live Battlefield Application" {
+    
+    package "Telegram Bot Layer" {
+        [Bot Handlers] as BH
+        [Keyboards] as KB
+        [Helpers] as HL
+    }
+    
+    package "API Layer" {
+        [Routes] as RT
+    }
+    
+    package "Service Layer" {
+        [AI Player Service] as AI
+        [Ship Placement Service] as SP
+    }
+    
+    package "Event System" {
+        [Event Factory] as EF
+        [Event Saver] as ES
+        [Event Models] as EM
+    }
+    
+    package "Game Logic" {
+        [Game State] as GS
+        [Board Renderer] as BR
+        [Ships] as SH
+    }
+    
+    package "Data Layer" {
+        database "PostgreSQL" as DB {
+            entity "players"
+            entity "game_events"
+            entity "locations"
+            entity "game_settings"
+        }
+    }
+    
+    package "External" {
+        [Telegram API] as TG
+        [Web Browser] as WB
+    }
+}
+
+RT --> GS : reads/writes state
+RT --> EF : creates events
+RT --> ES : saves events
+RT --> AI : triggers AI
+RT --> BR : renders boards
+
+BH --> HL : sends messages
+BH --> KB : builds keyboards
+BH --> GS : manages state
+BH --> EF : creates events
+BH --> ES : saves events
+BH --> SP : places ships
+BH --> AI : manages AI
+
+AI --> EF : creates events
+AI --> ES : saves events
+AI --> HL : sends notifications
+
+SP --> EF : creates events
+SP --> ES : saves events
+
+EF --> EM : event types
+ES --> DB : persists
+
+GS --> SH : ship logic
+BR --> GS : reads state
+
+TG <--> BH : Commands & Messages
+WB <--> RT : HTTP Requests
+
+note right of DB
+  - PostgreSQL 5432
+  - pgAdmin 5050
+end note
+
+note right of TG
+  - Bot API
+  - Webhooks or Polling
+end note
+
+@enduml

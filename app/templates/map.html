@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quest Locations Map - Live Battlefield</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 {
+            text-align: center;
+            padding: 15px;
+            background: #16213e;
+            color: #00d9ff;
+            margin-bottom: 0;
+        }
+        #map {
+            height: 60vh;
+            width: 100%;
+        }
+        .game-state {
+            padding: 20px;
+            background: #16213e;
+        }
+        .game-state h2 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+        }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 10px 15px;
+            background: #0f3460;
+            border-radius: 5px;
+        }
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .status-waiting {
+            background: #ff9800;
+            color: #1a1a2e;
+        }
+        .status-started {
+            background: #4caf50;
+            color: white;
+        }
+        .status-ended {
+            background: #f44336;
+            color: white;
+        }
+        .teams-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .team-card {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+        .team-name {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        .team-stats {
+            font-size: 14px;
+            color: #aaa;
+        }
+        .team-stats span {
+            display: block;
+            margin-top: 4px;
+        }
+        .color-red { border-color: #dc3c3c; }
+        .color-blue { border-color: #3c64dc; }
+        .color-green { border-color: #3cdc3c; }
+        .color-purple { border-color: #a03cdc; }
+        .color-orange { border-color: #ff9800; }
+        .color-yellow { border-color: #dcdc3c; }
+        
+        .custom-popup .leaflet-popup-content-wrapper {
+            background: #16213e;
+            color: #eee;
+        }
+        .custom-popup .leaflet-popup-tip {
+            background: #16213e;
+        }
+        .popup-content {
+            text-align: center;
+        }
+        .popup-content h3 {
+            color: #00d9ff;
+            margin-bottom: 8px;
+        }
+        .popup-content p {
+            margin: 4px 0;
+            font-size: 13px;
+            color: #aaa;
+        }
+        .popup-content a {
+            display: inline-block;
+            margin-top: 8px;
+            color: #00d9ff;
+            text-decoration: none;
+        }
+        .popup-content a:hover {
+            text-decoration: underline;
+        }
+        .nav-link {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 1000;
+            padding: 8px 15px;
+            background: #0f3460;
+            color: #00d9ff;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .nav-link:hover {
+            background: #1a4a7a;
+        }
+    </style>
+</head>
+<body>
+    <h1>🗺️ Quest Locations Map</h1>
+    
+    <a href="/admin/test-panel" class="nav-link">🕵️ Admin Panel</a>
+    
+    <div id="map"></div>
+    
+    <div class="game-state">
+        <div class="status-bar">
+            <h2>📊 Game Status</h2>
+            <span id="game-status-badge" class="status-badge status-waiting">⏳ WAITING</span>
+        </div>
+        
+        <div id="teams-container" class="teams-grid">
+            Loading teams...
+        </div>
+    </div>
+
+    <script>
+        var map = L.map('map').setView([52.0, 5.0], 8);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        const colorClasses = {
+            'red': 'color-red',
+            'blue': 'color-blue',
+            'green': 'color-green',
+            'purple': 'color-purple',
+            'orange': 'color-orange',
+            'yellow': 'color-yellow'
+        };
+        
+        function getColorClass(color) {
+            return colorClasses[color] || 'color-red';
+        }
+        
+        async function loadLocations() {
+            try {
+                const resp = await fetch('/api/locations');
+                const data = await resp.json();
+                
+                if (data.locations && data.locations.length > 0) {
+                    const bounds = [];
+                    
+                    data.locations.forEach(loc => {
+                        bounds.push([loc.latitude, loc.longitude]);
+                        
+                        const marker = L.marker([loc.latitude, loc.longitude], {
+                            title: 'Location #' + loc.number
+                        }).addTo(map);
+                        
+                        const popupContent = `
+                            <div class="popup-content">
+                                <h3>📍 Location #${loc.number}</h3>
+                                <p>💣 Worth: ${loc.bomb_value || 1} bombs</p>
+                                <p>${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}</p>
+                                <a href="https://maps.google.com/?q=${loc.latitude},${loc.longitude}" target="_blank">
+                                    Open in Google Maps
+                                </a>
+                            </div>
+                        `;
+                        
+                        marker.bindPopup(popupContent, {
+                            className: 'custom-popup'
+                        });
+                    });
+                    
+                    if (bounds.length > 0) {
+                        map.fitBounds(bounds, { padding: [50, 50] });
+                    }
+                }
+            } catch (e) {
+                console.error('Error loading locations:', e);
+            }
+        }
+        
+        async function loadPublicState() {
+            try {
+                const resp = await fetch('/api/public-state');
+                const data = await resp.json();
+                
+                const statusBadge = document.getElementById('game-status-badge');
+                statusBadge.className = 'status-badge';
+                
+                if (data.status === 'started') {
+                    statusBadge.textContent = '🎮 STARTED';
+                    statusBadge.classList.add('status-started');
+                } else if (data.status === 'ended') {
+                    statusBadge.textContent = '🏁 ENDED';
+                    statusBadge.classList.add('status-ended');
+                } else {
+                    statusBadge.textContent = '⏳ WAITING';
+                    statusBadge.classList.add('status-waiting');
+                }
+                
+                const teamsContainer = document.getElementById('teams-container');
+                
+                if (data.teams && data.teams.length > 0) {
+                    teamsContainer.innerHTML = data.teams.map(team => `
+                        <div class="team-card ${getColorClass(team.color)}">
+                            <div class="team-name">${team.name} (${team.color})</div>
+                            <div class="team-stats">
+                                <span>💣 Bombs: ${team.bombs}</span>
+                                <span>🚢 Ships: ${team.ships_placed}/10</span>
+                                <span>💥 Sunk: ${team.ships_sunk}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    teamsContainer.innerHTML = '<p style="color: #888;">No teams yet</p>';
+                }
+            } catch (e) {
+                console.error('Error loading public state:', e);
+                document.getElementById('teams-container').innerHTML = 
+                    '<p style="color: #f44336;">Error loading game state</p>';
+            }
+        }
+        
+        loadLocations();
+        loadPublicState();
+    </script>
+</body>
+</html>

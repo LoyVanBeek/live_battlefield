@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Battlefield - Team Play</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 { text-align: center; margin-bottom: 20px; color: #00d9ff; }
+        h2 { color: #00d9ff; margin-bottom: 15px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .btn {
+            padding: 10px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-primary { background: #00d9ff; color: #1a1a2e; }
+        .btn-primary:hover:not(:disabled) { background: #00b8d4; }
+        .btn-success { background: #4caf50; color: white; }
+        .btn-success:hover:not(:disabled) { background: #45a049; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-danger:hover:not(:disabled) { background: #da190b; }
+        
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            background: #16213e;
+            color: #00d9ff;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .nav-link:hover { background: #0f3460; }
+
+        /* Team Header */
+        .team-header {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .team-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .team-color-dot {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+        .team-name { font-size: 24px; font-weight: bold; }
+        .team-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 18px;
+        }
+        .team-stats span { display: flex; align-items: center; gap: 5px; }
+
+        /* Game Status */
+        .game-status {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 18px;
+        }
+        .game-status.started { border-left: 4px solid #4caf50; }
+        .game-status.waiting { border-left: 4px solid #ff9800; }
+        .game-status.ended { border-left: 4px solid #f44336; }
+
+        /* Board */
+        .board-section {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            min-height: 350px; /* Prevent layout shift during refresh */
+        }
+        .board-section img {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+
+        /* Actions */
+        .actions {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .actions h3 { margin-bottom: 15px; }
+        .action-group {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #0f3460;
+        }
+        .action-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .action-group .btn { margin-right: 10px; margin-bottom: 10px; }
+        .action-inputs {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        .action-inputs input, .action-inputs select {
+            padding: 10px;
+            font-size: 14px;
+            border: 2px solid #0f3460;
+            border-radius: 5px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .action-inputs input:focus, .action-inputs select:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            display: none;
+            z-index: 1000;
+        }
+        #toast.success { background: #4caf50; color: white; }
+        #toast.error { background: #f44336; color: white; }
+
+        /* Public Boards Grid */
+        .public-boards-section {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .public-boards-section h2 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+        }
+        .public-boards-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+        .public-board-item {
+            flex: 0 0 auto;
+            text-align: center;
+            min-height: 380px; /* Prevent layout shift during refresh */
+        }
+        .public-board-item p {
+            margin-bottom: 8px;
+            color: #aaa;
+            font-size: 14px;
+        }
+        .public-board-item img {
+            max-width: 250px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .public-board-item img:hover {
+            transform: scale(1.05);
+        }
+
+        /* Modal for zoom */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .modal.active { display: flex; }
+        .modal img {
+            max-width: 90%;
+            max-height: 80%;
+            border-radius: 8px;
+        }
+        .modal p {
+            color: #fff;
+            margin-top: 15px;
+            font-size: 18px;
+        }
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 40px;
+            cursor: pointer;
+        }
+
+        /* Board Grid Styling */
+        .board-grid {
+            display: inline-grid;
+            grid-template-columns: 30px repeat(10, 30px);
+            grid-template-rows: 30px repeat(10, 30px);
+            background: white;
+            border: 2px solid #333;
+            /* Fixed dimensions to prevent layout shifts */
+            width: 332px;  /* 2px border + 12 header + 10*30 cells */
+            height: 332px;
+        }
+        .board-cell {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            transition: background-color 0.2s ease; /* Smooth transitions */
+        }
+        .board-cell.header {
+            background: #e0e0e0;
+            font-weight: bold;
+            font-size: 12px;
+            color: #333;
+        }
+        .board-cell.ship {
+            background: #222;
+        }
+        .board-cell.ship.sunk {
+            background: #8B0000;
+        }
+        .board-cell .marker {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .board-cell .hit {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+        }
+        .board-cell .miss {
+            width: 18px;
+            height: 18px;
+            position: relative;
+        }
+        .board-cell .miss::before,
+        .board-cell .miss::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 14px;
+            height: 3px;
+            background-color: inherit;
+            border-radius: 1px;
+        }
+        .board-cell .miss::before {
+            transform: translate(-50%, -50%) rotate(45deg);
+        }
+        .board-cell .miss::after {
+            transform: translate(-50%, -50%) rotate(-45deg);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/admin" class="nav-link">← Back to Admin</a>
+        
+        <h1>🎮 Team Play</h1>
+
+        <!-- Team Header -->
+        <div class="team-header" id="team-header">
+            <div class="team-info">
+                <span class="team-color-dot" id="team-color-dot"></span>
+                <span class="team-name" id="team-name">Loading...</span>
+            </div>
+            <div class="team-stats">
+                <span>💣 <span id="bomb-count">-</span></span>
+                <span>🚢 <span id="ship-count">-</span>/10</span>
+                <span>💥 <span id="sunk-count">-</span> sunk</span>
+            </div>
+        </div>
+
+        <!-- Game Status -->
+        <div class="game-status waiting" id="game-status">
+            Loading...
+        </div>
+
+        <!-- Private Board -->
+        <div class="board-section">
+            <h2>🚢 Your Private Board</h2>
+            <div id="private-board"></div>
+        </div>
+
+        <!-- Public Boards -->
+        <div class="public-boards-section">
+            <h2>💥 Public Boards (All Teams)</h2>
+            <div class="public-boards-grid" id="public-boards-grid">
+                Loading...
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="actions" id="actions">
+            Loading actions...
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <!-- Modal for zoom -->
+    <div class="modal" id="modal" onclick="closeModal()">
+        <span class="modal-close">&times;</span>
+        <img id="modal-img" src="" alt="">
+        <p id="modal-caption"></p>
+    </div>
+
+    <script>
+        const TEAM_COLOR = '{{ team_color }}';
+        let gameStatus = 'waiting';
+        const TEAM_COLORS_RGB = {
+            'red': 'rgb(220, 60, 60)',
+            'blue': 'rgb(60, 100, 220)',
+            'green': 'rgb(60, 180, 80)',
+            'purple': 'rgb(160, 60, 180)',
+            'orange': 'rgb(255, 150, 50)',
+            'yellow': 'rgb(220, 200, 60)'
+        };
+        const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+
+        // Cache for board grids to avoid rebuilding
+        const boardGridCache = new Map();
+
+        function renderBoard(containerId, jsonUrl) {
+            return new Promise((resolve, reject) => {
+                fetch(jsonUrl)
+                    .then(resp => resp.json())
+                    .then(data => {
+                        if (data.error) {
+                            document.getElementById(containerId).innerHTML = '<p>' + data.error + '</p>';
+                            resolve();
+                            return;
+                        }
+                        updateBoardFromData(containerId, data, true);
+                        resolve();
+                    })
+                    .catch(err => {
+                        console.error('Failed to load board:', err);
+                        reject(err);
+                    });
+            });
+        }
+
+        function updateBoardFromData(containerId, data, includeShips) {
+            const container = document.getElementById(containerId);
+            
+            // Check if we already have a grid for this container
+            let grid = boardGridCache.get(containerId);
+            if (!grid) {
+                // Create new grid
+                grid = document.createElement('div');
+                grid.className = 'board-grid';
+                grid.dataset.containerId = containerId; // Store reference
+                
+                // Create header row
+                const corner = document.createElement('div');
+                corner.className = 'board-cell header';
+                grid.appendChild(corner);
+                
+                // Column headers A-J
+                for (let c = 0; c < 10; c++) {
+                    const header = document.createElement('div');
+                    header.className = 'board-cell header';
+                    header.textContent = COLS[c];
+                    grid.appendChild(header);
+                }
+                
+                // Create cell placeholders for rows 1-10
+                for (let r = 0; r < 10; r++) {
+                    // Row header
+                    const rowHeader = document.createElement('div');
+                    rowHeader.className = 'board-cell header';
+                    rowHeader.textContent = r + 1;
+                    grid.appendChild(rowHeader);
+                    
+                    // Cells
+                    for (let c = 0; c < 10; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'board-cell';
+                        cell.dataset.row = r;
+                        cell.dataset.col = c;
+                        grid.appendChild(cell);
+                    }
+                }
+                
+                container.innerHTML = '';
+                container.appendChild(grid);
+                boardGridCache.set(containerId, grid);
+            }
+            
+            // Update cell content without recreating elements
+            for (let r = 0; r < 10; r++) {
+                for (let c = 0; c < 10; c++) {
+                    const cellData = data.grid[r][c];
+                    // Find the cell: 1 corner + 10 col headers + r*11 (row header + 10 cells per row) + c
+                    const cellIndex = 1 + 10 + r * 11 + 1 + c; // = 12 + r*11 + c
+                    const cell = grid.children[cellIndex];
+                    
+                    if (!cell) continue;
+                    
+                    // Reset cell classes
+                    cell.className = 'board-cell';
+                    
+                    // Private board: show ships
+                    if (includeShips && cellData.has_ship) {
+                        cell.classList.add('ship');
+                        if (cellData.ship_sunk) {
+                            cell.classList.add('sunk');
+                        }
+                    }
+                    
+                    // Clear any existing markers
+                    while (cell.firstChild) {
+                        cell.removeChild(cell.firstChild);
+                    }
+                    
+                    // Show hit/miss markers (both public and private)
+                    if (cellData.status === 'hit') {
+                        const marker = document.createElement('div');
+                        marker.className = 'hit';
+                        const color = cellData.attacker_color || 'gray';
+                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
+                        cell.appendChild(marker);
+                    } else if (cellData.status === 'miss') {
+                        const marker = document.createElement('div');
+                        marker.className = 'miss';
+                        const color = cellData.attacker_color || 'gray';
+                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
+                        cell.appendChild(marker);
+                    }
+                }
+            }
+        }
+
+        function renderPrivateBoard() {
+            renderBoard('private-board', `/api/board/${TEAM_COLOR}/private.json`);
+        }
+
+        function renderPublicBoard(color) {
+            return renderBoard(`public-board-${color}`, `/api/board/${color}/public.json`);
+        }
+
+        async function apiCall(url, method = 'GET', body = null) {
+            try {
+                const options = { method };
+                if (body) {
+                    options.headers = { 'Content-Type': 'application/json' };
+                    options.body = JSON.stringify(body);
+                }
+                const resp = await fetch(url, options);
+                return await resp.json();
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+                return null;
+            }
+        }
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = type;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 3000);
+        }
+
+        async function loadGameStatus() {
+            const status = await apiCall('/api/game-status');
+            if (!status) return;
+
+            gameStatus = status.status;
+            
+            const statusEl = document.getElementById('game-status');
+            
+            if (status.status === 'started') {
+                statusEl.textContent = '🎮 Game Started - Bombs away!';
+                statusEl.className = 'game-status started';
+            } else if (status.status === 'ended') {
+                statusEl.textContent = '🏁 Game Ended';
+                statusEl.className = 'game-status ended';
+            } else {
+                statusEl.textContent = '⏳ Waiting to Start';
+                statusEl.className = 'game-status waiting';
+            }
+
+            renderActions();
+        }
+
+        async function loadTeam() {
+            const state = await apiCall('/api/state');
+            if (!state) return;
+
+            const team = state.teams?.find(t => t.color === TEAM_COLOR);
+            
+            if (!team) {
+                document.getElementById('team-header').innerHTML = `
+                    <div class="team-info">
+                        <span class="team-color-dot" style="background: ${TEAM_COLOR}"></span>
+                        <span class="team-name">Team ${TEAM_COLOR} (not joined)</span>
+                    </div>
+                `;
+                renderActions();
+                return;
+            }
+
+            document.getElementById('team-color-dot').style.background = TEAM_COLOR;
+            document.getElementById('team-name').textContent = team.name;
+            document.getElementById('bomb-count').textContent = team.bombs;
+            document.getElementById('ship-count').textContent = team.ships_placed;
+            document.getElementById('sunk-count').textContent = team.ships_sunk;
+
+            renderPrivateBoard();
+
+            // Load public boards
+            loadPublicBoards();
+
+            renderActions();
+        }
+
+        async function updateStats() {
+            const state = await apiCall('/api/state');
+            if (!state) return;
+
+            const team = state.teams?.find(t => t.color === TEAM_COLOR);
+            
+            if (!team) {
+                document.getElementById('team-header').innerHTML = `
+                    <div class="team-info">
+                        <span class="team-color-dot" style="background: ${TEAM_COLOR}"></span>
+                        <span class="team-name">Team ${TEAM_COLOR} (not joined)</span>
+                    </div>
+                `;
+                return;
+            }
+
+            document.getElementById('team-color-dot').style.background = TEAM_COLOR;
+            document.getElementById('team-name').textContent = team.name;
+            document.getElementById('bomb-count').textContent = team.bombs;
+            document.getElementById('ship-count').textContent = team.ships_placed;
+            document.getElementById('sunk-count').textContent = team.ships_sunk;
+        }
+
+        function refreshBoards() {
+            renderPrivateBoard();
+            loadPublicBoards();
+        }
+
+        async function loadPublicBoards() {
+            const state = await apiCall('/api/state');
+            if (!state || !state.teams) return;
+
+            const grid = document.getElementById('public-boards-grid');
+            
+            // Keep track of existing boards to avoid rebuilding
+            const existingBoards = new Set();
+            for (let i = 0; i < grid.children.length; i++) {
+                const child = grid.children[i];
+                const boardDiv = child.querySelector('[id^="public-board-"]');
+                if (boardDiv) {
+                    const id = boardDiv.id;
+                    existingBoards.add(id);
+                }
+            }
+
+            // Create or update boards for each team
+            state.teams.forEach(team => {
+                const boardId = `public-board-${team.color}`;
+                
+                // Check if board element already exists
+                let boardItem = document.getElementById(`public-board-item-${team.color}`);
+                if (!boardItem) {
+                    // Create new board item
+                    boardItem = document.createElement('div');
+                    boardItem.className = 'public-board-item';
+                    boardItem.id = `public-board-item-${team.color}`;
+                    boardItem.innerHTML = `
+                        <p>${team.name} (${team.color})</p>
+                        <div id="${boardId}"></div>
+                    `;
+                    grid.appendChild(boardItem);
+                } else {
+                    // Update team name if needed
+                    const nameElement = boardItem.querySelector('p');
+                    if (nameElement && nameElement.textContent !== `${team.name} (${team.color})`) {
+                        nameElement.textContent = `${team.name} (${team.color})`;
+                    }
+                }
+                
+                // Render the board
+                renderPublicBoard(team.color);
+            });
+            
+            // Remove boards for teams that no longer exist
+            const currentTeams = new Set(state.teams.map(t => t.color));
+            for (let i = grid.children.length - 1; i >= 0; i--) {
+                const child = grid.children[i];
+                const match = child.id && child.id.match(/^public-board-item-(.+)$/);
+                if (match) {
+                    const color = match[1];
+                    if (!currentTeams.has(color)) {
+                        grid.removeChild(child);
+                    }
+                }
+            }
+        }
+
+        function showModal(imgEl, caption) {
+            const modal = document.getElementById('modal');
+            const modalImg = document.getElementById('modal-img');
+            const modalCaption = document.getElementById('modal-caption');
+            modalImg.src = imgEl.src;
+            modalCaption.textContent = caption;
+            modal.classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+
+        function renderActions() {
+            const actionsEl = document.getElementById('actions');
+            
+            if (gameStatus === 'ended') {
+                actionsEl.innerHTML = '<p>Game has ended. No actions available.</p>';
+                return;
+            }
+
+            let html = '';
+
+            if (gameStatus === 'waiting') {
+                // PREPARING phase
+                html += `
+                    <div class="action-group">
+                        <h3>🚢 Ship Placement</h3>
+                        <button class="btn btn-primary" onclick="placeAllShips()">Place All Ships (Auto)</button>
+                        <div class="action-inputs">
+                            <input type="text" id="coord-input" placeholder="A1">
+                            <select id="ship-type">
+                                <option value="airplane_carrier">airplane_carrier (6)</option>
+                                <option value="battleship">battleship (4)</option>
+                                <option value="torpedo_hunter">torpedo_hunter (3)</option>
+                                <option value="patrol_boat">patrol_boat (2)</option>
+                            </select>
+                            <select id="direction">
+                                <option value="horizontal">horizontal</option>
+                                <option value="vertical">vertical</option>
+                            </select>
+                            <button class="btn btn-primary" onclick="placeShip()">Place Ship</button>
+                        </div>
+                        <div class="action-inputs">
+                            <input type="text" id="remove-coord" placeholder="A1 (remove)">
+                            <button class="btn btn-danger" onclick="removeShip()">Remove Ship</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (gameStatus === 'started') {
+                // STARTED phase
+                html += `
+                    <div class="action-group">
+                        <h3>💥 Bomb Enemy</h3>
+                        <div class="action-inputs">
+                            <select id="target-team">
+                                <option value="">Select target</option>
+                            </select>
+                            <input type="text" id="bomb-coord" placeholder="A1" onkeypress="if(event.key==='Enter')throwBomb()">
+                            <button class="btn btn-primary" onclick="throwBomb()">Throw Bomb</button>
+                        </div>
+                    </div>
+                    <div class="action-group">
+                        <h3>🔑 Redeem Code</h3>
+                        <div class="action-inputs">
+                            <input type="number" id="code-loc" placeholder="Location #" onkeypress="if(event.key==='Enter')redeemCode()">
+                            <input type="text" id="code-val" placeholder="ABCD" onkeypress="if(event.key==='Enter')redeemCode()">
+                            <button class="btn btn-primary" onclick="redeemCode()">Redeem</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            actionsEl.innerHTML = html;
+
+            // Populate target team dropdown
+            if (gameStatus === 'started') {
+                loadTargetTeams();
+            }
+        }
+
+        async function loadTargetTeams() {
+            const state = await apiCall('/api/state');
+            if (!state || !state.teams) return;
+
+            const select = document.getElementById('target-team');
+            select.innerHTML = '<option value="">Select target</option>';
+            
+            state.teams.forEach(team => {
+                if (team.color !== TEAM_COLOR) {
+                    const opt = document.createElement('option');
+                    opt.value = team.color;
+                    opt.textContent = team.name + ' (' + team.color + ')';
+                    select.appendChild(opt);
+                }
+            });
+        }
+
+        async function placeAllShips() {
+            const result = await apiCall('/api/quick/place_all_ships', 'POST', { team_color: TEAM_COLOR });
+            showToast(result.message, result.success ? 'success' : 'error');
+            updateStats();
+            refreshBoards();
+        }
+
+        async function placeShip() {
+            const coord = document.getElementById('coord-input').value || 'A1';
+            const shipType = document.getElementById('ship-type').value;
+            const direction = document.getElementById('direction').value;
+
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'place',
+                args: { ship_type: shipType, coordinate: coord, direction: direction }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            updateStats();
+            refreshBoards();
+        }
+
+        async function removeShip() {
+            const coord = document.getElementById('remove-coord').value;
+            if (!coord) {
+                showToast('Enter a coordinate!', 'error');
+                return;
+            }
+
+            const coordUpper = coord.toUpperCase().trim();
+            const colLetter = coordUpper.charAt(0);
+            const col = colLetter.charCodeAt(0) - 65;
+            const row = parseInt(coordUpper.substring(1)) - 1;
+
+            if (col < 0 || col > 9 || row < 0 || row > 9) {
+                showToast('Invalid coordinate! Use A1-J10', 'error');
+                return;
+            }
+
+            const result = await apiCall('/api/quick/remove_ship', 'POST', {
+                team_color: TEAM_COLOR,
+                row: row,
+                col: col
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            updateStats();
+            refreshBoards();
+        }
+
+        async function throwBomb() {
+            const target = document.getElementById('target-team').value;
+            const coord = document.getElementById('bomb-coord').value;
+
+            if (!target) {
+                showToast('Select a target!', 'error');
+                return;
+            }
+            if (!coord) {
+                showToast('Enter a coordinate!', 'error');
+                return;
+            }
+
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'bomb',
+                args: { target: target, coordinate: coord }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            updateStats();
+            refreshBoards();
+        }
+
+        async function redeemCode() {
+            const locNum = document.getElementById('code-loc').value;
+            const code = document.getElementById('code-val').value;
+
+            if (!locNum) {
+                showToast('Enter location number!', 'error');
+                return;
+            }
+            if (!code) {
+                showToast('Enter code!', 'error');
+                return;
+            }
+
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'code',
+                args: { location_number: parseInt(locNum), code: code }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            updateStats();
+        }
+
+        // Initial load
+        loadGameStatus();
+        loadTeam();
+
+        // Refresh boards every 2 seconds (reduced from 1 second to reduce flickering)
+        setInterval(refreshBoards, 2000);
+    </script>
+</body>
+</html>

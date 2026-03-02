@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Battlefield - Admin Panel</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 { text-align: center; margin-bottom: 20px; color: #00d9ff; }
+        h2 { color: #00d9ff; margin-bottom: 15px; }
+        h3 { color: #00d9ff; margin-bottom: 10px; }
+        .container { max-width: 1600px; margin: 0 auto; }
+        .btn {
+            padding: 10px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-primary { background: #00d9ff; color: #1a1a2e; }
+        .btn-primary:hover:not(:disabled) { background: #00b8d4; }
+        .btn-success { background: #4caf50; color: white; }
+        .btn-success:hover:not(:disabled) { background: #45a049; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-danger:hover:not(:disabled) { background: #da190b; }
+        .btn-warning { background: #ff9800; color: #1a1a2e; }
+        
+        /* Game Status Bar */
+        .status-bar {
+            background: #16213e;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .status-bar .status {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .status-bar .status.started { color: #4caf50; }
+        .status-bar .status.ended { color: #f44336; }
+        .status-bar .status.waiting { color: #ff9800; }
+        .status-bar .buttons { display: flex; gap: 10px; }
+        .status-bar .locations { color: #888; }
+
+        /* Navigation */
+        .nav-links {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .nav-links a {
+            color: #00d9ff;
+            text-decoration: none;
+            padding: 8px 15px;
+            background: #16213e;
+            border-radius: 5px;
+        }
+        .nav-links a:hover { background: #0f3460; }
+
+        /* Section */
+        .section {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        /* Public Boards Grid */
+        .public-boards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .public-board-item {
+            background: #0f3460;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            min-height: 280px; /* Prevent layout shift during refresh */
+        }
+        .public-board-item h4 { margin-bottom: 10px; }
+        .public-board-item img { max-width: 100%; border-radius: 4px; }
+
+        /* Teams Grid */
+        .teams-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .team-card {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .team-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .team-color-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .team-name { font-size: 18px; font-weight: bold; }
+        .ai-badge {
+            margin-left: 8px;
+            background: #6366f1;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: normal;
+        }
+        .team-stats {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .team-stats span { display: flex; align-items: center; gap: 5px; }
+        .team-board img { width: 100%; border-radius: 4px; }
+        .team-board-grid {
+            display: inline-grid;
+            grid-template-columns: 20px repeat(10, 20px);
+            grid-template-rows: 20px repeat(10, 20px);
+            background: white;
+            border: 1px solid #333;
+            margin: 10px 0;
+            /* Fixed dimensions to prevent layout shifts */
+            width: 222px;  /* 1px border + 11 header + 10*20 cells */
+            height: 222px;
+        }
+        .team-board-cell {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            transition: background-color 0.2s ease; /* Smooth transitions */
+        }
+        .team-board-cell.header {
+            background: #e0e0e0;
+            font-size: 9px;
+            font-weight: bold;
+            color: #333;
+        }
+        .team-board-cell.ship {
+            background: #222;
+        }
+        .team-board-cell.ship.sunk {
+            background: #8B0000;
+        }
+        .team-board-cell .marker {
+            width: 14px;
+            height: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .team-board-cell .hit {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .team-board-cell .miss {
+            width: 12px;
+            height: 12px;
+            position: relative;
+        }
+        .team-board-cell .miss::before,
+        .team-board-cell .miss::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 2px;
+            background-color: inherit;
+            border-radius: 1px;
+        }
+        .team-board-cell .miss::before {
+            transform: translate(-50%, -50%) rotate(45deg);
+        }
+        .team-board-cell .miss::after {
+            transform: translate(-50%, -50%) rotate(-45deg);
+        }
+        .team-play-link {
+            display: block;
+            text-align: center;
+            margin-top: 10px;
+            padding: 8px;
+            background: #00d9ff;
+            color: #1a1a2e;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .team-play-link:hover { background: #00b8d4; }
+        .no-teams { text-align: center; color: #888; padding: 40px; }
+
+        /* Reset Buttons */
+        .reset-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            display: none;
+            z-index: 1000;
+        }
+        #toast.success { background: #4caf50; color: white; }
+        #toast.error { background: #f44336; color: white; }
+
+        /* Loading */
+        .loading { opacity: 0.5; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🕵️ Admin Panel</h1>
+        
+        <!-- Navigation -->
+        <div class="nav-links">
+            <a href="/map">🗺️ Map</a>
+            <a href="/admin/events">📊 Events Timeline</a>
+            <a href="/admin/locations-secret">📍 Locations</a>
+        </div>
+
+        <!-- Game Status Bar -->
+        <div class="status-bar">
+            <div>
+                <span class="status waiting" id="game-status">⏳ WAITING</span>
+                <span class="locations" id="location-progress">0 locations</span>
+            </div>
+            <div class="buttons">
+                <button class="btn btn-success" id="btn-start" onclick="startGame()">Start Game</button>
+                <button class="btn btn-danger" id="btn-end" onclick="endGame()">End Game</button>
+                <button class="btn btn-primary" id="btn-new" onclick="startNewGame()">Start New Game</button>
+            </div>
+        </div>
+
+        <!-- Public Boards -->
+        <div class="section">
+            <h2>📺 All Public Boards</h2>
+            <div class="public-boards-grid" id="public-boards">
+            </div>
+        </div>
+
+        <!-- Teams -->
+        <div class="section">
+            <h2>🚢 Teams</h2>
+            
+            <!-- Join Team -->
+            <div style="margin-bottom: 20px; padding: 15px; background: #0f3460; border-radius: 8px;">
+                <h3 style="margin-bottom: 10px;">➕ Join Team</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                    <select id="join-color" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                        <option value="">Select color...</option>
+                    </select>
+                    <input type="text" id="join-name" placeholder="Team name" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                    <button class="btn btn-success" onclick="joinTeam()">Join</button>
+                </div>
+            </div>
+            
+            <div class="teams-grid" id="teams-grid">
+            </div>
+        </div>
+
+        <!-- AI Players -->
+        <div class="section">
+            <h2>🤖 AI Players</h2>
+            
+            <div style="margin-bottom: 15px; padding: 15px; background: #0f3460; border-radius: 8px;">
+                <h3 style="margin-bottom: 10px;">➕ Add AI Player</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                    <select id="ai-color" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                        <option value="">Select color...</option>
+                    </select>
+                    <input type="text" id="ai-name" placeholder="AI name (optional)" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                    <button class="btn btn-primary" onclick="addAI()">Add AI</button>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <button class="btn btn-warning" onclick="pauseAllAI()">⏸️ Pause All AI</button>
+                <button class="btn btn-success" onclick="resumeAllAI()">▶️ Resume All AI</button>
+            </div>
+        </div>
+
+        <!-- Reset Buttons -->
+        <div class="section">
+            <h2>🔧 Reset</h2>
+            <div class="reset-buttons">
+                <button class="btn btn-danger" onclick="resetGame()">Reset Game</button>
+                <button class="btn btn-warning" onclick="clearLocations()">Clear Locations</button>
+                <button class="btn btn-danger" onclick="clearDatabase()">Clear Database</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <script>
+        let gameStatus = 'waiting';
+        const TEAM_COLORS_RGB = {
+            'red': 'rgb(220, 60, 60)',
+            'blue': 'rgb(60, 100, 220)',
+            'green': 'rgb(60, 180, 80)',
+            'purple': 'rgb(160, 60, 180)',
+            'orange': 'rgb(255, 150, 50)',
+            'yellow': 'rgb(220, 200, 60)'
+        };
+        const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+        
+        // Cache for board grids to avoid rebuilding
+        const boardGridCache = new Map();
+
+        async function renderBoard(containerId, jsonUrl) {
+            try {
+                const resp = await fetch(jsonUrl);
+                const data = await resp.json();
+                if (data.error) {
+                    document.getElementById(containerId).innerHTML = '<p>' + data.error + '</p>';
+                    return;
+                }
+                updateBoardFromData(containerId, data, true);
+            } catch (err) {
+                console.error('Failed to load board:', err);
+            }
+        }
+
+        function updateBoardFromData(containerId, data, includeShips) {
+            const container = document.getElementById(containerId);
+            
+            // Check if we already have a grid for this container
+            let grid = boardGridCache.get(containerId);
+            if (!grid) {
+                // Create new grid
+                grid = document.createElement('div');
+                grid.className = 'team-board-grid';
+                grid.dataset.containerId = containerId; // Store reference
+                
+                // Create header row
+                const corner = document.createElement('div');
+                corner.className = 'team-board-cell header';
+                grid.appendChild(corner);
+                
+                // Column headers A-J
+                for (let c = 0; c < 10; c++) {
+                    const header = document.createElement('div');
+                    header.className = 'team-board-cell header';
+                    header.textContent = COLS[c];
+                    header.style.fontSize = '9px';
+                    grid.appendChild(header);
+                }
+                
+                // Create cell placeholders for rows 1-10
+                for (let r = 0; r < 10; r++) {
+                    // Row header
+                    const rowHeader = document.createElement('div');
+                    rowHeader.className = 'team-board-cell header';
+                    rowHeader.textContent = r + 1;
+                    rowHeader.style.fontSize = '9px';
+                    grid.appendChild(rowHeader);
+                    
+                    // Cells
+                    for (let c = 0; c < 10; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'team-board-cell';
+                        cell.dataset.row = r;
+                        cell.dataset.col = c;
+                        grid.appendChild(cell);
+                    }
+                }
+                
+                container.innerHTML = '';
+                container.appendChild(grid);
+                boardGridCache.set(containerId, grid);
+            }
+            
+            // Update cell content without recreating elements
+            for (let r = 0; r < 10; r++) {
+                for (let c = 0; c < 10; c++) {
+                    const cellData = data.grid[r][c];
+                    // Find the cell: 1 corner + 10 col headers + r*11 (row header + 10 cells per row) + c
+                    const cellIndex = 1 + 10 + r * 11 + 1 + c; // = 12 + r*11 + c
+                    const cell = grid.children[cellIndex];
+                    
+                    if (!cell) continue;
+                    
+                    // Reset cell classes
+                    cell.className = 'team-board-cell';
+                    
+                    // Private board: show ships
+                    if (includeShips && cellData.has_ship) {
+                        cell.classList.add('ship');
+                        if (cellData.ship_sunk) {
+                            cell.classList.add('sunk');
+                        }
+                    }
+                    
+                    // Clear any existing markers
+                    while (cell.firstChild) {
+                        cell.removeChild(cell.firstChild);
+                    }
+                    
+                    // Show hit/miss markers (both public and private)
+                    if (cellData.status === 'hit') {
+                        const marker = document.createElement('div');
+                        marker.className = 'hit';
+                        const color = cellData.attacker_color || 'gray';
+                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
+                        cell.appendChild(marker);
+                    } else if (cellData.status === 'miss') {
+                        const marker = document.createElement('div');
+                        marker.className = 'miss';
+                        const color = cellData.attacker_color || 'gray';
+                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
+                        cell.appendChild(marker);
+                    }
+                }
+            }
+        }
+
+        async function apiCall(url, method = 'GET', body = null) {
+            try {
+                const options = { method };
+                if (body) {
+                    options.headers = { 'Content-Type': 'application/json' };
+                    options.body = JSON.stringify(body);
+                }
+                const resp = await fetch(url, options);
+                return await resp.json();
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+                return null;
+            }
+        }
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = type;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 3000);
+        }
+
+        async function loadGameStatus() {
+            const status = await apiCall('/api/game-status');
+            if (!status) return;
+
+            gameStatus = status.status;
+            
+            const statusEl = document.getElementById('game-status');
+            const btnStart = document.getElementById('btn-start');
+            const btnEnd = document.getElementById('btn-end');
+            const btnNew = document.getElementById('btn-new');
+
+            if (status.status === 'started') {
+                statusEl.textContent = '🎮 STARTED';
+                statusEl.className = 'status started';
+                btnStart.disabled = true;
+                btnEnd.disabled = false;
+            } else if (status.status === 'ended') {
+                statusEl.textContent = '🏁 ENDED';
+                statusEl.className = 'status ended';
+                btnStart.disabled = true;
+                btnEnd.disabled = true;
+                btnNew.disabled = false;
+            } else {
+                statusEl.textContent = '⏳ WAITING';
+                statusEl.className = 'status waiting';
+                
+                // Check preconditions
+                const hasLocations = status.locations_placed > 0;
+                const hasEnoughTeams = status.total_teams >= 2;
+                const canStart = hasLocations && hasEnoughTeams;
+                
+                btnStart.disabled = !canStart;
+                if (!canStart) {
+                    if (!hasLocations) {
+                        btnStart.title = `Need at least 1 location (currently ${status.locations_placed})`;
+                    } else {
+                        btnStart.title = `Need at least 2 teams (currently ${status.total_teams})`;
+                    }
+                } else {
+                    btnStart.title = 'Start the game';
+                }
+                btnEnd.disabled = true;
+                btnNew.disabled = true;
+            }
+
+            document.getElementById('location-progress').textContent = 
+                `${status.locations_placed} locations`;
+        }
+
+        async function loadPublicBoards() {
+            const state = await apiCall('/api/state');
+            if (!state) return;
+
+            const grid = document.getElementById('public-boards');
+            
+            // Clear "Loading..." text on first load
+            if (grid.innerHTML.toLowerCase().includes('loading')) {
+                grid.innerHTML = '';
+            }
+            
+            if (!state.teams || state.teams.length === 0) {
+                grid.innerHTML = '<div class="no-teams">No teams yet</div>';
+                return;
+            }
+            
+            // Keep track of existing boards to avoid rebuilding
+            const existingBoards = new Set();
+            for (let i = 0; i < grid.children.length; i++) {
+                const child = grid.children[i];
+                const boardDiv = child.querySelector('[id^="public-board-"]');
+                if (boardDiv) {
+                    const id = boardDiv.id;
+                    existingBoards.add(id);
+                }
+            }
+
+            // Create or update boards for each team
+            state.teams.forEach(team => {
+                const boardId = `public-board-${team.color}`;
+                
+                // Check if board element already exists
+                let boardItem = document.getElementById(`public-board-item-${team.color}`);
+                if (!boardItem) {
+                    // Create new board item
+                    boardItem = document.createElement('div');
+                    boardItem.className = 'public-board-item';
+                    boardItem.id = `public-board-item-${team.color}`;
+                    boardItem.innerHTML = `
+                        <h4>${team.name} (${team.color})</h4>
+                        <div id="${boardId}"></div>
+                    `;
+                    grid.appendChild(boardItem);
+                } else {
+                    // Update team name if needed
+                    const nameElement = boardItem.querySelector('h4');
+                    if (nameElement && nameElement.textContent !== `${team.name} (${team.color})`) {
+                        nameElement.textContent = `${team.name} (${team.color})`;
+                    }
+                }
+                
+                // Render the board
+                renderBoard(boardId, '/api/board/' + team.color + '/public.json');
+            });
+            
+            // Remove boards for teams that no longer exist
+            const currentTeams = new Set(state.teams.map(t => t.color));
+            for (let i = grid.children.length - 1; i >= 0; i--) {
+                const child = grid.children[i];
+                const match = child.id && child.id.match(/^public-board-item-(.+)$/);
+                if (match) {
+                    const color = match[1];
+                    if (!currentTeams.has(color)) {
+                        grid.removeChild(child);
+                    }
+                }
+            }
+        }
+
+        async function loadTeams() {
+            const state = await apiCall('/api/state');
+            if (!state) return;
+
+            // Populate available colors dropdown (preserve selection)
+            const joinColorSelect = document.getElementById('join-color');
+            const joinSelectedValue = joinColorSelect.value;
+            joinColorSelect.innerHTML = '<option value="">Select color...</option>';
+            if (state.available_colors) {
+                state.available_colors.forEach(color => {
+                    const opt = document.createElement('option');
+                    opt.value = color;
+                    opt.textContent = color.toUpperCase();
+                    joinColorSelect.appendChild(opt);
+                });
+            }
+            joinColorSelect.value = joinSelectedValue;
+
+            // Populate AI color dropdown (preserve selection)
+            const aiColorSelect = document.getElementById('ai-color');
+            const aiSelectedValue = aiColorSelect.value;
+            aiColorSelect.innerHTML = '<option value="">Select color...</option>';
+            if (state.available_colors) {
+                state.available_colors.forEach(color => {
+                    const opt = document.createElement('option');
+                    opt.value = color;
+                    opt.textContent = color.toUpperCase();
+                    aiColorSelect.appendChild(opt);
+                });
+            }
+            aiColorSelect.value = aiSelectedValue;
+
+            const grid = document.getElementById('teams-grid');
+            
+            // Clear "Loading..." text on first load
+            if (grid.innerHTML.toLowerCase().includes('loading')) {
+                grid.innerHTML = '';
+            }
+            
+            if ((!state.teams || state.teams.length === 0) && (!state.available_colors || state.available_colors.length === 0)) {
+                grid.innerHTML = '<div class="no-teams">No teams available</div>';
+                return;
+            }
+
+            // Keep track of existing team cards to avoid rebuilding
+            const existingCards = new Set();
+            for (let i = 0; i < grid.children.length; i++) {
+                const child = grid.children[i];
+                const match = child.id && child.id.match(/^team-card-(.+)$/);
+                if (match) {
+                    existingCards.add(match[1]);
+                }
+            }
+
+            // Update or create team cards
+            if (state.teams && state.teams.length > 0) {
+                state.teams.forEach(team => {
+                    const cardId = `team-card-${team.color}`;
+                    let card = document.getElementById(cardId);
+                    
+                    const aiIndicator = team.is_ai ? '<span class="ai-badge">🤖 AI</span>' : '';
+                    
+                    if (!card) {
+                        // Create new card
+                        card = document.createElement('div');
+                        card.className = 'team-card';
+                        card.id = cardId;
+                        card.innerHTML = `
+                            <div class="team-card-header">
+                                <span class="team-name">
+                                    <span class="team-color-dot" style="background: ${team.color}"></span>
+                                    <span class="team-name-text">${team.name}</span>
+                                    ${aiIndicator}
+                                </span>
+                            </div>
+                            <div class="team-stats">
+                                <span class="team-bombs">💣 <span class="bombs-count">${team.bombs}</span></span>
+                                <span class="team-ships">🚢 <span class="ships-count">${team.ships_placed}</span>/${team.total_ships}</span>
+                                <span class="team-sunk">💥 <span class="sunk-count">${team.ships_sunk}</span> sunk</span>
+                            </div>
+                            <div class="team-board" id="team-board-${team.color}">
+                            </div>
+                            <a href="/team/${team.color}" class="team-play-link">🎮 Play as ${team.color}</a>
+                            <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')">💣 +5 Bombs</button>
+                            <div class="ai-buttons" id="ai-buttons-${team.color}"></div>
+                        `;
+                        grid.appendChild(card);
+                    } else {
+                        // Update existing card content
+                        const nameElement = card.querySelector('.team-name-text');
+                        if (nameElement && nameElement.textContent !== team.name) {
+                            nameElement.textContent = team.name;
+                        }
+                        
+                        // Update AI indicator
+                        const aiBadge = card.querySelector('.ai-badge');
+                        if (team.is_ai && !aiBadge) {
+                            // Add badge if AI and no badge exists
+                            const teamNameSpan = card.querySelector('.team-name');
+                            const existingBadge = document.createElement('span');
+                            existingBadge.className = 'ai-badge';
+                            existingBadge.textContent = '🤖 AI';
+                            teamNameSpan.appendChild(existingBadge);
+                        } else if (!team.is_ai && aiBadge) {
+                            // Remove badge if not AI but badge exists
+                            aiBadge.remove();
+                        }
+                        
+                        const bombsElement = card.querySelector('.bombs-count');
+                        if (bombsElement && bombsElement.textContent !== String(team.bombs)) {
+                            bombsElement.textContent = team.bombs;
+                        }
+                        
+                        const shipsElement = card.querySelector('.ships-count');
+                        if (shipsElement && shipsElement.textContent !== String(team.ships_placed)) {
+                            shipsElement.textContent = team.ships_placed;
+                        }
+                        
+                        const sunkElement = card.querySelector('.sunk-count');
+                        if (sunkElement && sunkElement.textContent !== String(team.ships_sunk)) {
+                            sunkElement.textContent = team.ships_sunk;
+                        }
+                        
+                        // Update AI buttons
+                        const aiButtonsContainer = card.querySelector(`#ai-buttons-${team.color}`);
+                        if (aiButtonsContainer) {
+                            if (team.is_ai) {
+                                aiButtonsContainer.innerHTML = `
+                                    <button class="btn btn-primary" style="margin-top: 5px; margin-right: 5px;" onclick="triggerAIMove('${team.color}')">⚡ Next Move</button>
+                                    <button class="btn btn-danger" style="margin-top: 5px;" onclick="removeAI('${team.color}')">🤖 Remove AI</button>
+                                `;
+                            } else {
+                                aiButtonsContainer.innerHTML = '';
+                            }
+                        }
+                    }
+                    
+                    // Render the board
+                    renderBoard('team-board-' + team.color, '/api/board/' + team.color + '/private.json');
+                });
+            }
+
+            // Handle available colors (teams not yet joined)
+            const availableColors = state.available_colors || [];
+            availableColors.forEach(color => {
+                const cardId = `team-card-available-${color}`;
+                let card = document.getElementById(cardId);
+                
+                if (!card) {
+                    // Create new available team card
+                    card = document.createElement('div');
+                    card.className = 'team-card';
+                    card.id = cardId;
+                    card.style.opacity = '0.6';
+                    card.innerHTML = `
+                        <div class="team-card-header">
+                            <span class="team-name">
+                                <span class="team-color-dot" style="background: ${color}"></span>
+                                <span class="team-name-text">Available: ${color.toUpperCase()}</span>
+                            </span>
+                        </div>
+                        <div class="team-stats">
+                            <span>Not joined</span>
+                        </div>
+                        <p style="color: #888; text-align: center; padding: 20px;">Select "${color.toUpperCase()}" above to join</p>
+                    `;
+                    grid.appendChild(card);
+                }
+            });
+
+            // Remove cards for teams that no longer exist
+            const currentTeams = new Set((state.teams || []).map(t => t.color));
+            const currentAvailable = new Set(availableColors);
+            
+            for (let i = grid.children.length - 1; i >= 0; i--) {
+                const child = grid.children[i];
+                const match = child.id && child.id.match(/^team-card-(.+)$/);
+                if (match) {
+                    const idParts = match[1].split('-');
+                    if (idParts[0] === 'available') {
+                        // This is an available team card
+                        const color = idParts[1];
+                        if (!currentAvailable.has(color)) {
+                            grid.removeChild(child);
+                        }
+                    } else {
+                        // This is a joined team card
+                        const color = match[1];
+                        if (!currentTeams.has(color)) {
+                            grid.removeChild(child);
+                        }
+                    }
+                }
+            }
+        }
+
+        async function joinTeam() {
+            const color = document.getElementById('join-color').value;
+            const name = document.getElementById('join-name').value || color;
+            
+            if (!color) {
+                showToast('Select a color first!', 'error');
+                return;
+            }
+            
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: color,
+                command: 'join',
+                args: { name: name }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success) {
+                document.getElementById('join-name').value = '';
+            }
+            loadTeams();
+        }
+
+        async function addBombs(teamColor) {
+            const result = await apiCall('/api/quick/add_bombs', 'POST', { team_color: teamColor, count: 5 });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
+        }
+
+        async function addAI() {
+            const color = document.getElementById('ai-color').value;
+            const name = document.getElementById('ai-name').value || color + ' AI';
+            
+            if (!color) {
+                showToast('Select a color first!', 'error');
+                return;
+            }
+            
+            const result = await apiCall('/api/quick/add-ai', 'POST', {
+                team_color: color,
+                name: name
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success) {
+                document.getElementById('ai-name').value = '';
+            }
+            loadTeams();
+        }
+
+        async function removeAI(color) {
+            if (!confirm(`Remove AI player ${color}?`)) return;
+            
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: color,
+                command: 'removeai',
+                args: {}
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
+        }
+
+        async function triggerAIMove(color) {
+            const result = await apiCall('/api/quick/trigger-ai-move', 'POST', { team_color: color });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
+        }
+
+        async function pauseAllAI() {
+            const result = await apiCall('/api/quick/pause-all-ai', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
+        }
+
+        async function resumeAllAI() {
+            const result = await apiCall('/api/quick/resume-all-ai', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
+        }
+
+        async function startGame() {
+            if (!confirm('Start the game?')) return;
+            const result = await apiCall('/api/quick/start-game', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadGameStatus();
+            loadPublicBoards();
+            loadTeams();
+        }
+
+        async function endGame() {
+            if (!confirm('End the game?')) return;
+            const result = await apiCall('/api/quick/end-game', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadGameStatus();
+            loadPublicBoards();
+            loadTeams();
+        }
+
+        async function startNewGame() {
+            if (!confirm('Start a new game? This will clear ALL data (teams, locations, events).')) return;
+            if (!confirm('Are you REALLY sure? Everything will be deleted!')) return;
+            const result = await apiCall('/api/quick/clear-database', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadGameStatus();
+            loadPublicBoards();
+            loadTeams();
+        }
+
+        async function resetGame() {
+            if (!confirm('Reset game? This clears all events.')) return;
+            const result = await apiCall('/api/quick/reset-game', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadGameStatus();
+            loadPublicBoards();
+            loadTeams();
+        }
+
+        async function clearLocations() {
+            if (!confirm('Clear all locations?')) return;
+            const result = await apiCall('/api/quick/clear-locations', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadGameStatus();
+        }
+
+        async function clearDatabase() {
+            if (!confirm('Clear ENTIRE database? This cannot be undone!')) return;
+            if (!confirm('Are you REALLY sure?')) return;
+            const result = await apiCall('/api/quick/clear-database', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadGameStatus();
+            loadPublicBoards();
+            loadTeams();
+        }
+
+        // Handle Enter key for join form
+        document.getElementById('join-name').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                joinTeam();
+            }
+        });
+        document.getElementById('join-color').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                joinTeam();
+            }
+        });
+
+        // Initial load
+        loadGameStatus();
+        loadPublicBoards();
+        loadTeams();
+
+        // Refresh boards every 2 seconds (reduced from 1 second to reduce flickering)
+        setInterval(() => {
+            loadPublicBoards();
+            loadTeams();
+        }, 2000);
+    </script>
+</body>
+</html>
