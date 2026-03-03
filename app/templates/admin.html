@@ -266,6 +266,7 @@
                 <button class="btn btn-success" id="btn-start" onclick="startGame()">Start Game</button>
                 <button class="btn btn-danger" id="btn-end" onclick="endGame()">End Game</button>
                 <button class="btn btn-primary" id="btn-new" onclick="startNewGame()">Start New Game</button>
+                <button class="btn btn-warning" id="btn-replay" onclick="showReplayModal()" style="display: none;">🎬 Show Replay</button>
             </div>
         </div>
 
@@ -944,7 +945,73 @@
         setInterval(() => {
             loadPublicBoards();
             loadTeams();
+            checkReplayButton();
         }, 2000);
+    </script>
+
+    <!-- Replay Modal -->
+    <div id="replay-modal">
+        <div class="replay-content">
+            <div class="replay-header">
+                <h2>🎮 Game Replay</h2>
+                <button class="replay-close" onclick="closeReplayModal()">&times;</button>
+            </div>
+            
+            <div id="replay-board">
+                <p style="color: #888; text-align: center;">Loading...</p>
+            </div>
+            
+            <div class="replay-timeline-container">
+                <div class="replay-timeline" id="replay-timeline">
+                    <div class="replay-progress" id="replay-progress" style="width: 0%;"></div>
+                </div>
+                <div class="replay-position" id="replay-position">0 / 0</div>
+            </div>
+            
+            <div class="replay-controls">
+                <button id="replay-btn-reset" title="Reset">⏮️</button>
+                <button id="replay-btn-play" title="Play">▶️</button>
+                <button id="replay-btn-pause" class="hidden" title="Pause">⏸️</button>
+                <button id="replay-btn-end" title="Go to End">⏭️</button>
+                
+                <div class="speed-controls">
+                    <span class="speed-label">Speed:</span>
+                    <button class="speed-btn" data-speed="0.5">0.5x</button>
+                    <button class="speed-btn" data-speed="1">1x</button>
+                    <button class="speed-btn" data-speed="2">2x</button>
+                    <button class="speed-btn active" data-speed="5">5x</button>
+                </div>
+            </div>
+            
+            <div class="replay-event-info" id="replay-event-info">
+                Click play to start replay
+            </div>
+        </div>
+    </div>
+
+    <link rel="stylesheet" href="/static/css/replay.css">
+    <script src="/static/js/replay.js"></script>
+
+    <script>
+        // Check if replay button should be shown
+        async function checkReplayButton() {
+            try {
+                const response = await fetch('/api/game-status');
+                const data = await response.json();
+                const replayBtn = document.getElementById('btn-replay');
+                
+                if (data.status === 'ended') {
+                    replayBtn.style.display = 'inline-block';
+                } else {
+                    replayBtn.style.display = 'none';
+                }
+            } catch (e) {
+                console.error('Error checking game status:', e);
+            }
+        }
+        
+        // Initialize replay button check on load
+        checkReplayButton();
     </script>
 </body>
 </html>

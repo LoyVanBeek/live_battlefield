@@ -62,6 +62,13 @@ async def get_api_db():
 
 app = FastAPI(title="Live Battlefield API")
 
+# Serve static files
+from fastapi.staticfiles import StaticFiles
+
+static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 templates = Jinja2Templates(directory=templates_dir)
 
@@ -258,6 +265,35 @@ async def get_state_at_event(event_index: int, db: AsyncSession = Depends(get_ap
         "event_index": event_index,
         "total_events": len(events),
         "state": state.to_dict(),
+    }
+
+
+@app.get("/api/game/replay")
+async def get_game_replay(db: AsyncSession = Depends(get_api_db)):
+    """Get all events formatted for replay functionality."""
+    from app.models import get_all_events as db_get_all_events
+    from app.models import get_game_settings
+
+    events = await db_get_all_events(db)
+    settings = await get_game_settings(db)
+
+    replay_events = []
+    for i, event in enumerate(events):
+        replay_events.append(
+            {
+                "index": i,
+                "type": event.event_type.value
+                if hasattr(event.event_type, "value")
+                else event.event_type,
+                "payload": event.payload,
+                "timestamp": event.created_at.isoformat() if event.created_at else None,
+            }
+        )
+
+    return {
+        "events": replay_events,
+        "total_events": len(events),
+        "game_status": settings.status.value if settings else "waiting",
     }
 
 

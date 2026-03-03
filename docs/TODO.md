@@ -36,7 +36,7 @@
 - [x] BUG: Show correct column and row labels in html rendering
 - [x] Show event timestamps in timeline
 - [x] Bug: game can start before all ships are placed and without locations
-
+- [ ] variable board size, with matching ships
 ## Remaining Items
 
 | # | Item | Plan |
