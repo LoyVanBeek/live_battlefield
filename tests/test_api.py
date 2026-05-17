@@ -15,9 +15,9 @@ class TestExecuteCommand:
     def test_join_command_creates_team_joined_event(self):
         from app.api.routes import app
         from app.game.state import GameState
-        from app import models
+        from unittest.mock import AsyncMock
 
-        with patch.object(models, "get_all_events", return_value=[]):
+        with patch("app.api.routes.get_all_events", return_value=[]):
             with patch("app.api.routes.save_event") as mock_save:
                 with patch("app.api.routes.GameState.from_events") as mock_from_events:
                     mock_state = GameState()
@@ -133,9 +133,10 @@ class TestGameControl:
 
         with patch("app.api.routes.GameState.from_events", return_value=state):
             with patch("app.api.routes.get_all_events", return_value=[]):
-                with patch("app.api.routes.save_event"):
-                    client = TestClient(app)
-                    response = client.post("/api/quick/start-game", json={})
+                with patch("app.models.get_all_locations", return_value=[]):
+                    with patch("app.api.routes.save_event"):
+                        client = TestClient(app)
+                        response = client.post("/api/quick/start-game", json={})
 
         assert response.status_code == 200
         data = response.json()
