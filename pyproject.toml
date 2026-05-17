@@ -18,6 +18,7 @@ dependencies = [
     "pydantic-settings>=2.1.0",
     "alembic>=1.13.0",
     "httpx>=0.26.0",
+    "pytest>=9.0.2",
 ]
 
 [project.optional-dependencies]

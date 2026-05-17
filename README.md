@@ -140,8 +140,21 @@ A pgAdmin instance is included for database management.
 ## Development
 
 ### Running Tests
+
+Outside Docker (recommended):
 ```bash
-python3 -m pytest tests/ -v
+uv sync
+uv run pytest tests/ -v
+```
+
+Inside Docker:
+```bash
+uv run --with pytest pytest tests/ -v
+```
+
+Pure unit tests only (skip DB-dependent tests):
+```bash
+uv run pytest tests/ -v -k "not test_api and not test_telegram_handlers"
 ```
 
 ### Running Locally (without Docker)
