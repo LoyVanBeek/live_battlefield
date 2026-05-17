@@ -71,6 +71,53 @@ Game masters can:
 - View all teams and their status
 - Monitor game events
 
+## Internet Deployment
+
+Deploy on a home server with a public URL — no open ports, no domain needed.
+
+### Prerequisites
+
+- Docker + Compose installed on your home machine
+- Free [ngrok account](https://dashboard.ngrok.com/signup)
+
+### Setup
+
+1. Copy `.env.example` to `.env` and add your tokens:
+   ```bash
+   cp .env.example .env
+   # Edit .env:
+   # TELEGRAM_BOT_TOKEN=your_bot_token
+   # NGROK_AUTHTOKEN=your_ngrok_authtoken
+   ```
+
+2. Start everything:
+   ```bash
+   docker compose up -d
+   ```
+
+3. Get your public URL:
+   ```bash
+   ./scripts/get-public-url.sh
+   # → https://xxxx-xxxx.ngrok-free.app
+   ```
+
+4. Share that URL with players for the web UI (team boards, admin panel).
+
+The bot works via polling (outbound to Telegram) — no tunnel needed for it.
+
+### Architecture
+
+```
+┌──────────┐    ┌──────────┐    ┌──────────┐
+│ postgres │◄───│   app    │───►│  ngrok   │──► internet (HTTPS)
+└──────────┘    └──────────┘    └──────────┘
+┌──────────┐    (bot polls
+│ pgadmin  │     Telegram)
+└──────────┘
+```
+
+All services are internal to the Docker network. Only ngrok connects outbound. No ports are exposed to the host or router.
+
 ## Database Management
 
 ### pgAdmin (Database Viewer)

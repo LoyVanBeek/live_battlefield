@@ -97,7 +97,7 @@ async def root():
 
 @app.get("/map", response_class=HTMLResponse)
 async def map_page(request: Request):
-    return templates.TemplateResponse("map.html", {"request": request})
+    return templates.TemplateResponse(request, "map.html", {"request": request})
 
 
 @app.get("/api/locations")
@@ -152,7 +152,7 @@ async def get_public_state(db: AsyncSession = Depends(get_api_db)):
 
 @app.get("/admin/test-panel", response_class=HTMLResponse)
 async def admin_page(request: Request):
-    return templates.TemplateResponse("admin.html", {"request": request})
+    return templates.TemplateResponse(request, "admin.html", {"request": request})
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -164,13 +164,13 @@ async def admin_redirect(request: Request):
 
 @app.get("/admin/locations-secret", response_class=HTMLResponse)
 async def locations_page(request: Request):
-    return templates.TemplateResponse("locations.html", {"request": request})
+    return templates.TemplateResponse(request, "locations.html", {"request": request})
 
 
 @app.get("/team/{team_color}", response_class=HTMLResponse)
 async def team_page(request: Request, team_color: str):
     return templates.TemplateResponse(
-        "team.html", {"request": request, "team_color": team_color}
+        request, "team.html", {"request": request, "team_color": team_color}
     )
 
 
@@ -212,7 +212,7 @@ async def get_admin_locations(db: AsyncSession = Depends(get_api_db)):
 
 @app.get("/admin/events", response_class=HTMLResponse)
 async def events_page(request: Request):
-    return templates.TemplateResponse("events.html", {"request": request})
+    return templates.TemplateResponse(request, "events.html", {"request": request})
 
 
 @app.get("/api/admin/events")
