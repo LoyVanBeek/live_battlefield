@@ -43,18 +43,26 @@ class TestHandleJoin:
                         with patch(
                             "app.bot.handlers.save_event", new_callable=AsyncMock
                         ) as mock_save:
-                            mock_get_player.return_value = None
-                            mock_events.return_value = []
-                            mock_settings_obj = MagicMock()
-                            mock_settings_obj.status = GameStatus.WAITING
-                            mock_settings.return_value = mock_settings_obj
+                            with patch(
+                                "app.models.get_all_players",
+                                new_callable=AsyncMock,
+                            ) as mock_get_all:
+                                mock_get_all.return_value = []
+                                mock_get_player.return_value = None
+                                mock_events.return_value = []
+                                mock_settings_obj = MagicMock()
+                                mock_settings_obj.status = GameStatus.WAITING
+                                mock_settings.return_value = mock_settings_obj
 
-                            result = await handle_join(
-                                mock_db, mock_update, mock_context, "Blue Team"
-                            )
+                                result = await handle_join(
+                                    mock_db,
+                                    mock_update,
+                                    mock_context,
+                                    "Blue Team",
+                                )
 
-                            assert "Welcome" in result
-                            assert "Blue Team" in result
+                                assert "Welcome" in result
+                                assert "Blue Team" in result
 
     @pytest.mark.asyncio
     async def test_gm_can_join_as_team(self):
@@ -82,20 +90,28 @@ class TestHandleJoin:
                         with patch(
                             "app.bot.handlers.save_event", new_callable=AsyncMock
                         ) as mock_save:
-                            mock_player = MagicMock()
-                            mock_player.role = Role.GAMEMASTER
-                            mock_get_player.return_value = mock_player
+                            with patch(
+                                "app.models.get_all_players",
+                                new_callable=AsyncMock,
+                            ) as mock_get_all:
+                                mock_get_all.return_value = []
+                                mock_player = MagicMock()
+                                mock_player.role = Role.GAMEMASTER
+                                mock_get_player.return_value = mock_player
 
-                            mock_events.return_value = []
-                            mock_settings_obj = MagicMock()
-                            mock_settings_obj.status = GameStatus.WAITING
-                            mock_settings.return_value = mock_settings_obj
+                                mock_events.return_value = []
+                                mock_settings_obj = MagicMock()
+                                mock_settings_obj.status = GameStatus.WAITING
+                                mock_settings.return_value = mock_settings_obj
 
-                            result = await handle_join(
-                                mock_db, mock_update, mock_context, "Red Team"
-                            )
+                                result = await handle_join(
+                                    mock_db,
+                                    mock_update,
+                                    mock_context,
+                                    "Red Team",
+                                )
 
-                            assert "Welcome" in result
+                                assert "Welcome" in result
 
     @pytest.mark.asyncio
     async def test_team_player_can_rejoin(self):
@@ -123,20 +139,28 @@ class TestHandleJoin:
                         with patch(
                             "app.bot.handlers.save_event", new_callable=AsyncMock
                         ) as mock_save:
-                            mock_player = MagicMock()
-                            mock_player.role = Role.TEAM
-                            mock_get_player.return_value = mock_player
+                            with patch(
+                                "app.models.get_all_players",
+                                new_callable=AsyncMock,
+                            ) as mock_get_all:
+                                mock_get_all.return_value = []
+                                mock_player = MagicMock()
+                                mock_player.role = Role.TEAM
+                                mock_get_player.return_value = mock_player
 
-                            mock_events.return_value = []
-                            mock_settings_obj = MagicMock()
-                            mock_settings_obj.status = GameStatus.WAITING
-                            mock_settings.return_value = mock_settings_obj
+                                mock_events.return_value = []
+                                mock_settings_obj = MagicMock()
+                                mock_settings_obj.status = GameStatus.WAITING
+                                mock_settings.return_value = mock_settings_obj
 
-                            result = await handle_join(
-                                mock_db, mock_update, mock_context, "New Team"
-                            )
+                                result = await handle_join(
+                                    mock_db,
+                                    mock_update,
+                                    mock_context,
+                                    "New Team",
+                                )
 
-                            assert "Welcome" in result
+                                assert "Welcome" in result
 
     @pytest.mark.asyncio
     async def test_game_started_blocks_join(self):
