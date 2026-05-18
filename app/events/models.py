@@ -429,12 +429,12 @@ class GameStartedEvent:
 
     def apply(self, state: "GameState") -> tuple["GameState", "GameStartedEvent"]:
         from app.game.state import GameStatusField
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         if self.timestamp:
             ts = self.timestamp
         else:
-            ts = datetime.utcnow().isoformat()
+            ts = datetime.now(timezone.utc).isoformat()
 
         new_state = replace(state, status=GameStatusField.STARTED)
         return new_state, replace(self, timestamp=ts)
@@ -457,12 +457,12 @@ class GameEndedEvent:
 
     def apply(self, state: "GameState") -> tuple["GameState", "GameEndedEvent"]:
         from app.game.state import GameStatusField
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         if self.timestamp:
             ts = self.timestamp
         else:
-            ts = datetime.utcnow().isoformat()
+            ts = datetime.now(timezone.utc).isoformat()
 
         new_state = replace(state, status=GameStatusField.ENDED)
         return new_state, replace(self, timestamp=ts)
