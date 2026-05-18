@@ -202,6 +202,7 @@ def _copy_game_state(
     teams: Optional[dict[str, TeamState]] = None,
     location_codes: Optional[dict[int, str]] = None,
     location_counter: Optional[int] = None,
+    team_tokens: Optional[dict[str, str]] = None,
 ) -> "GameState":
     return GameState(
         teams=teams if teams is not None else state.teams,
@@ -211,6 +212,7 @@ def _copy_game_state(
         location_counter=location_counter
         if location_counter is not None
         else state.location_counter,
+        team_tokens=team_tokens if team_tokens is not None else state.team_tokens,
     )
 
 
@@ -220,6 +222,7 @@ class GameState:
     location_codes: dict[int, str] = field(default_factory=dict)
     location_counter: int = 0
     status: GameStatusField = GameStatusField.PREPARING
+    team_tokens: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_events(cls, events: list) -> "GameState":
@@ -238,6 +241,7 @@ class GameState:
         self.teams = new_state.teams
         self.location_codes = new_state.location_codes
         self.location_counter = new_state.location_counter
+        self.team_tokens = new_state.team_tokens
         return new_state, updated_event
 
     def handle_ship_placed(

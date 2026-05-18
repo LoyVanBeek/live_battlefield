@@ -167,10 +167,15 @@ async def locations_page(request: Request):
     return templates.TemplateResponse(request, "locations.html", {"request": request})
 
 
-@app.get("/team/{team_color}", response_class=HTMLResponse)
-async def team_page(request: Request, team_color: str):
+@app.get("/team/{token}", response_class=HTMLResponse)
+async def team_page(request: Request, token: str, db: AsyncSession = Depends(get_api_db)):
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+    color = state.team_tokens.get(token)
+    if color is None:
+        return HTMLResponse("Team not found", status_code=404)
     return templates.TemplateResponse(
-        request, "team.html", {"request": request, "team_color": team_color}
+        request, "team.html", {"request": request, "team_color": color}
     )
 
 
@@ -288,6 +293,7 @@ async def get_game_state(db: AsyncSession = Depends(get_api_db)):
         if not is_ai and color in db_ai_colors:
             is_ai = True
 
+        token = next((t for t, c in state.team_tokens.items() if c == color), "")
         teams.append(
             {
                 "name": team.name,
@@ -300,6 +306,7 @@ async def get_game_state(db: AsyncSession = Depends(get_api_db)):
                 "has_all_ships": team.has_all_ships(),
                 "placed_ship_types": team.placed_ship_types,
                 "is_ai": is_ai,
+                "token": token,
             }
         )
 
@@ -516,11 +523,15 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
             return result
 
         team_name = cmd.args.get("name", cmd.team_color)
+        from app.events.models import TeamJoinedEvent, generate_team_token
+
+        token = generate_team_token()
         event = TeamJoinedEvent(
             name=team_name,
             color=cmd.team_color,
             chat_id=999999,
             bombs=3,
+            token=token,
         )
         state.handle_team_joined(event)
         await save_event(db, event)
@@ -889,7 +900,10 @@ async def quick_add_ai(action: AddAIAction, db: AsyncSession = Depends(get_api_d
     await create_player(db, name, color, None, Role.AI)
 
     # Emit TeamJoinedEvent to create the team (like human teams)
-    event = TeamJoinedEvent(name=name, color=color, chat_id=0, bombs=3)
+    from app.events.models import generate_team_token
+
+    token = generate_team_token()
+    event = TeamJoinedEvent(name=name, color=color, chat_id=0, bombs=3, token=token)
     await save_event(db, event)
 
     # Add AI to in-memory player registry
@@ -906,53 +920,6 @@ async def quick_add_ai(action: AddAIAction, db: AsyncSession = Depends(get_api_d
         "success": True,
         "message": f"🤖 Added AI player '{name}' ({color})! Ships auto-placed.",
     }
-
-    from app.models import get_all_events, get_all_players
-    from app.game.state import GameState
-
-    # Check database for existing players
-    all_players = await get_all_players(db)
-    existing_colors = [p.color for p in all_players]
-
-    if color in existing_colors:
-        return {
-            "success": False,
-            "message": f"Color {color} already taken! Choose a different color.",
-        }
-
-    events = await get_all_events(db)
-    state = GameState.from_events(events)
-
-    if color in state.teams:
-        return {
-            "success": False,
-            "message": f"Team {color} already exists in game!",
-        }
-
-    from app.services.ai_player import get_ai_player
-
-    existing_ai = get_ai_player(color)
-    if existing_ai:
-        return {"success": False, "message": f"AI player for {color} already exists!"}
-
-    # Create Player record for AI (persists across restarts)
-    from app.models import create_player
-
-    await create_player(db, name, color, None, Role.AI)
-
-    # Emit TeamJoinedEvent to create the team (like human teams)
-    event = TeamJoinedEvent(name=name, color=color, chat_id=0, bombs=3)
-    await save_event(db, event)
-
-    # Add AI to in-memory player registry
-    from app.services.ai_player import add_ai_player
-
-    add_ai_player(color, name)
-
-    # Place ships (this emits ShipPlacedEvent events)
-    from app.services.ship_placement import place_all_ships
-
-    await place_all_ships(db, color)
 
     return {
         "success": True,

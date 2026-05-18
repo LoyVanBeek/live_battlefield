@@ -676,7 +676,7 @@
                             </div>
                             <div class="team-board" id="team-board-${team.color}">
                             </div>
-                            <a href="/team/${team.color}" class="team-play-link">🎮 Play as ${team.color}</a>
+                            <button class="btn btn-primary" style="margin-top: 10px;" onclick="copyTeamUrl('${team.token}', '${team.color}')">📋 Copy URL</button>
                             <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')">💣 +5 Bombs</button>
                             <div class="ai-buttons" id="ai-buttons-${team.color}"></div>
                         `;
@@ -788,6 +788,19 @@
                     }
                 }
             }
+        }
+
+        function copyTeamUrl(token, color) {
+            if (!token) {
+                showToast(`No URL available for ${color} team`, 'error');
+                return;
+            }
+            const url = window.location.origin + '/team/' + token;
+            navigator.clipboard.writeText(url).then(() => {
+                showToast(`URL copied: ${url}`, 'success');
+            }).catch(() => {
+                showToast('Failed to copy URL', 'error');
+            });
         }
 
         async function joinTeam() {
