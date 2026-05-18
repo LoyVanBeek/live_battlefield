@@ -252,8 +252,8 @@
         <!-- Navigation -->
         <div class="nav-links">
             <a href="/map">🗺️ Map</a>
-            <a href="/admin/events">📊 Events Timeline</a>
-            <a href="/admin/locations-secret">📍 Locations</a>
+            <a href="/admin/{{ token }}/events">📊 Events Timeline</a>
+            <a href="/admin/{{ token }}/locations-secret">📍 Locations</a>
         </div>
 
         <!-- Game Status Bar -->
@@ -453,14 +453,21 @@
             }
         }
 
+        function getAdminToken() {
+            const m = window.location.pathname.match(/^\/admin\/([^/]+)/);
+            return m ? m[1] : '';
+        }
+
         async function apiCall(url, method = 'GET', body = null) {
             try {
+                const token = getAdminToken();
+                const sep = url.includes('?') ? '&' : '?';
                 const options = { method };
                 if (body) {
                     options.headers = { 'Content-Type': 'application/json' };
                     options.body = JSON.stringify(body);
                 }
-                const resp = await fetch(url, options);
+                const resp = await fetch(url + sep + 'admin_token=' + encodeURIComponent(token), options);
                 return await resp.json();
             } catch (error) {
                 showToast('Error: ' + error.message, 'error');
@@ -676,7 +683,8 @@
                             </div>
                             <div class="team-board" id="team-board-${team.color}">
                             </div>
-                            <a href="/team/${team.color}" class="team-play-link">🎮 Play as ${team.color}</a>
+                            <a href="/team/${team.token}" class="team-play-link">🎮 Play as ${team.color}</a>
+                            <button class="btn btn-primary" style="margin-top: 10px;" onclick="copyTeamUrl('${team.token}', '${team.color}')">📋 Copy URL</button>
                             <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')">💣 +5 Bombs</button>
                             <div class="ai-buttons" id="ai-buttons-${team.color}"></div>
                         `;
@@ -790,6 +798,19 @@
             }
         }
 
+        function copyTeamUrl(token, color) {
+            if (!token) {
+                showToast(`No URL available for ${color} team`, 'error');
+                return;
+            }
+            const url = window.location.origin + '/team/' + token;
+            navigator.clipboard.writeText(url).then(() => {
+                showToast(`URL copied: ${url}`, 'success');
+            }).catch(() => {
+                showToast('Failed to copy URL', 'error');
+            });
+        }
+
         async function joinTeam() {
             const color = document.getElementById('join-color').value;
             const name = document.getElementById('join-name').value || color;
@@ -890,9 +911,9 @@
             if (!confirm('Are you REALLY sure? Everything will be deleted!')) return;
             const result = await apiCall('/api/quick/clear-database', 'POST', {});
             showToast(result.message, result.success ? 'success' : 'error');
-            loadGameStatus();
-            loadPublicBoards();
-            loadTeams();
+            if (result.success && result.new_token) {
+                setTimeout(() => { window.location.href = '/admin/' + result.new_token; }, 1000);
+            }
         }
 
         async function resetGame() {
@@ -916,9 +937,9 @@
             if (!confirm('Are you REALLY sure?')) return;
             const result = await apiCall('/api/quick/clear-database', 'POST', {});
             showToast(result.message, result.success ? 'success' : 'error');
-            loadGameStatus();
-            loadPublicBoards();
-            loadTeams();
+            if (result.success && result.new_token) {
+                setTimeout(() => { window.location.href = '/admin/' + result.new_token; }, 1000);
+            }
         }
 
         // Handle Enter key for join form

@@ -117,7 +117,10 @@ async def handle_join(
         player = await create_player(db, team_name, color, chat_id)
         logger.info(f"handle_join: player created id={player.id}")
 
-        event = TeamJoinedEvent(name=team_name, color=color, chat_id=chat_id, bombs=3)
+        from app.events.models import generate_team_token
+
+        token = generate_team_token()
+        event = TeamJoinedEvent(name=team_name, color=color, chat_id=chat_id, bombs=3, token=token)
         await save_event(db, event)
         logger.info(f"handle_join: event saved")
 

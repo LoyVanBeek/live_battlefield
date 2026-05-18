@@ -1,7 +1,14 @@
+import secrets
+import string
 from dataclasses import dataclass, replace
 from typing import Optional, TYPE_CHECKING, Any
 from app.events.types import EventType
 from app.database import GameEvent
+
+
+def generate_team_token() -> str:
+    raw = "".join(secrets.choice(string.ascii_lowercase) for _ in range(9))
+    return f"{raw[:3]}-{raw[3:6]}-{raw[6:]}"
 
 if TYPE_CHECKING:
     from app.game.state import (
@@ -20,6 +27,7 @@ class TeamJoinedEvent:
     color: str = ""
     chat_id: int = 0
     bombs: int = 0
+    token: str = ""
 
     def apply(self, state: "GameState") -> tuple["GameState", "TeamJoinedEvent"]:
         from app.game.state import TeamState
@@ -35,7 +43,10 @@ class TeamJoinedEvent:
             bombs=self.bombs,
         )
         new_teams = {**state.teams, color: new_team}
-        return replace(state, teams=new_teams), self
+        new_token_map = dict(state.team_tokens)
+        if self.token:
+            new_token_map[self.token] = color
+        return replace(state, teams=new_teams, team_tokens=new_token_map), self
 
     def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
         return GameEvent(
@@ -45,6 +56,7 @@ class TeamJoinedEvent:
                 "color": self.color,
                 "chat_id": self.chat_id,
                 "bombs": self.bombs,
+                "token": self.token,
             },
             player_id=player_id,
         )
@@ -417,12 +429,12 @@ class GameStartedEvent:
 
     def apply(self, state: "GameState") -> tuple["GameState", "GameStartedEvent"]:
         from app.game.state import GameStatusField
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         if self.timestamp:
             ts = self.timestamp
         else:
-            ts = datetime.utcnow().isoformat()
+            ts = datetime.now(timezone.utc).isoformat()
 
         new_state = replace(state, status=GameStatusField.STARTED)
         return new_state, replace(self, timestamp=ts)
@@ -445,12 +457,12 @@ class GameEndedEvent:
 
     def apply(self, state: "GameState") -> tuple["GameState", "GameEndedEvent"]:
         from app.game.state import GameStatusField
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         if self.timestamp:
             ts = self.timestamp
         else:
-            ts = datetime.utcnow().isoformat()
+            ts = datetime.now(timezone.utc).isoformat()
 
         new_state = replace(state, status=GameStatusField.ENDED)
         return new_state, replace(self, timestamp=ts)

@@ -346,6 +346,7 @@
 
     <script>
         const TEAM_COLOR = '{{ team_color }}';
+        const TEAM_TOKEN = '{{ team_token }}';
         let gameStatus = 'waiting';
         const TEAM_COLORS_RGB = {
             'red': 'rgb(220, 60, 60)',
@@ -481,12 +482,13 @@
 
         async function apiCall(url, method = 'GET', body = null) {
             try {
+                const sep = url.includes('?') ? '&' : '?';
                 const options = { method };
                 if (body) {
                     options.headers = { 'Content-Type': 'application/json' };
                     options.body = JSON.stringify(body);
                 }
-                const resp = await fetch(url, options);
+                const resp = await fetch(url + sep + 'team_token=' + encodeURIComponent(TEAM_TOKEN), options);
                 return await resp.json();
             } catch (error) {
                 showToast('Error: ' + error.message, 'error');

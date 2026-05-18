@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
 )
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, JSON, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, JSON, Text, text
 from datetime import datetime
 import enum
 
@@ -106,6 +106,7 @@ class GameSettings(Base):
     status = Column(Enum(GameStatus), nullable=False, default=GameStatus.WAITING)
     total_locations_needed = Column(Integer, nullable=False, default=33)
     started_at = Column(DateTime, nullable=True)
+    admin_token = Column(String(20), default="")
 
 
 async def get_db() -> AsyncSession:
@@ -116,3 +117,6 @@ async def get_db() -> AsyncSession:
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text(
+            "ALTER TABLE game_settings ADD COLUMN IF NOT EXISTS admin_token VARCHAR(20) DEFAULT ''"
+        ))
