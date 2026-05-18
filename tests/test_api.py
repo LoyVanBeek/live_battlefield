@@ -13,26 +13,30 @@ class TestExecuteCommand:
     """Tests for /api/execute endpoint"""
 
     def test_join_command_creates_team_joined_event(self):
-        from app.api.routes import app
+        from app.api.routes import app, verify_team_or_admin_token
         from app.game.state import GameState
         from unittest.mock import AsyncMock
 
-        with patch("app.api.routes.get_all_events", return_value=[]):
-            with patch("app.api.routes.save_event") as mock_save:
-                with patch("app.api.routes.GameState.from_events") as mock_from_events:
-                    mock_state = GameState()
-                    mock_state.available_colors = ["blue", "red"]
-                    mock_from_events.return_value = mock_state
+        app.dependency_overrides[verify_team_or_admin_token] = lambda: "test_token"
+        try:
+            with patch("app.api.routes.get_all_events", return_value=[]):
+                with patch("app.api.routes.save_event") as mock_save:
+                    with patch("app.api.routes.GameState.from_events") as mock_from_events:
+                        mock_state = GameState()
+                        mock_state.available_colors = ["blue", "red"]
+                        mock_from_events.return_value = mock_state
 
-                    client = TestClient(app)
-                    response = client.post(
-                        "/api/execute",
-                        json={
-                            "team_color": "blue",
-                            "command": "join",
-                            "args": {"name": "Blue Team"},
-                        },
-                    )
+                        client = TestClient(app)
+                        response = client.post(
+                            "/api/execute",
+                            json={
+                                "team_color": "blue",
+                                "command": "join",
+                                "args": {"name": "Blue Team"},
+                            },
+                        )
+        finally:
+            app.dependency_overrides.clear()
 
         assert response.status_code == 200
         data = response.json()

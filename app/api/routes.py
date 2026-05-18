@@ -72,6 +72,27 @@ async def verify_admin_token(
     return admin_token
 
 
+async def verify_team_or_admin_token(
+    admin_token: Optional[str] = Query(None),
+    team_token: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_api_db),
+):
+    if admin_token:
+        from app.models import get_or_create_game_settings
+
+        settings = await get_or_create_game_settings(db)
+        if settings.admin_token and settings.admin_token == admin_token:
+            return admin_token
+
+    if team_token:
+        events = await get_all_events(db)
+        state = GameState.from_events(events)
+        if team_token in state.team_tokens:
+            return team_token
+
+    raise HTTPException(status_code=404)
+
+
 app = FastAPI(title="Live Battlefield API")
 
 templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
@@ -237,7 +258,7 @@ async def team_page(request: Request, token: str, db: AsyncSession = Depends(get
     if color is None:
         return HTMLResponse("Team not found", status_code=404)
     return templates.TemplateResponse(
-        request, "team.html", {"request": request, "team_color": color}
+        request, "team.html", {"request": request, "team_color": color, "team_token": token}
     )
 
 
@@ -576,7 +597,11 @@ async def get_game_state_png(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.post("/api/execute")
-async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_api_db)):
+async def execute_command(
+    cmd: ExecuteCommand,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_team_or_admin_token),
+):
     from app.database import EventType
 
     events = await get_all_events(db)
@@ -861,7 +886,7 @@ async def quick_add_bombs(
 async def quick_place_all_ships(
     action: QuickAction,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    _=Depends(verify_team_or_admin_token),
 ):
     from app.services.ship_placement import place_all_ships
 
@@ -1043,7 +1068,7 @@ async def quick_reset_team(
 async def quick_remove_ship(
     action: RemoveShipAction,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    _=Depends(verify_team_or_admin_token),
 ):
     events = await get_all_events(db)
     state = GameState.from_events(events)
