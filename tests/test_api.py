@@ -125,22 +125,26 @@ class TestGameControl:
         assert updated_event.timestamp != ""
 
     def test_start_game_already_started_fails(self):
-        from app.api.routes import app
+        from app.api.routes import app, verify_admin_token
         from app.game.state import GameState, GameStatusField
 
-        state = GameState()
-        state.status = GameStatusField.STARTED
+        app.dependency_overrides[verify_admin_token] = lambda: "test_token"
+        try:
+            state = GameState()
+            state.status = GameStatusField.STARTED
 
-        with patch("app.api.routes.GameState.from_events", return_value=state):
-            with patch("app.api.routes.get_all_events", return_value=[]):
-                with patch("app.models.get_all_locations", return_value=[]):
-                    with patch("app.api.routes.save_event"):
-                        client = TestClient(app)
-                        response = client.post("/api/quick/start-game", json={})
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.api.routes.get_all_events", return_value=[]):
+                    with patch("app.models.get_all_locations", return_value=[]):
+                        with patch("app.api.routes.save_event"):
+                            client = TestClient(app)
+                            response = client.post("/api/quick/start-game", json={})
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] == False
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] == False
+        finally:
+            app.dependency_overrides.clear()
 
     def test_end_game_creates_event(self):
         from app.events.models import GameEndedEvent
@@ -157,21 +161,25 @@ class TestGameControl:
         assert updated_event.timestamp != ""
 
     def test_end_game_from_preparing_fails(self):
-        from app.api.routes import app
+        from app.api.routes import app, verify_admin_token
         from app.game.state import GameState, GameStatusField
 
-        state = GameState()
-        state.status = GameStatusField.PREPARING
+        app.dependency_overrides[verify_admin_token] = lambda: "test_token"
+        try:
+            state = GameState()
+            state.status = GameStatusField.PREPARING
 
-        with patch("app.api.routes.GameState.from_events", return_value=state):
-            with patch("app.api.routes.get_all_events", return_value=[]):
-                client = TestClient(app)
-                response = client.post("/api/quick/end-game", json={})
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.api.routes.get_all_events", return_value=[]):
+                    client = TestClient(app)
+                    response = client.post("/api/quick/end-game", json={})
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] == False
-        assert "hasn't started" in data["message"]
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] == False
+            assert "hasn't started" in data["message"]
+        finally:
+            app.dependency_overrides.clear()
 
     def test_game_status_field_enum(self):
         from app.game.state import GameStatusField
@@ -185,40 +193,48 @@ class TestAdminEvents:
     """Tests for /api/admin/events* endpoints"""
 
     def test_get_all_events_returns_list(self):
-        from app.api.routes import app
+        from app.api.routes import app, verify_admin_token
         from app.database import EventType
         from app import models
 
-        with patch.object(models, "get_all_events") as mock_get:
-            mock_event = MagicMock()
-            mock_event.event_type = EventType.TEAM_JOINED
-            mock_event.payload = {"color": "blue"}
-            mock_event.id = 1
-            mock_event.player_id = None
-            mock_event.created_at = None
-            mock_get.return_value = [mock_event]
+        app.dependency_overrides[verify_admin_token] = lambda: "test_token"
+        try:
+            with patch.object(models, "get_all_events") as mock_get:
+                mock_event = MagicMock()
+                mock_event.event_type = EventType.TEAM_JOINED
+                mock_event.payload = {"color": "blue"}
+                mock_event.id = 1
+                mock_event.player_id = None
+                mock_event.created_at = None
+                mock_get.return_value = [mock_event]
 
-            client = TestClient(app)
-            response = client.get("/api/admin/events")
+                client = TestClient(app)
+                response = client.get("/api/admin/events")
 
-        assert response.status_code == 200
-        data = response.json()
-        assert "events" in data
-        assert data["total_events"] == 1
+            assert response.status_code == 200
+            data = response.json()
+            assert "events" in data
+            assert data["total_events"] == 1
+        finally:
+            app.dependency_overrides.clear()
 
     def test_get_event_state_invalid_index_fails(self):
-        from app.api.routes import app
+        from app.api.routes import app, verify_admin_token
         from app import models
 
-        with patch.object(models, "get_all_events") as mock_get:
-            mock_get.return_value = [MagicMock(), MagicMock()]  # 2 events
+        app.dependency_overrides[verify_admin_token] = lambda: "test_token"
+        try:
+            with patch.object(models, "get_all_events") as mock_get:
+                mock_get.return_value = [MagicMock(), MagicMock()]  # 2 events
 
-            client = TestClient(app)
-            response = client.get("/api/admin/events/999/state")
+                client = TestClient(app)
+                response = client.get("/api/admin/events/999/state")
 
-        assert response.status_code == 200
-        data = response.json()
-        assert "error" in data
+            assert response.status_code == 200
+            data = response.json()
+            assert "error" in data
+        finally:
+            app.dependency_overrides.clear()
 
 
 class TestLocations:

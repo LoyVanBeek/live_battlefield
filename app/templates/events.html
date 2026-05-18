@@ -226,9 +226,9 @@
         
         <div class="nav-links">
             <a href="/map">🗺️ Map</a>
-            <a href="/admin/test-panel">🕵️ Test Panel</a>
-            <a href="/admin/locations-secret">📍 Locations</a>
-            <a href="/admin/events" class="active">📜 Events</a>
+            <a href="/admin/{{ token }}">🕵️ Test Panel</a>
+            <a href="/admin/{{ token }}/locations-secret">📍 Locations</a>
+            <a href="/admin/{{ token }}/events" class="active">📜 Events</a>
         </div>
 
         <div class="event-list" id="event-list">
@@ -300,14 +300,21 @@
             return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
         }
 
+        function getAdminToken() {
+            const m = window.location.pathname.match(/^\/admin\/([^/]+)/);
+            return m ? m[1] : '';
+        }
+
         async function apiCall(url, method = 'GET', body = null) {
             try {
+                const token = getAdminToken();
+                const sep = url.includes('?') ? '&' : '?';
                 const options = { method };
                 if (body) {
                     options.headers = { 'Content-Type': 'application/json' };
                     options.body = JSON.stringify(body);
                 }
-                const resp = await fetch(url, options);
+                const resp = await fetch(url + sep + 'admin_token=' + encodeURIComponent(token), options);
                 if (!resp.ok) {
                     return { success: false, message: `HTTP error: ${resp.status}` };
                 }
@@ -405,7 +412,7 @@
             html += '<td class="row-label">Public</td>';
             for (const color of teamColors) {
                 html += `<td class="board-cell">
-                    <img src="/api/admin/events/${index}/board/${color}/public.png?_=${Date.now()}" alt="${color} public">
+                    <img src="/api/admin/events/${index}/board/${color}/public.png?admin_token=${getAdminToken()}&_=${Date.now()}" alt="${color} public">
                 </td>`;
             }
             html += '</tr>';
@@ -415,7 +422,7 @@
             html += '<td class="row-label">Private</td>';
             for (const color of teamColors) {
                 html += `<td class="board-cell">
-                    <img src="/api/admin/events/${index}/board/${color}/private.png?_=${Date.now()}" alt="${color} private">
+                    <img src="/api/admin/events/${index}/board/${color}/private.png?admin_token=${getAdminToken()}&_=${Date.now()}" alt="${color} private">
                 </td>`;
             }
             html += '</tr>';

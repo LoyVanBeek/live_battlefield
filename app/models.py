@@ -166,6 +166,15 @@ async def reset_game_settings(db: AsyncSession) -> GameSettings:
     settings.status = GameStatus.WAITING
     settings.total_locations_needed = 33
     settings.started_at = None
+    settings.admin_token = ""
+    await db.commit()
+    await db.refresh(settings)
+    return settings
+
+
+async def set_admin_token(db: AsyncSession, token: str) -> GameSettings:
+    settings = await get_or_create_game_settings(db)
+    settings.admin_token = token
     await db.commit()
     await db.refresh(settings)
     return settings

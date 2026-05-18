@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Depends, Request, HTTPException, Query
 from fastapi.responses import Response, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
@@ -58,6 +58,18 @@ api_session_maker = async_sessionmaker(
 async def get_api_db():
     async with api_session_maker() as session:
         yield session
+
+
+async def verify_admin_token(
+    admin_token: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_or_create_game_settings
+
+    settings = await get_or_create_game_settings(db)
+    if not settings.admin_token or settings.admin_token != admin_token:
+        raise HTTPException(status_code=404)
+    return admin_token
 
 
 app = FastAPI(title="Live Battlefield API")
@@ -150,21 +162,71 @@ async def get_public_state(db: AsyncSession = Depends(get_api_db)):
     }
 
 
-@app.get("/admin/test-panel", response_class=HTMLResponse)
-async def admin_page(request: Request):
-    return templates.TemplateResponse(request, "admin.html", {"request": request})
-
-
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_redirect(request: Request):
-    from fastapi.responses import RedirectResponse
+async def admin_bootstrap(request: Request, db: AsyncSession = Depends(get_api_db)):
+    from app.models import get_or_create_game_settings
 
-    return RedirectResponse(url="/admin/test-panel")
+    settings = await get_or_create_game_settings(db)
+    if settings.admin_token:
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(url=f"/admin/{settings.admin_token}")
+    return templates.TemplateResponse(
+        request, "admin_create.html", {"request": request}
+    )
 
 
-@app.get("/admin/locations-secret", response_class=HTMLResponse)
-async def locations_page(request: Request):
-    return templates.TemplateResponse(request, "locations.html", {"request": request})
+@app.get("/admin/{token}", response_class=HTMLResponse)
+async def admin_page(
+    request: Request, token: str, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_or_create_game_settings
+
+    settings = await get_or_create_game_settings(db)
+    if not settings.admin_token or settings.admin_token != token:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "admin.html", {"request": request, "token": token}
+    )
+
+
+@app.get("/admin/{token}/locations-secret", response_class=HTMLResponse)
+async def admin_locations_page(
+    request: Request, token: str, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_or_create_game_settings
+
+    settings = await get_or_create_game_settings(db)
+    if not settings.admin_token or settings.admin_token != token:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "locations.html", {"request": request, "token": token}
+    )
+
+
+@app.get("/admin/{token}/events", response_class=HTMLResponse)
+async def admin_events_page(
+    request: Request, token: str, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_or_create_game_settings
+
+    settings = await get_or_create_game_settings(db)
+    if not settings.admin_token or settings.admin_token != token:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "events.html", {"request": request, "token": token}
+    )
+
+
+@app.post("/api/admin/create-game")
+async def admin_create_game(db: AsyncSession = Depends(get_api_db)):
+    from app.events.models import generate_team_token
+    from app.models import set_admin_token, reset_game_settings
+
+    token = generate_team_token()
+    await reset_game_settings(db)
+    await set_admin_token(db, token)
+    return {"token": token}
 
 
 @app.get("/team/{token}", response_class=HTMLResponse)
@@ -180,7 +242,10 @@ async def team_page(request: Request, token: str, db: AsyncSession = Depends(get
 
 
 @app.get("/api/admin/locations")
-async def get_admin_locations(db: AsyncSession = Depends(get_api_db)):
+async def get_admin_locations(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     from app.models import get_all_locations
     from app.database import EventType
 
@@ -215,13 +280,12 @@ async def get_admin_locations(db: AsyncSession = Depends(get_api_db)):
     return {"locations": result}
 
 
-@app.get("/admin/events", response_class=HTMLResponse)
-async def events_page(request: Request):
-    return templates.TemplateResponse(request, "events.html", {"request": request})
-
 
 @app.get("/api/admin/events")
-async def get_all_events_for_timeline(db: AsyncSession = Depends(get_api_db)):
+async def get_all_events_for_timeline(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     from app.models import get_all_events as db_get_all_events
 
     events = await db_get_all_events(db)
@@ -247,7 +311,11 @@ async def get_all_events_for_timeline(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.get("/api/admin/events/{event_index}/state")
-async def get_state_at_event(event_index: int, db: AsyncSession = Depends(get_api_db)):
+async def get_state_at_event(
+    event_index: int,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     from app.models import get_all_events as db_get_all_events
 
     events = await db_get_all_events(db)
@@ -437,7 +505,9 @@ async def get_public_board(team_color: str, db: AsyncSession = Depends(get_api_d
 
 @app.get("/api/admin/events/{event_index}/board/public.png")
 async def get_public_boards_at_event(
-    event_index: int, db: AsyncSession = Depends(get_api_db)
+    event_index: int,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
 ):
     events = await get_all_events(db)
 
@@ -452,7 +522,10 @@ async def get_public_boards_at_event(
 
 @app.get("/api/admin/events/{event_index}/board/{team_color}/public.png")
 async def get_single_public_board_at_event(
-    event_index: int, team_color: str, db: AsyncSession = Depends(get_api_db)
+    event_index: int,
+    team_color: str,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
 ):
     events = await get_all_events(db)
 
@@ -472,7 +545,10 @@ async def get_single_public_board_at_event(
 
 @app.get("/api/admin/events/{event_index}/board/{team_color}/private.png")
 async def get_private_board_at_event(
-    event_index: int, team_color: str, db: AsyncSession = Depends(get_api_db)
+    event_index: int,
+    team_color: str,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
 ):
     events = await get_all_events(db)
 
@@ -752,7 +828,11 @@ async def execute_command(cmd: ExecuteCommand, db: AsyncSession = Depends(get_ap
 
 
 @app.post("/api/quick/add_bombs")
-async def quick_add_bombs(action: QuickAction, db: AsyncSession = Depends(get_api_db)):
+async def quick_add_bombs(
+    action: QuickAction,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     events = await get_all_events(db)
     state = GameState.from_events(events)
 
@@ -779,7 +859,9 @@ async def quick_add_bombs(action: QuickAction, db: AsyncSession = Depends(get_ap
 
 @app.post("/api/quick/place_all_ships")
 async def quick_place_all_ships(
-    action: QuickAction, db: AsyncSession = Depends(get_api_db)
+    action: QuickAction,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
 ):
     from app.services.ship_placement import place_all_ships
 
@@ -791,7 +873,11 @@ async def quick_place_all_ships(
 
 
 @app.post("/api/quick/trigger-ai-move")
-async def trigger_ai_move(action: QuickAction, db: AsyncSession = Depends(get_api_db)):
+async def trigger_ai_move(
+    action: QuickAction,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     from app.services.ai_player import get_ai_player, add_ai_player
     from app.database import Role
 
@@ -830,7 +916,7 @@ async def trigger_ai_move(action: QuickAction, db: AsyncSession = Depends(get_ap
 
 
 @app.post("/api/quick/pause-all-ai")
-async def pause_all_ai():
+async def pause_all_ai(_=Depends(verify_admin_token)):
     from app.services.ai_player import pause_all_ai as pause_all
 
     pause_all()
@@ -838,7 +924,7 @@ async def pause_all_ai():
 
 
 @app.post("/api/quick/resume-all-ai")
-async def resume_all_ai():
+async def resume_all_ai(_=Depends(verify_admin_token)):
     from app.services.ai_player import resume_all_ai as resume_all
 
     resume_all()
@@ -846,7 +932,11 @@ async def resume_all_ai():
 
 
 @app.post("/api/quick/add-ai")
-async def quick_add_ai(action: AddAIAction, db: AsyncSession = Depends(get_api_db)):
+async def quick_add_ai(
+    action: AddAIAction,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     from app.game.state import TEAM_COLORS
     from app.events import TeamJoinedEvent, save_event
     from app.database import Role
@@ -928,7 +1018,11 @@ async def quick_add_ai(action: AddAIAction, db: AsyncSession = Depends(get_api_d
 
 
 @app.post("/api/quick/reset_team")
-async def quick_reset_team(action: QuickAction, db: AsyncSession = Depends(get_api_db)):
+async def quick_reset_team(
+    action: QuickAction,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     events = await get_all_events(db)
     state = GameState.from_events(events)
 
@@ -947,7 +1041,9 @@ async def quick_reset_team(action: QuickAction, db: AsyncSession = Depends(get_a
 
 @app.post("/api/quick/remove_ship")
 async def quick_remove_ship(
-    action: RemoveShipAction, db: AsyncSession = Depends(get_api_db)
+    action: RemoveShipAction,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
 ):
     events = await get_all_events(db)
     state = GameState.from_events(events)
@@ -991,7 +1087,9 @@ class CreateLocations(BaseModel):
 
 @app.post("/api/quick/create_locations")
 async def create_locations(
-    action: CreateLocations, db: AsyncSession = Depends(get_api_db)
+    action: CreateLocations,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
 ):
     from app.models import get_all_locations, get_next_location_number
     from app.database import Location
@@ -1076,7 +1174,9 @@ class RemoveLocation(BaseModel):
 
 @app.post("/api/quick/remove_location")
 async def remove_location(
-    action: RemoveLocation, db: AsyncSession = Depends(get_api_db)
+    action: RemoveLocation,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
 ):
     from app.models import get_location_by_number, get_all_locations
     from app.database import Location
@@ -1141,7 +1241,10 @@ async def remove_location(
 
 
 @app.post("/api/quick/reset-game")
-async def reset_game(db: AsyncSession = Depends(get_api_db)):
+async def reset_game(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     from app.models import delete_all_events
     from app.database import GameStatus
 
@@ -1155,7 +1258,10 @@ async def reset_game(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.post("/api/quick/clear-locations")
-async def clear_locations(db: AsyncSession = Depends(get_api_db)):
+async def clear_locations(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     from app.models import delete_all_locations
 
     count = await delete_all_locations(db)
@@ -1167,7 +1273,10 @@ async def clear_locations(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.post("/api/quick/reset-settings")
-async def reset_settings(db: AsyncSession = Depends(get_api_db)):
+async def reset_settings(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     from app.models import reset_game_settings
 
     settings = await reset_game_settings(db)
@@ -1179,7 +1288,10 @@ async def reset_settings(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.post("/api/quick/clear-players")
-async def clear_players(db: AsyncSession = Depends(get_api_db)):
+async def clear_players(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     from app.models import delete_all_players
 
     count = await delete_all_players(db)
@@ -1191,12 +1303,17 @@ async def clear_players(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.post("/api/quick/clear-database")
-async def clear_database(db: AsyncSession = Depends(get_api_db)):
+async def clear_database(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
+    from app.events.models import generate_team_token
     from app.models import (
         delete_all_players,
         delete_all_events,
         delete_all_locations,
         reset_game_settings,
+        set_admin_token,
     )
     from app.database import GameStatus
 
@@ -1205,9 +1322,13 @@ async def clear_database(db: AsyncSession = Depends(get_api_db)):
     locations_count = await delete_all_locations(db)
     await reset_game_settings(db)
 
+    new_token = generate_team_token()
+    await set_admin_token(db, new_token)
+
     return {
         "success": True,
         "message": f"Database cleared! Players: {players_count}, Events: {events_count}, Locations: {locations_count}. Settings reset.",
+        "new_token": new_token,
     }
 
 
@@ -1225,7 +1346,10 @@ async def update_game_settings(db: AsyncSession, **kwargs):
 
 
 @app.post("/api/quick/start-game")
-async def start_game(db: AsyncSession = Depends(get_api_db)):
+async def start_game(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     from app.models import get_or_create_game_settings, get_all_locations
     from app.database import GameStatus
 
@@ -1265,7 +1389,11 @@ async def start_game(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.post("/api/quick/end-game")
-async def end_game(winner: str = "", db: AsyncSession = Depends(get_api_db)):
+async def end_game(
+    winner: str = "",
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
+):
     from app.models import get_or_create_game_settings
     from app.database import GameStatus
 
@@ -1324,7 +1452,9 @@ class SetLocationBombs(BaseModel):
 
 @app.post("/api/quick/set_location_bombs")
 async def set_location_bombs(
-    data: SetLocationBombs, db: AsyncSession = Depends(get_api_db)
+    data: SetLocationBombs,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_token),
 ):
     from app.models import get_location_by_number
 
