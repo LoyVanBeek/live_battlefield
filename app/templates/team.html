@@ -288,6 +288,37 @@
         .board-cell .miss::after {
             transform: translate(-50%, -50%) rotate(-45deg);
         }
+
+        /* Clickable cells on public boards */
+        .public-board-item .board-cell { cursor: pointer; }
+        .public-board-item .board-cell.header { cursor: default; }
+        .public-board-item .board-cell:hover { background: rgba(0, 217, 255, 0.15); }
+
+        /* Bomb Confirmation Modal */
+        .bomb-confirm {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+        }
+        .bomb-confirm.active { display: flex; }
+        .bomb-confirm-content {
+            background: #16213e;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 400px;
+        }
+        .bomb-confirm-content p { font-size: 20px; margin-bottom: 10px; }
+        .bomb-confirm-content .coord-display { font-size: 28px; color: #00d9ff; margin: 15px 0; }
+        .bomb-confirm-actions { display: flex; gap: 15px; margin-top: 25px; justify-content: center; }
+        .bomb-confirm-actions .btn { font-size: 16px; padding: 12px 30px; }
     </style>
 </head>
 <body>
@@ -334,6 +365,18 @@
         </div>
     </div>
 
+    <!-- Bomb Confirmation Modal -->
+    <div id="bomb-confirm" class="bomb-confirm">
+        <div class="bomb-confirm-content">
+            <p>💥 Bomb <strong id="confirm-target"></strong>?</p>
+            <div class="coord-display" id="confirm-coord"></div>
+            <div class="bomb-confirm-actions">
+                <button onclick="confirmBomb()" class="btn btn-primary">💥 Throw Bomb!</button>
+                <button onclick="closeBombConfirm()" class="btn btn-danger">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div id="toast"></div>
 
@@ -357,6 +400,10 @@
             'yellow': 'rgb(220, 200, 60)'
         };
         const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+
+        // Pending bomb state (set by clicking a public board cell)
+        let pendingBombTarget = null;
+        let pendingBombCoord = null;
 
         // Cache for board grids to avoid rebuilding
         const boardGridCache = new Map();
@@ -644,6 +691,34 @@
             }
         }
 
+        // Click-to-bomb: delegate clicks on public board cells
+        document.getElementById('public-boards-grid').addEventListener('click', function (e) {
+            const cell = e.target.closest('.board-cell');
+            if (!cell) return;
+            if (cell.classList.contains('header')) return;
+            if (gameStatus !== 'started') {
+                showToast('Game is not started!', 'error');
+                return;
+            }
+
+            const boardItem = cell.closest('[id^="public-board-item-"]');
+            if (!boardItem) return;
+
+            const match = boardItem.id.match(/^public-board-item-(.+)$/);
+            if (!match) return;
+            if (match[1] === TEAM_COLOR) {
+                showToast('Cannot bomb yourself!', 'error');
+                return;
+            }
+
+            pendingBombTarget = match[1];
+            pendingBombCoord = COLS[parseInt(cell.dataset.col)] + (parseInt(cell.dataset.row) + 1);
+
+            document.getElementById('confirm-target').textContent = match[1];
+            document.getElementById('confirm-coord').textContent = pendingBombCoord;
+            document.getElementById('bomb-confirm').classList.add('active');
+        });
+
         function showModal(imgEl, caption) {
             const modal = document.getElementById('modal');
             const modalImg = document.getElementById('modal-img');
@@ -814,6 +889,31 @@
             showToast(result.message, result.success ? 'success' : 'error');
             updateStats();
             refreshBoards();
+        }
+
+        async function confirmBomb() {
+            document.getElementById('bomb-confirm').classList.remove('active');
+            if (!pendingBombTarget || !pendingBombCoord) return;
+
+            const target = pendingBombTarget;
+            const coord = pendingBombCoord;
+            pendingBombTarget = null;
+            pendingBombCoord = null;
+
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'bomb',
+                args: { target: target, coordinate: coord }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            updateStats();
+            refreshBoards();
+        }
+
+        function closeBombConfirm() {
+            document.getElementById('bomb-confirm').classList.remove('active');
+            pendingBombTarget = null;
+            pendingBombCoord = null;
         }
 
         async function redeemCode() {
