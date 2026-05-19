@@ -18,8 +18,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    pass
+    from app.database import Base
+    Base.metadata.create_all(bind=op.get_bind())
 
 
 def downgrade() -> None:
-    pass
+    op.drop_table("game_settings")
+    op.drop_table("locations")
+    op.drop_table("game_events")
+    op.drop_table("players")

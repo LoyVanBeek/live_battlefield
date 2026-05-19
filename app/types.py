@@ -11,7 +11,7 @@ class ShipDict(TypedDict):
 class TeamStateDict(TypedDict):
     name: str
     color: str
-    chat_id: int
+    chat_id: int | None
     bombs: int
     ships: list[ShipDict]
     placed_ship_types: dict[str, int]

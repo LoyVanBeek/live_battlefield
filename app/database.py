@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import Integer, String, Float, DateTime, Enum, JSON, text
+from sqlalchemy import Integer, String, Float, DateTime, Enum, JSON
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 import enum
@@ -118,6 +118,3 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        await conn.execute(text(
-            "ALTER TABLE game_settings ADD COLUMN IF NOT EXISTS admin_token VARCHAR(20) DEFAULT ''"
-        ))

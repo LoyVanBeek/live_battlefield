@@ -92,7 +92,7 @@ def _copy_team(
 class TeamState:
     name: str
     color: str
-    chat_id: int
+    chat_id: int | None
     bombs: int = 3
     ships: list[Ship] = field(default_factory=list)
     placed_ship_types: dict[str, int] = field(default_factory=dict)
