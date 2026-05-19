@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Battlefield</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container { text-align: center; padding: 40px; }
+        h1 { font-size: 2.5rem; margin-bottom: 16px; color: #fff; }
+        p { font-size: 1.1rem; color: #aaa; margin-bottom: 32px; }
+        button {
+            padding: 16px 48px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            background: #e94560;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #d63850; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .error { color: #e94560; margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Live Battlefield</h1>
+        <p>No active game yet. Create one to get started.</p>
+        <button id="create-btn" onclick="createGame()">Create New Game</button>
+        <div id="error" class="error" style="display:none"></div>
+    </div>
+    <script>
+        async function createGame() {
+            const btn = document.getElementById('create-btn');
+            const errorDiv = document.getElementById('error');
+            btn.disabled = true;
+            errorDiv.style.display = 'none';
+            try {
+                const res = await fetch('/api/admin/create-game', { method: 'POST' });
+                const data = await res.json();
+                if (data.token) {
+                    window.location.href = '/admin/' + data.token;
+                } else {
+                    throw new Error('No token returned');
+                }
+            } catch (e) {
+                errorDiv.textContent = 'Failed to create game: ' + e.message;
+                errorDiv.style.display = 'block';
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
