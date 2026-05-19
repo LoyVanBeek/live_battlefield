@@ -23,7 +23,7 @@ class TestExecuteCommand:
                 with patch("app.api.routes.save_event") as mock_save:
                     with patch("app.api.routes.GameState.from_events") as mock_from_events:
                         mock_state = GameState()
-                        mock_state.available_colors = ["blue", "red"]
+                        mock_state.available_colors = ["blue", "red"]  # ty: ignore[unresolved-attribute]
                         mock_from_events.return_value = mock_state
 
                         client = TestClient(app)

@@ -169,7 +169,7 @@ class AIPlayer:
 
                     bot = Bot(token=settings.telegram_bot_token)
                     await bot.send_message(
-                        chat_id=target_player.chat_id, text=notify_msg
+                        chat_id=target_player.chat_id, text=notify_msg  # ty: ignore[invalid-argument-type]
                     )
                     print(f"[AI] Notification sent successfully!")
             except Exception as e:

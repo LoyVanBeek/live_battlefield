@@ -75,7 +75,7 @@ class TestEventSequences:
         )
 
         events.extend(
-            [
+            [  # ty: ignore[invalid-argument-type]
                 BombThrownEvent(
                     attacker_color="red", target_color="blue", row=0, col=5
                 ),
@@ -125,7 +125,7 @@ class TestEventSequences:
         )
 
         events.extend(
-            [
+            [  # ty: ignore[invalid-argument-type]
                 BombThrownEvent(
                     attacker_color="red", target_color="blue", row=0, col=5
                 ),
@@ -150,7 +150,7 @@ class TestEventSequences:
         ]
 
         events.extend(
-            [
+            [  # ty: ignore[invalid-argument-type]
                 LocationAddedEvent(
                     number=1, latitude=52.0, longitude=5.0, code="ABCD", bomb_value=5
                 ),
@@ -222,7 +222,7 @@ class TestEventSequences:
         ]
 
         events.extend(
-            [
+            [  # ty: ignore[invalid-argument-type]
                 LocationAddedEvent(
                     number=1, latitude=52.0, longitude=5.0, code="ABCD", bomb_value=5
                 ),
@@ -429,10 +429,10 @@ class TestEventSequences:
         )
 
         events.append(
-            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=0)
+            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=0)  # ty: ignore[invalid-argument-type]
         )
         events.append(
-            BombThrownEvent(attacker_color="blue", target_color="red", row=0, col=0)
+            BombThrownEvent(attacker_color="blue", target_color="red", row=0, col=0)  # ty: ignore[invalid-argument-type]
         )
 
         state = create_full_game_state(events)
@@ -476,10 +476,10 @@ class TestEventSequences:
         )
 
         events.append(
-            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=0)
+            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=0)  # ty: ignore[invalid-argument-type]
         )
         events.append(
-            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=1)
+            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=1)  # ty: ignore[invalid-argument-type]
         )
 
         state = create_full_game_state(events)

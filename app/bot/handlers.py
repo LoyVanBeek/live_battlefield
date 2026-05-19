@@ -59,6 +59,8 @@ def generate_code(length: int = 4) -> str:
 async def handle_join(
     db, update: Update, context: ContextTypes.DEFAULT_TYPE, team_name: str
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
     logger.info(f"handle_join: chat_id={chat_id} team_name={team_name}")
 
@@ -133,6 +135,8 @@ async def handle_join(
 
 
 async def handle_leave(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     try:
@@ -166,6 +170,8 @@ async def handle_place(
     coord: str,
     direction: str,
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -189,7 +195,7 @@ async def handle_place(
     if player.color not in state.teams:
         return "You are not in the game yet!"
 
-    team = state.teams[player.color]
+    team = state.teams[player.color]  # ty: ignore[invalid-argument-type]
 
     if not team.can_place_ship(ship_type):
         return f"You've already placed all your {ship_type} ships!"
@@ -199,7 +205,7 @@ async def handle_place(
         return "Cannot place ship there! Check boundaries and that ships don't touch."
 
     event = ShipPlacedEvent(
-        color=player.color,
+        color=player.color,  # ty: ignore[invalid-argument-type]
         ship_type=ship_type,
         row=row,
         col=col,
@@ -225,6 +231,9 @@ async def handle_place_all(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
+    if update.effective_chat is None:
+        return
+
     from app.services.ship_placement import place_all_ships
     from app.models import get_or_create_game_settings
 
@@ -239,7 +248,7 @@ async def handle_place_all(
     if settings.status.value == "started":
         return "Cannot place ships - the game has already started!"
 
-    success, message = await place_all_ships(db, player.color)
+    success, message = await place_all_ships(db, player.color)  # ty: ignore[invalid-argument-type]
 
     if not success:
         return message
@@ -254,6 +263,8 @@ async def handle_bomb(
     target_color: str,
     coord: str,
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -278,7 +289,7 @@ async def handle_bomb(
     if player.color not in state.teams:
         return "You are not in the game yet!"
 
-    attacker = state.teams[player.color]
+    attacker = state.teams[player.color]  # ty: ignore[invalid-argument-type]
 
     if attacker.bombs <= 0:
         return "You have no bombs! Visit locations to earn more."
@@ -295,11 +306,11 @@ async def handle_bomb(
         return f"That coordinate has already been bombed!"
 
     attacker.bombs -= 1
-    result, ship, new_target = target.receive_bomb(row, col, player.color)
+    result, ship, new_target = target.receive_bomb(row, col, player.color)  # ty: ignore[invalid-argument-type]
     state.teams[target_color] = new_target
 
     event = BombThrownEvent(
-        attacker_color=player.color,
+        attacker_color=player.color,  # ty: ignore[invalid-argument-type]
         target_color=target_color,
         row=row,
         col=col,
@@ -322,7 +333,7 @@ async def handle_bomb(
             hit_msg = (
                 f"💨 MISS! {attacker.name} ({attacker.color}) missed at {coord_str}!"
             )
-        await send_message(context, target_player.chat_id, hit_msg)
+        await send_message(context, target_player.chat_id, hit_msg)  # ty: ignore[invalid-argument-type]
 
     if result == BombResult.HIT:
         msg = f"You bombed {target.name} at {coord}! 💥 HIT!"
@@ -349,6 +360,8 @@ async def handle_code(
     location_number: int,
     code: str,
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -374,7 +387,7 @@ async def handle_code(
     if player.color not in state.teams:
         return "You are not in the game yet!"
 
-    team = state.teams[player.color]
+    team = state.teams[player.color]  # ty: ignore[invalid-argument-type]
 
     if location.code.upper() != code.upper():
         return "Invalid code! Please check the code at the location."
@@ -393,11 +406,11 @@ async def handle_code(
     team.bombs += bomb_value
 
     event = CodeRedeemedEvent(
-        color=player.color,
+        color=player.color,  # ty: ignore[invalid-argument-type]
         location_number=location_number,
         code=code.upper(),
         success=True,
-        bombs_earned=bomb_value,
+        bombs_earned=bomb_value,  # ty: ignore[invalid-argument-type]
     )
     await save_event(db, event)
 
@@ -405,6 +418,8 @@ async def handle_code(
 
 
 async def handle_overview(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -417,7 +432,7 @@ async def handle_overview(db, update: Update, context: ContextTypes.DEFAULT_TYPE
     if player.color not in state.teams:
         return "You are not in the game yet!"
 
-    team = state.teams[player.color]
+    team = state.teams[player.color]  # ty: ignore[invalid-argument-type]
 
     msg = f"📊 {team.name} ({team.color})\n"
     msg += f"💣 Bombs: {team.bombs}\n"
@@ -448,6 +463,8 @@ async def handle_location(
     longitude: float,
     code: Optional[str],
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -474,6 +491,8 @@ async def handle_location(
 
 
 async def handle_locations_list(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     locations = await get_all_locations(db)
@@ -490,8 +509,8 @@ async def handle_locations_list(db, update: Update, context: ContextTypes.DEFAUL
         try:
             await context.bot.send_location(
                 chat_id=chat_id,
-                latitude=loc.latitude,
-                longitude=loc.longitude,
+                latitude=loc.latitude,  # ty: ignore[invalid-argument-type]
+                longitude=loc.longitude,  # ty: ignore[invalid-argument-type]
             )
         except Exception as e:
             print(f"Error sending location: {e}")
@@ -515,6 +534,8 @@ async def handle_locations_list(db, update: Update, context: ContextTypes.DEFAUL
 
 
 async def handle_register_gm(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     existing_player = await get_player_by_chat(db, chat_id)
@@ -522,7 +543,7 @@ async def handle_register_gm(db, update: Update, context: ContextTypes.DEFAULT_T
         if existing_player.role.value == "gamemaster":
             return "You are already registered as a game master!"
         # Allow team players to also be GMs
-        existing_player.role = Role.GAMEMASTER
+        existing_player.role = Role.GAMEMASTER  # ty: ignore[invalid-assignment]
         await db.commit()
         return (
             "You are now also registered as a game master! You can now use GM commands."
@@ -534,8 +555,11 @@ async def handle_register_gm(db, update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def handle_add_ai(
-    db, update: Update, context: ContextTypes.DEFAULT_TYPE, color: str, name: str = None
+    db, update: Update, context: ContextTypes.DEFAULT_TYPE, color: str, name: str | None = None
 ):
+    if update.effective_chat is None:
+        return
+
     from app.database import Role
 
     chat_id = update.effective_chat.id
@@ -583,6 +607,9 @@ async def handle_add_ai(
 async def handle_remove_ai(
     db, update: Update, context: ContextTypes.DEFAULT_TYPE, color: str
 ):
+    if update.effective_chat is None:
+        return
+
     from app.database import Role
 
     chat_id = update.effective_chat.id
@@ -639,6 +666,8 @@ async def handle_create_locations(
     longitude: float,
     radius_km: float = 2.0,
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -667,7 +696,7 @@ async def handle_create_locations(
 
     # Update ALL existing locations to have equal bomb values
     for loc in existing_locations:
-        loc.bomb_value = default_bomb_value
+        loc.bomb_value = default_bomb_value  # ty: ignore[invalid-assignment]
 
     for i in range(count):
         lat_offset = random.uniform(-radius_km / 111, radius_km / 111)
@@ -724,6 +753,8 @@ async def handle_set_location_bombs(
     location_number: int,
     bomb_count: int,
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -741,13 +772,15 @@ async def handle_set_location_bombs(
         return "Bomb count must be at least 1!"
 
     # Update bomb value
-    location.bomb_value = bomb_count
+    location.bomb_value = bomb_count  # ty: ignore[invalid-assignment]
     await db.commit()
 
     return f"✅ Location {location_number} now worth {bomb_count} bombs!"
 
 
 async def handle_start_game(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -774,6 +807,8 @@ async def handle_start_game(db, update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def handle_reset_game(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)

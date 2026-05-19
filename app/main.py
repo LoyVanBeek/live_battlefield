@@ -45,6 +45,8 @@ async def safe_reply(update: Update, text: str):
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
     response = (
         "Welcome to Live Battlefield!\n\n"
@@ -74,6 +76,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     help_text = """🎮 Live Battlefield - Commands
 
 📝 For Players:
@@ -107,6 +111,10 @@ Example: /place battleship B2 horizontal"""
 
 
 async def join_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
+    if update.message is None:
+        return
     chat_id = update.effective_chat.id
 
     if not context.args:
@@ -135,6 +143,10 @@ async def join_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def leave_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
+    if update.message is None:
+        return
     chat_id = update.effective_chat.id
 
     async with async_session_maker() as db:
@@ -154,6 +166,12 @@ async def leave_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def place_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
+    if update.message is None:
+        return
+    if context.args is None:
+        return
     chat_id = update.effective_chat.id
 
     if len(context.args) < 3:
@@ -180,6 +198,8 @@ async def place_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def place_all_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     async with async_session_maker() as db:
@@ -196,6 +216,10 @@ async def place_all_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def bomb_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
+    if context.args is None:
+        return
     chat_id = update.effective_chat.id
 
     if len(context.args) < 2:
@@ -217,6 +241,10 @@ async def bomb_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def code_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
+    if context.args is None:
+        return
     if len(context.args) < 2:
         await safe_reply(update, "Usage: /code <location_number> <code>")
         return
@@ -237,6 +265,8 @@ async def code_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def overview_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     async with async_session_maker() as db:
@@ -253,6 +283,8 @@ async def overview_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def locations_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     async with async_session_maker() as db:
@@ -264,6 +296,8 @@ async def locations_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def register_gm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     async with async_session_maker() as db:
@@ -275,6 +309,8 @@ async def register_gm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def add_ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     if not context.args:
@@ -294,6 +330,8 @@ async def add_ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def remove_ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     if not context.args:
@@ -311,6 +349,8 @@ async def remove_ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def ai_status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     async with async_session_maker() as db:
@@ -322,6 +362,10 @@ async def ai_status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def create_locations_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
+    if context.args is None:
+        return
     chat_id = update.effective_chat.id
 
     if len(context.args) < 3:
@@ -356,6 +400,10 @@ async def create_locations_handler(update: Update, context: ContextTypes.DEFAULT
 async def set_location_bombs_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
+    if update.effective_chat is None:
+        return
+    if context.args is None:
+        return
     chat_id = update.effective_chat.id
 
     if len(context.args) < 2:
@@ -385,6 +433,8 @@ async def set_location_bombs_handler(
 
 
 async def start_game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     async with async_session_maker() as db:
@@ -396,6 +446,8 @@ async def start_game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def reset_game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     async with async_session_maker() as db:
@@ -407,6 +459,10 @@ async def reset_game_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def location_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
+    if update.message is None:
+        return
     chat_id = update.effective_chat.id
 
     if not update.message.location:

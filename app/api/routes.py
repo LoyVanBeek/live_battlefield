@@ -47,7 +47,6 @@ try:
     TELEGRAM_BOT_AVAILABLE = True
 except ImportError:
     TELEGRAM_BOT_AVAILABLE = False
-    Bot = None
 
 api_engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
 api_session_maker = async_sessionmaker(
@@ -441,14 +440,14 @@ async def get_private_board_json(
     return _team_to_json(team, include_ships=True)
 
 
-def _team_to_json(team: "TeamState", include_ships: bool) -> dict:
+def _team_to_json(team: "TeamState", include_ships: bool) -> dict[str, Any]:
     from app.game.ships import BOARD_SIZE
 
-    grid = []
+    grid: list[list[dict[str, Any]]] = []
     for row in range(BOARD_SIZE):
-        grid_row = []
+        grid_row: list[dict[str, Any]] = []
         for col in range(BOARD_SIZE):
-            cell_data = {"row": row, "col": col}
+            cell_data: dict[str, Any] = {"row": row, "col": col}
 
             public = team.public_board[row][col]
             if public:
@@ -473,7 +472,7 @@ def _team_to_json(team: "TeamState", include_ships: bool) -> dict:
             grid_row.append(cell_data)
         grid.append(grid_row)
 
-    result = {
+    result: dict[str, Any] = {
         "team": {"name": team.name, "color": team.color},
         "grid": grid,
     }
@@ -651,6 +650,9 @@ async def execute_command(
 
         team = state.teams[cmd.team_color]
         ship_type = cmd.args.get("ship_type")
+        if not isinstance(ship_type, str):
+            result["message"] = "Missing ship_type!"
+            return result
         coord = cmd.args.get("coordinate", "A1")
         direction = cmd.args.get("direction", "horizontal")
 
@@ -772,7 +774,7 @@ async def execute_command(
                         notify_msg = f"💨 MISS! {team.name} ({cmd.team_color}) missed at {coord_display}!"
 
                     await bot.send_message(
-                        chat_id=target_player.chat_id, text=notify_msg
+                        chat_id=target_player.chat_id, text=notify_msg  # ty: ignore[invalid-argument-type]
                     )
                 except Exception as e:
                     print(f"Failed to send notification: {e}")
@@ -845,7 +847,7 @@ async def execute_command(
                 location_number=location_num,
                 code=code,
                 success=True,
-                bombs_earned=bomb_value,
+                bombs_earned=bomb_value,  # ty: ignore[invalid-argument-type]
             )
             await save_event(db, event)
 
@@ -916,7 +918,7 @@ async def trigger_ai_move(
         for p in all_players:
             if p.color == action.team_color and p.role == Role.AI:
                 # Restore AI to memory
-                ai = add_ai_player(p.color, p.name)
+                ai = add_ai_player(p.color, p.name)  # ty: ignore[invalid-argument-type]
                 break
 
     if not ai:
@@ -1142,7 +1144,7 @@ async def create_locations(
 
     # Update ALL existing locations to have equal bomb values
     for loc in existing_locations:
-        loc.bomb_value = default_bomb_value
+        loc.bomb_value = default_bomb_value  # ty: ignore[invalid-assignment]
 
     created = []
 
@@ -1240,13 +1242,13 @@ async def remove_location(
         new_bomb_value = max(1, 100 // remaining_count)
         for loc in existing_locations:
             if loc.number != action.location_number:
-                loc.bomb_value = new_bomb_value
+                loc.bomb_value = new_bomb_value  # ty: ignore[invalid-assignment]
     else:
         new_bomb_value = 0
 
     event = LocationRemovedEvent(
         number=action.location_number,
-        bomb_value=location.bomb_value,
+        bomb_value=location.bomb_value,  # ty: ignore[invalid-argument-type]
     )
     await save_event(db, event)
 
@@ -1493,7 +1495,7 @@ async def set_location_bombs(
     if data.bomb_value < 1:
         return {"success": False, "message": "Bomb value must be at least 1!"}
 
-    location.bomb_value = data.bomb_value
+    location.bomb_value = data.bomb_value  # ty: ignore[invalid-assignment]
     await db.commit()
 
     return {

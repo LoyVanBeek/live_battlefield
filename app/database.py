@@ -6,13 +6,14 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, JSON, Text, text
-from datetime import datetime
+from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 import enum
 
 from app.config import settings
 
 
-_engine: AsyncEngine = None
+_engine: AsyncEngine | None = None
 _async_session_maker = None
 
 
@@ -54,7 +55,7 @@ class Player(Base):
     color = Column(String(20), nullable=False, unique=True)
     chat_id = Column(Integer, nullable=True)  # Nullable for AI players
     role = Column(Enum(Role), nullable=False, default=Role.TEAM)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
 
 class EventType(str, enum.Enum):
@@ -78,7 +79,7 @@ class GameEvent(Base):
     event_type = Column(Enum(EventType), nullable=False)
     payload = Column(JSON, nullable=False)
     player_id = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
 
 class Location(Base):
@@ -90,7 +91,7 @@ class Location(Base):
     longitude = Column(Float, nullable=False)
     code = Column(String(20), nullable=False)
     bomb_value = Column(Integer, nullable=False, default=1)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
 
 class GameStatus(str, enum.Enum):
@@ -109,7 +110,7 @@ class GameSettings(Base):
     admin_token = Column(String(20), default="")
 
 
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncIterator[AsyncSession]:
     async with async_session_maker() as session:
         yield session
 
