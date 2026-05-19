@@ -55,7 +55,7 @@ class Player(Base):
     color: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
     chat_id: Mapped[int | None] = mapped_column(nullable=True)  # Nullable for AI players
     role: Mapped[Role] = mapped_column(Enum(Role), nullable=False, default=Role.TEAM)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class EventType(str, enum.Enum):
@@ -79,7 +79,7 @@ class GameEvent(Base):
     event_type: Mapped[EventType] = mapped_column(Enum(EventType), nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     player_id: Mapped[int | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class Location(Base):
@@ -91,7 +91,7 @@ class Location(Base):
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
     code: Mapped[str] = mapped_column(String(20), nullable=False)
     bomb_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class GameStatus(str, enum.Enum):
