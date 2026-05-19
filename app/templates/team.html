@@ -73,6 +73,9 @@
             font-size: 18px;
         }
         .team-stats span { display: flex; align-items: center; gap: 5px; }
+        .bomb-count-ok { color: #4caf50; }
+        .bomb-count-low { color: #ff9800; }
+        .bomb-count-empty { color: #f44336; font-weight: bold; }
 
         /* Game Status */
         .game-status {
@@ -548,7 +551,14 @@
             toast.textContent = msg;
             toast.className = type;
             toast.style.display = 'block';
-            setTimeout(() => toast.style.display = 'none', 3000);
+            const duration = type === 'error' ? 5000 : 3000;
+            setTimeout(() => toast.style.display = 'none', duration);
+        }
+
+        function updateBombCountDisplay(count) {
+            const el = document.getElementById('bomb-count');
+            el.textContent = count;
+            el.className = count <= 0 ? 'bomb-count-empty' : count <= 2 ? 'bomb-count-low' : 'bomb-count-ok';
         }
 
         async function loadGameStatus() {
@@ -592,7 +602,7 @@
 
             document.getElementById('team-color-dot').style.background = TEAM_COLOR;
             document.getElementById('team-name').textContent = team.name;
-            document.getElementById('bomb-count').textContent = team.bombs;
+            updateBombCountDisplay(team.bombs);
             document.getElementById('ship-count').textContent = team.ships_placed;
             document.getElementById('sunk-count').textContent = team.ships_sunk;
 
@@ -622,7 +632,7 @@
 
             document.getElementById('team-color-dot').style.background = TEAM_COLOR;
             document.getElementById('team-name').textContent = team.name;
-            document.getElementById('bomb-count').textContent = team.bombs;
+            updateBombCountDisplay(team.bombs);
             document.getElementById('ship-count').textContent = team.ships_placed;
             document.getElementById('sunk-count').textContent = team.ships_sunk;
         }
