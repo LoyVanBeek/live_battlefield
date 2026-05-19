@@ -1,7 +1,7 @@
 import secrets
 import string
 from dataclasses import dataclass, replace
-from typing import Optional, TYPE_CHECKING, Any
+from typing import Optional, Union, TYPE_CHECKING, Any
 from app.events.types import EventType
 from app.database import GameEvent
 
@@ -476,3 +476,18 @@ class GameEndedEvent:
             },
             player_id=player_id,
         )
+
+
+AnyEvent = Union[
+    "TeamJoinedEvent",
+    "ShipPlacedEvent",
+    "ShipRemovedEvent",
+    "BombThrownEvent",
+    "CodeRedeemedEvent",
+    "LocationAddedEvent",
+    "LocationRemovedEvent",
+    "BombsAddedEvent",
+    "TeamResetEvent",
+    "GameStartedEvent",
+    "GameEndedEvent",
+]

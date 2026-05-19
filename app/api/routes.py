@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
+from app.types import TeamJsonResult, CellData
 import os
 import math
 import random
@@ -440,23 +441,21 @@ async def get_private_board_json(
     return _team_to_json(team, include_ships=True)
 
 
-def _team_to_json(team: "TeamState", include_ships: bool) -> dict[str, Any]:
+def _team_to_json(team: "TeamState", include_ships: bool) -> TeamJsonResult:
     from app.game.ships import BOARD_SIZE
 
-    grid: list[list[dict[str, Any]]] = []
+    grid: list[list[CellData]] = []
     for row in range(BOARD_SIZE):
-        grid_row: list[dict[str, Any]] = []
+        grid_row: list[CellData] = []
         for col in range(BOARD_SIZE):
-            cell_data: dict[str, Any] = {"row": row, "col": col}
+            cell_data: CellData = {"row": row, "col": col, "status": "clear"}
 
             public = team.public_board[row][col]
             if public:
                 attacker_color, is_hit = public
+                cell_data["status"] = "hit" if is_hit else "miss"
                 cell_data["attacker_color"] = attacker_color
                 cell_data["is_hit"] = is_hit
-                cell_data["status"] = "hit" if is_hit else "miss"
-            else:
-                cell_data["status"] = "clear"
 
             if include_ships:
                 has_ship = team.private_board[row][col]
@@ -472,7 +471,7 @@ def _team_to_json(team: "TeamState", include_ships: bool) -> dict[str, Any]:
             grid_row.append(cell_data)
         grid.append(grid_row)
 
-    result: dict[str, Any] = {
+    result: TeamJsonResult = {
         "team": {"name": team.name, "color": team.color},
         "grid": grid,
     }
@@ -774,7 +773,7 @@ async def execute_command(
                         notify_msg = f"💨 MISS! {team.name} ({cmd.team_color}) missed at {coord_display}!"
 
                     await bot.send_message(
-                        chat_id=target_player.chat_id, text=notify_msg  # ty: ignore[invalid-argument-type]
+                        chat_id=target_player.chat_id, text=notify_msg
                     )
                 except Exception as e:
                     print(f"Failed to send notification: {e}")
@@ -847,7 +846,7 @@ async def execute_command(
                 location_number=location_num,
                 code=code,
                 success=True,
-                bombs_earned=bomb_value,  # ty: ignore[invalid-argument-type]
+                bombs_earned=bomb_value,
             )
             await save_event(db, event)
 
@@ -918,7 +917,7 @@ async def trigger_ai_move(
         for p in all_players:
             if p.color == action.team_color and p.role == Role.AI:
                 # Restore AI to memory
-                ai = add_ai_player(p.color, p.name)  # ty: ignore[invalid-argument-type]
+                ai = add_ai_player(p.color, p.name)
                 break
 
     if not ai:
@@ -1144,7 +1143,7 @@ async def create_locations(
 
     # Update ALL existing locations to have equal bomb values
     for loc in existing_locations:
-        loc.bomb_value = default_bomb_value  # ty: ignore[invalid-assignment]
+        loc.bomb_value = default_bomb_value
 
     created = []
 
@@ -1242,13 +1241,13 @@ async def remove_location(
         new_bomb_value = max(1, 100 // remaining_count)
         for loc in existing_locations:
             if loc.number != action.location_number:
-                loc.bomb_value = new_bomb_value  # ty: ignore[invalid-assignment]
+                loc.bomb_value = new_bomb_value
     else:
         new_bomb_value = 0
 
     event = LocationRemovedEvent(
         number=action.location_number,
-        bomb_value=location.bomb_value,  # ty: ignore[invalid-argument-type]
+        bomb_value=location.bomb_value,
     )
     await save_event(db, event)
 
@@ -1495,7 +1494,7 @@ async def set_location_bombs(
     if data.bomb_value < 1:
         return {"success": False, "message": "Bomb value must be at least 1!"}
 
-    location.bomb_value = data.bomb_value  # ty: ignore[invalid-assignment]
+    location.bomb_value = data.bomb_value
     await db.commit()
 
     return {

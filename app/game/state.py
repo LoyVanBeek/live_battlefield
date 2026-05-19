@@ -11,6 +11,7 @@ from app.game.ships import (
 from dataclasses import dataclass, field, replace
 from typing import Optional
 from enum import Enum
+from app.types import ShipDict, TeamStateDict, GameStateDict
 from app.events.factory import create_events, _get_event_type_value
 from app.events.models import (
     TeamJoinedEvent,
@@ -48,7 +49,7 @@ class Ship:
     def with_hits(self, hits: int) -> "Ship":
         return replace(self, hits=hits)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> ShipDict:
         return {
             "ship_type": self.ship_type,
             "cells": self.cells,
@@ -168,7 +169,7 @@ class TeamState:
     def is_destroyed(self) -> bool:
         return all(s.is_sunk() for s in self.ships)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> TeamStateDict:
         return {
             "name": self.name,
             "color": self.color,
@@ -320,7 +321,7 @@ class GameState:
     def is_ended(self, game_status: str) -> bool:
         return game_status == "ended"
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> GameStateDict:
         return {
             "teams": {color: team.to_dict() for color, team in self.teams.items()},
             "location_codes": self.location_codes,

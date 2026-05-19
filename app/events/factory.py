@@ -1,5 +1,6 @@
 from typing import Optional, Union
 from app.events.types import EventType
+from app.events.models import AnyEvent
 from app.events.models import (
     TeamJoinedEvent,
     ShipPlacedEvent,
@@ -21,7 +22,7 @@ def _get_event_type_value(event_type: Union[EventType, str]) -> str:
     return event_type
 
 
-def create_event(db_event) -> Optional[object]:
+def create_event(db_event) -> Optional[AnyEvent]:
     event_type = db_event.event_type
     payload_dict = db_event.payload
     player_id = getattr(db_event, "player_id", None)
@@ -64,8 +65,8 @@ def create_event(db_event) -> Optional[object]:
     return None
 
 
-def create_events(db_events: list) -> list:
-    events = []
+def create_events(db_events: list) -> list[AnyEvent]:
+    events: list[AnyEvent] = []
     for db_event in db_events:
         event = create_event(db_event)
         if event:

@@ -1,4 +1,5 @@
 import random
+from typing import Any
 from app.game.state import GameState, BombResult
 from app.events.models import (
     TeamJoinedEvent,
@@ -49,7 +50,7 @@ def create_full_game_state(events: list) -> GameState:
 class TestEventSequences:
     def test_two_teams_battle(self):
         """Two teams join, place ships, exchange bombs until one runs out."""
-        events = [
+        events: list[Any] = [
             TeamJoinedEvent(name="Team A", color="red", chat_id=1, bombs=5),
             TeamJoinedEvent(name="Team B", color="blue", chat_id=2, bombs=5),
         ]
@@ -75,7 +76,7 @@ class TestEventSequences:
         )
 
         events.extend(
-            [  # ty: ignore[invalid-argument-type]
+            [
                 BombThrownEvent(
                     attacker_color="red", target_color="blue", row=0, col=5
                 ),
@@ -102,7 +103,7 @@ class TestEventSequences:
 
     def test_teams_run_out_of_bombs(self):
         """Teams use all bombs, verify bombs == 0."""
-        events = [
+        events: list[Any] = [
             TeamJoinedEvent(name="Team A", color="red", chat_id=1, bombs=3),
             TeamJoinedEvent(name="Team B", color="blue", chat_id=2, bombs=2),
         ]
@@ -125,7 +126,7 @@ class TestEventSequences:
         )
 
         events.extend(
-            [  # ty: ignore[invalid-argument-type]
+            [
                 BombThrownEvent(
                     attacker_color="red", target_color="blue", row=0, col=5
                 ),
@@ -145,12 +146,12 @@ class TestEventSequences:
 
     def test_redeem_code_increases_bombs(self):
         """Team redeems code, bombs increase correctly."""
-        events = [
+        events: list[Any] = [
             TeamJoinedEvent(name="Team A", color="red", chat_id=1, bombs=1),
         ]
 
         events.extend(
-            [  # ty: ignore[invalid-argument-type]
+            [
                 LocationAddedEvent(
                     number=1, latitude=52.0, longitude=5.0, code="ABCD", bomb_value=5
                 ),
@@ -217,12 +218,12 @@ class TestEventSequences:
 
     def test_prevent_duplicate_code_redeem(self):
         """Same team cannot redeem same location twice."""
-        events = [
+        events: list[Any] = [
             TeamJoinedEvent(name="Team A", color="red", chat_id=1, bombs=1),
         ]
 
         events.extend(
-            [  # ty: ignore[invalid-argument-type]
+            [
                 LocationAddedEvent(
                     number=1, latitude=52.0, longitude=5.0, code="ABCD", bomb_value=5
                 ),
@@ -406,7 +407,7 @@ class TestEventSequences:
 
     def test_ship_placement_affects_battle_outcome(self):
         """Ships placed strategically affect battle outcomes."""
-        events = [
+        events: list[Any] = [
             TeamJoinedEvent(name="Team A", color="red", chat_id=1, bombs=5),
             TeamJoinedEvent(name="Team B", color="blue", chat_id=2, bombs=5),
         ]
@@ -429,10 +430,10 @@ class TestEventSequences:
         )
 
         events.append(
-            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=0)  # ty: ignore[invalid-argument-type]
+            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=0)
         )
         events.append(
-            BombThrownEvent(attacker_color="blue", target_color="red", row=0, col=0)  # ty: ignore[invalid-argument-type]
+            BombThrownEvent(attacker_color="blue", target_color="red", row=0, col=0)
         )
 
         state = create_full_game_state(events)
@@ -448,7 +449,7 @@ class TestEventSequences:
 
     def test_from_events_reconstructs_complete_state(self):
         """GameState.from_events correctly reconstructs complete game state."""
-        events = [
+        events: list[Any] = [
             TeamJoinedEvent(name="Team A", color="red", chat_id=1, bombs=5),
             TeamJoinedEvent(name="Team B", color="blue", chat_id=2, bombs=3),
             LocationAddedEvent(
@@ -476,10 +477,10 @@ class TestEventSequences:
         )
 
         events.append(
-            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=0)  # ty: ignore[invalid-argument-type]
+            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=0)
         )
         events.append(
-            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=1)  # ty: ignore[invalid-argument-type]
+            BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=1)
         )
 
         state = create_full_game_state(events)

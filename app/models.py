@@ -85,7 +85,7 @@ async def get_next_location_number(db: AsyncSession) -> int:
     )
     last_location = result.scalar_one_or_none()
     if last_location:
-        return last_location.number + 1  # ty: ignore[invalid-return-type]
+        return last_location.number + 1
     return 1
 
 
@@ -163,10 +163,10 @@ async def delete_all_players(db: AsyncSession) -> int:
 
 async def reset_game_settings(db: AsyncSession) -> GameSettings:
     settings = await get_or_create_game_settings(db)
-    settings.status = GameStatus.WAITING  # ty: ignore[invalid-assignment]
-    settings.total_locations_needed = 33  # ty: ignore[invalid-assignment]
-    settings.started_at = None  # ty: ignore[invalid-assignment]
-    settings.admin_token = ""  # ty: ignore[invalid-assignment]
+    settings.status = GameStatus.WAITING
+    settings.total_locations_needed = 33
+    settings.started_at = None
+    settings.admin_token = ""
     await db.commit()
     await db.refresh(settings)
     return settings
@@ -174,7 +174,7 @@ async def reset_game_settings(db: AsyncSession) -> GameSettings:
 
 async def set_admin_token(db: AsyncSession, token: str) -> GameSettings:
     settings = await get_or_create_game_settings(db)
-    settings.admin_token = token  # ty: ignore[invalid-assignment]
+    settings.admin_token = token
     await db.commit()
     await db.refresh(settings)
     return settings
