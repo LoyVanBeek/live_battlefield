@@ -59,6 +59,8 @@ def generate_code(length: int = 4) -> str:
 async def handle_join(
     db, update: Update, context: ContextTypes.DEFAULT_TYPE, team_name: str
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
     logger.info(f"handle_join: chat_id={chat_id} team_name={team_name}")
 
@@ -133,6 +135,8 @@ async def handle_join(
 
 
 async def handle_leave(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     try:
@@ -166,6 +170,8 @@ async def handle_place(
     coord: str,
     direction: str,
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -225,6 +231,9 @@ async def handle_place_all(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
+    if update.effective_chat is None:
+        return
+
     from app.services.ship_placement import place_all_ships
     from app.models import get_or_create_game_settings
 
@@ -254,6 +263,8 @@ async def handle_bomb(
     target_color: str,
     coord: str,
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -308,7 +319,7 @@ async def handle_bomb(
     await save_event(db, event)
 
     target_player = await get_player_by_color(db, target_color)
-    if target_player:
+    if target_player and target_player.chat_id:
         coord_str = coordinate_to_string(row, col)
         if result == BombResult.HIT:
             hit_msg = (
@@ -349,6 +360,8 @@ async def handle_code(
     location_number: int,
     code: str,
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -405,6 +418,8 @@ async def handle_code(
 
 
 async def handle_overview(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -448,6 +463,8 @@ async def handle_location(
     longitude: float,
     code: Optional[str],
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -474,6 +491,8 @@ async def handle_location(
 
 
 async def handle_locations_list(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     locations = await get_all_locations(db)
@@ -515,6 +534,8 @@ async def handle_locations_list(db, update: Update, context: ContextTypes.DEFAUL
 
 
 async def handle_register_gm(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     existing_player = await get_player_by_chat(db, chat_id)
@@ -534,8 +555,11 @@ async def handle_register_gm(db, update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def handle_add_ai(
-    db, update: Update, context: ContextTypes.DEFAULT_TYPE, color: str, name: str = None
+    db, update: Update, context: ContextTypes.DEFAULT_TYPE, color: str, name: str | None = None
 ):
+    if update.effective_chat is None:
+        return
+
     from app.database import Role
 
     chat_id = update.effective_chat.id
@@ -583,6 +607,9 @@ async def handle_add_ai(
 async def handle_remove_ai(
     db, update: Update, context: ContextTypes.DEFAULT_TYPE, color: str
 ):
+    if update.effective_chat is None:
+        return
+
     from app.database import Role
 
     chat_id = update.effective_chat.id
@@ -639,6 +666,8 @@ async def handle_create_locations(
     longitude: float,
     radius_km: float = 2.0,
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -724,6 +753,8 @@ async def handle_set_location_bombs(
     location_number: int,
     bomb_count: int,
 ):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -748,6 +779,8 @@ async def handle_set_location_bombs(
 
 
 async def handle_start_game(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)
@@ -774,6 +807,8 @@ async def handle_start_game(db, update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def handle_reset_game(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     chat_id = update.effective_chat.id
 
     player = await get_player_by_chat(db, chat_id)

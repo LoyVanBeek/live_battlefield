@@ -32,7 +32,7 @@ async def get_player_by_color(db: AsyncSession, color: str) -> Optional[Player]:
 
 
 async def create_player(
-    db: AsyncSession, name: str, color: str, chat_id: int, role: Role = Role.TEAM
+    db: AsyncSession, name: str, color: str, chat_id: int | None, role: Role = Role.TEAM
 ) -> Player:
     player = Player(name=name, color=color, chat_id=chat_id, role=role)
     db.add(player)

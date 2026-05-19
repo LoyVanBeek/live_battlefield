@@ -26,5 +26,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev --frozen
 
+      - name: Run type checks
+        run: uv run ty check
+
       - name: Run tests
         run: uv run pytest tests/

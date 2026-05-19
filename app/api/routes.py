@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
+from app.types import TeamJsonResult, CellData
 import os
 import math
 import random
@@ -47,7 +48,6 @@ try:
     TELEGRAM_BOT_AVAILABLE = True
 except ImportError:
     TELEGRAM_BOT_AVAILABLE = False
-    Bot = None
 
 api_engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
 api_session_maker = async_sessionmaker(
@@ -441,23 +441,21 @@ async def get_private_board_json(
     return _team_to_json(team, include_ships=True)
 
 
-def _team_to_json(team: "TeamState", include_ships: bool) -> dict:
+def _team_to_json(team: "TeamState", include_ships: bool) -> TeamJsonResult:
     from app.game.ships import BOARD_SIZE
 
-    grid = []
+    grid: list[list[CellData]] = []
     for row in range(BOARD_SIZE):
-        grid_row = []
+        grid_row: list[CellData] = []
         for col in range(BOARD_SIZE):
-            cell_data = {"row": row, "col": col}
+            cell_data: CellData = {"row": row, "col": col, "status": "clear"}
 
             public = team.public_board[row][col]
             if public:
                 attacker_color, is_hit = public
+                cell_data["status"] = "hit" if is_hit else "miss"
                 cell_data["attacker_color"] = attacker_color
                 cell_data["is_hit"] = is_hit
-                cell_data["status"] = "hit" if is_hit else "miss"
-            else:
-                cell_data["status"] = "clear"
 
             if include_ships:
                 has_ship = team.private_board[row][col]
@@ -473,7 +471,7 @@ def _team_to_json(team: "TeamState", include_ships: bool) -> dict:
             grid_row.append(cell_data)
         grid.append(grid_row)
 
-    result = {
+    result: TeamJsonResult = {
         "team": {"name": team.name, "color": team.color},
         "grid": grid,
     }
@@ -651,6 +649,9 @@ async def execute_command(
 
         team = state.teams[cmd.team_color]
         ship_type = cmd.args.get("ship_type")
+        if not isinstance(ship_type, str):
+            result["message"] = "Missing ship_type!"
+            return result
         coord = cmd.args.get("coordinate", "A1")
         direction = cmd.args.get("direction", "horizontal")
 
