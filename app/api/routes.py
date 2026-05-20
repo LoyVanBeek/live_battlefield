@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Depends, Request, HTTPException, Query
-from fastapi.responses import Response, HTMLResponse
+from fastapi.responses import Response, HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
 from app.types import TeamJsonResult, CellData
 from app.translations import get_translations, detect_language, SUPPORTED_LANGS
+from app.sse_manager import manager
 import os
 import json
 import math
@@ -250,6 +251,34 @@ async def admin_create_game(db: AsyncSession = Depends(get_api_db)):
     await reset_game_settings(db)
     await set_admin_token(db, token)
     return {"token": token}
+
+
+@app.get("/api/events/stream")
+async def event_stream(request: Request):
+    q = await manager.connect()
+
+    async def event_generator():
+        try:
+            while True:
+                try:
+                    message = await asyncio.wait_for(q.get(), timeout=30)
+                    yield f"data: {message}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await manager.disconnect(q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/team/{token}", response_class=HTMLResponse)

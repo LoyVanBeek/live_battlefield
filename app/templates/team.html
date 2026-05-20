@@ -978,12 +978,35 @@
             window.location.href = window.location.pathname + '?lang=' + lang;
         }
 
+        // SSE for real-time refresh notifications
+        function connectSSE() {
+            var es = new EventSource('/api/events/stream');
+            es.onmessage = function (event) {
+                if (event.data === 'refresh') {
+                    refreshBoards();
+                    loadGameStatus();
+                    updateStats();
+                }
+            };
+            es.onerror = function () {
+                es.close();
+                setTimeout(connectSSE, 5000);
+            };
+        }
+
         // Initial load
         loadGameStatus();
         loadTeam();
 
-        // Refresh boards every 2 seconds (reduced from 1 second to reduce flickering)
-        setInterval(refreshBoards, 2000);
+        // Real-time updates via SSE
+        connectSSE();
+
+        // Fallback polling (30s) in case SSE connection drops
+        setInterval(function () {
+            refreshBoards();
+            loadGameStatus();
+            updateStats();
+        }, 30000);
     </script>
 </body>
 </html>
