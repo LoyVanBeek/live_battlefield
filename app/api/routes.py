@@ -5,7 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
 from app.types import TeamJsonResult, CellData
+from app.translations import get_translations, detect_language, SUPPORTED_LANGS
 import os
+import json
 import math
 import random
 import string
@@ -251,15 +253,43 @@ async def admin_create_game(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.get("/team/{token}", response_class=HTMLResponse)
-async def team_page(request: Request, token: str, db: AsyncSession = Depends(get_api_db)):
+async def team_page(
+    request: Request,
+    token: str,
+    db: AsyncSession = Depends(get_api_db),
+    lang: Optional[str] = Query(None),
+):
     events = await get_all_events(db)
     state = GameState.from_events(events)
     color = state.team_tokens.get(token)
     if color is None:
         return HTMLResponse("Team not found", status_code=404)
-    return templates.TemplateResponse(
-        request, "team.html", {"request": request, "team_color": color, "team_token": token}
+
+    # Language detection: query param > cookie > Accept-Language > 'en'
+    if lang and lang in SUPPORTED_LANGS:
+        chosen_lang = lang
+    else:
+        chosen_lang = request.cookies.get("lang", "")
+        if chosen_lang not in SUPPORTED_LANGS:
+            accept = request.headers.get("accept-language", "")
+            chosen_lang = detect_language(accept)
+
+    translations = get_translations(chosen_lang)
+
+    response = templates.TemplateResponse(
+        request,
+        "team.html",
+        {
+            "request": request,
+            "team_color": color,
+            "team_token": token,
+            "tr": translations,
+            "tr_json": json.dumps(translations),
+            "current_lang": chosen_lang,
+        },
     )
+    response.set_cookie(key="lang", value=chosen_lang, max_age=365 * 24 * 3600)
+    return response
 
 
 @app.get("/api/admin/locations")

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ current_lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Battlefield - Team Play</title>
+    <title>{{ tr.page.title }}</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -73,6 +73,16 @@
             font-size: 18px;
         }
         .team-stats span { display: flex; align-items: center; gap: 5px; }
+        .lang-select {
+            padding: 6px 10px;
+            font-size: 14px;
+            border: 2px solid #0f3460;
+            border-radius: 5px;
+            background: #1a1a2e;
+            color: #eee;
+            cursor: pointer;
+        }
+        .lang-select:focus { outline: none; border-color: #00d9ff; }
         .bomb-count-ok { color: #4caf50; }
         .bomb-count-low { color: #ff9800; }
         .bomb-count-empty { color: #f44336; font-weight: bold; }
@@ -327,55 +337,53 @@
 <body>
     <div class="container">
         
-        <h1>🎮 Team Play</h1>
+        <h1>{{ tr.page.heading }}</h1>
 
         <!-- Team Header -->
         <div class="team-header" id="team-header">
             <div class="team-info">
                 <span class="team-color-dot" id="team-color-dot"></span>
-                <span class="team-name" id="team-name">Loading...</span>
+                <span class="team-name" id="team-name">{{ tr.status.loading }}</span>
             </div>
             <div class="team-stats">
                 <span>💣 <span id="bomb-count">-</span></span>
                 <span>🚢 <span id="ship-count">-</span>/10</span>
-                <span>💥 <span id="sunk-count">-</span> sunk</span>
+                <span>💥 <span id="sunk-count">-</span> {{ tr.team.sunk }}</span>
             </div>
+            <select class="lang-select" id="lang-select" onchange="switchLanguage(this.value)">
+                <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
+                <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>{{ tr.lang.nl }}</option>
+            </select>
         </div>
 
         <!-- Game Status -->
         <div class="game-status waiting" id="game-status">
-            Loading...
+            {{ tr.status.loading }}
         </div>
 
         <!-- Private Board -->
         <div class="board-section">
-            <h2>🚢 Your Private Board</h2>
+            <h2>{{ tr.board.private.heading }}</h2>
             <div id="private-board"></div>
         </div>
 
         <!-- Public Boards -->
         <div class="public-boards-section">
-            <h2>💥 Public Boards (All Teams)</h2>
+            <h2>{{ tr.board.public.heading }}</h2>
             <div class="public-boards-grid" id="public-boards-grid">
-                Loading...
+                {{ tr.status.loading }}
             </div>
         </div>
 
         <!-- Actions -->
         <div class="actions" id="actions">
-            Loading actions...
+            {{ tr.action.loading }}
         </div>
     </div>
 
     <!-- Bomb Confirmation Modal -->
     <div id="bomb-confirm" class="bomb-confirm">
-        <div class="bomb-confirm-content">
-            <p>💥 Bomb <strong id="confirm-target"></strong>?</p>
-            <div class="coord-display" id="confirm-coord"></div>
-            <div class="bomb-confirm-actions">
-                <button onclick="confirmBomb()" class="btn btn-primary">💥 Throw Bomb!</button>
-                <button onclick="closeBombConfirm()" class="btn btn-danger">Cancel</button>
-            </div>
+        <div class="bomb-confirm-content" id="bomb-confirm-content">
         </div>
     </div>
 
@@ -402,6 +410,21 @@
             'yellow': 'rgb(220, 200, 60)'
         };
         const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+        const TR = {{ tr_json|safe }};
+        function _(key, params) {
+            let val = TR;
+            for (const part of key.split('.')) {
+                val = val[part];
+                if (val === undefined) return key;
+            }
+            if (typeof val !== 'string') return key;
+            if (params) {
+                for (const [k, v] of Object.entries(params)) {
+                    val = val.replace('{' + k + '}', v);
+                }
+            }
+            return val;
+        }
 
         // Pending bomb state (set by clicking a public board cell)
         let pendingBombTarget = null;
@@ -540,7 +563,7 @@
                 const resp = await fetch(url + sep + 'team_token=' + encodeURIComponent(TEAM_TOKEN), options);
                 return await resp.json();
             } catch (error) {
-                showToast('Error: ' + error.message, 'error');
+                showToast(_('error.fetch_prefix') + error.message, 'error');
                 return null;
             }
         }
@@ -569,13 +592,13 @@
             const statusEl = document.getElementById('game-status');
             
             if (status.status === 'started') {
-                statusEl.textContent = '🎮 Game Started - Bombs away!';
+                statusEl.textContent = _('status.started');
                 statusEl.className = 'game-status started';
             } else if (status.status === 'ended') {
-                statusEl.textContent = '🏁 Game Ended';
+                statusEl.textContent = _('status.ended');
                 statusEl.className = 'game-status ended';
             } else {
-                statusEl.textContent = '⏳ Waiting to Start';
+                statusEl.textContent = _('status.waiting');
                 statusEl.className = 'game-status waiting';
             }
 
@@ -589,10 +612,10 @@
             const team = state.teams?.find(t => t.color === TEAM_COLOR);
             
             if (!team) {
-                document.getElementById('team-header').innerHTML = `
+                    document.getElementById('team-header').innerHTML = `
                     <div class="team-info">
                         <span class="team-color-dot" style="background: ${TEAM_COLOR}"></span>
-                        <span class="team-name">Team ${TEAM_COLOR} (not joined)</span>
+                        <span class="team-name">${_('team.not_joined', {color: TEAM_COLOR})}</span>
                     </div>
                 `;
                 renderActions();
@@ -623,7 +646,7 @@
                 document.getElementById('team-header').innerHTML = `
                     <div class="team-info">
                         <span class="team-color-dot" style="background: ${TEAM_COLOR}"></span>
-                        <span class="team-name">Team ${TEAM_COLOR} (not joined)</span>
+                        <span class="team-name">${_('team.not_joined', {color: TEAM_COLOR})}</span>
                     </div>
                 `;
                 return;
@@ -670,15 +693,15 @@
                     boardItem.className = 'public-board-item';
                     boardItem.id = `public-board-item-${team.color}`;
                     boardItem.innerHTML = `
-                        <p>${team.name} (${team.color})</p>
+                        <p>${_('board.public.team_label', {name: team.name, color: team.color})}</p>
                         <div id="${boardId}"></div>
                     `;
                     grid.appendChild(boardItem);
                 } else {
-                    // Update team name if needed
                     const nameElement = boardItem.querySelector('p');
-                    if (nameElement && nameElement.textContent !== `${team.name} (${team.color})`) {
-                        nameElement.textContent = `${team.name} (${team.color})`;
+                    const expectedLabel = _('board.public.team_label', {name: team.name, color: team.color});
+                    if (nameElement && nameElement.textContent !== expectedLabel) {
+                        nameElement.textContent = expectedLabel;
                     }
                 }
                 
@@ -706,7 +729,7 @@
             if (!cell) return;
             if (cell.classList.contains('header')) return;
             if (gameStatus !== 'started') {
-                showToast('Game is not started!', 'error');
+                showToast(_('error.game_not_started'), 'error');
                 return;
             }
 
@@ -716,15 +739,21 @@
             const match = boardItem.id.match(/^public-board-item-(.+)$/);
             if (!match) return;
             if (match[1] === TEAM_COLOR) {
-                showToast('Cannot bomb yourself!', 'error');
+                showToast(_('error.cannot_bomb_self'), 'error');
                 return;
             }
 
             pendingBombTarget = match[1];
             pendingBombCoord = COLS[parseInt(cell.dataset.col)] + (parseInt(cell.dataset.row) + 1);
 
-            document.getElementById('confirm-target').textContent = match[1];
-            document.getElementById('confirm-coord').textContent = pendingBombCoord;
+            document.getElementById('bomb-confirm-content').innerHTML = `
+                <p>${_('bomb_confirm.title', {target: match[1]})}</p>
+                <div class="coord-display">${pendingBombCoord}</div>
+                <div class="bomb-confirm-actions">
+                    <button onclick="confirmBomb()" class="btn btn-primary">${_('bomb_confirm.button')}</button>
+                    <button onclick="closeBombConfirm()" class="btn btn-danger">${_('bomb_confirm.cancel')}</button>
+                </div>
+            `;
             document.getElementById('bomb-confirm').classList.add('active');
         });
 
@@ -745,59 +774,57 @@
             const actionsEl = document.getElementById('actions');
             
             if (gameStatus === 'ended') {
-                actionsEl.innerHTML = '<p>Game has ended. No actions available.</p>';
+                actionsEl.innerHTML = '<p>' + _('action.game_ended') + '</p>';
                 return;
             }
 
             let html = '';
 
             if (gameStatus === 'waiting') {
-                // PREPARING phase
                 html += `
                     <div class="action-group">
-                        <h3>🚢 Ship Placement</h3>
-                        <button class="btn btn-primary" onclick="placeAllShips()">Place All Ships (Auto)</button>
+                        <h3>${_('action.ship.heading')}</h3>
+                        <button class="btn btn-primary" onclick="placeAllShips()">${_('action.ship.auto')}</button>
                         <div class="action-inputs">
-                            <input type="text" id="coord-input" placeholder="A1">
+                            <input type="text" id="coord-input" placeholder="${_('action.ship.coord_placeholder')}">
                             <select id="ship-type">
-                                <option value="airplane_carrier">airplane_carrier (6)</option>
-                                <option value="battleship">battleship (4)</option>
-                                <option value="torpedo_hunter">torpedo_hunter (3)</option>
-                                <option value="patrol_boat">patrol_boat (2)</option>
+                                <option value="airplane_carrier">${_('action.ship.type_airplane')}</option>
+                                <option value="battleship">${_('action.ship.type_battleship')}</option>
+                                <option value="torpedo_hunter">${_('action.ship.type_torpedo')}</option>
+                                <option value="patrol_boat">${_('action.ship.type_patrol')}</option>
                             </select>
                             <select id="direction">
-                                <option value="horizontal">horizontal</option>
-                                <option value="vertical">vertical</option>
+                                <option value="horizontal">${_('action.ship.dir_horizontal')}</option>
+                                <option value="vertical">${_('action.ship.dir_vertical')}</option>
                             </select>
-                            <button class="btn btn-primary" onclick="placeShip()">Place Ship</button>
+                            <button class="btn btn-primary" onclick="placeShip()">${_('action.ship.place')}</button>
                         </div>
                         <div class="action-inputs">
-                            <input type="text" id="remove-coord" placeholder="A1 (remove)">
-                            <button class="btn btn-danger" onclick="removeShip()">Remove Ship</button>
+                            <input type="text" id="remove-coord" placeholder="${_('action.ship.remove_placeholder')}">
+                            <button class="btn btn-danger" onclick="removeShip()">${_('action.ship.remove')}</button>
                         </div>
                     </div>
                 `;
             }
 
             if (gameStatus === 'started') {
-                // STARTED phase
                 html += `
                     <div class="action-group">
-                        <h3>💥 Bomb Enemy</h3>
+                        <h3>${_('action.bomb.heading')}</h3>
                         <div class="action-inputs">
                             <select id="target-team">
-                                <option value="">Select target</option>
+                                <option value="">${_('action.bomb.select_target')}</option>
                             </select>
-                            <input type="text" id="bomb-coord" placeholder="A1" onkeypress="if(event.key==='Enter')throwBomb()">
-                            <button class="btn btn-primary" onclick="throwBomb()">Throw Bomb</button>
+                            <input type="text" id="bomb-coord" placeholder="${_('action.bomb.coord_placeholder')}" onkeypress="if(event.key==='Enter')throwBomb()">
+                            <button class="btn btn-primary" onclick="throwBomb()">${_('action.bomb.throw')}</button>
                         </div>
                     </div>
                     <div class="action-group">
-                        <h3>🔑 Redeem Code</h3>
+                        <h3>${_('action.code.heading')}</h3>
                         <div class="action-inputs">
-                            <input type="number" id="code-loc" placeholder="Location #" onkeypress="if(event.key==='Enter')redeemCode()">
-                            <input type="text" id="code-val" placeholder="ABCD" onkeypress="if(event.key==='Enter')redeemCode()">
-                            <button class="btn btn-primary" onclick="redeemCode()">Redeem</button>
+                            <input type="number" id="code-loc" placeholder="${_('action.code.location_placeholder')}" onkeypress="if(event.key==='Enter')redeemCode()">
+                            <input type="text" id="code-val" placeholder="${_('action.code.value_placeholder')}" onkeypress="if(event.key==='Enter')redeemCode()">
+                            <button class="btn btn-primary" onclick="redeemCode()">${_('action.code.redeem')}</button>
                         </div>
                     </div>
                 `;
@@ -816,13 +843,13 @@
             if (!state || !state.teams) return;
 
             const select = document.getElementById('target-team');
-            select.innerHTML = '<option value="">Select target</option>';
+            select.innerHTML = '<option value="">' + _('action.bomb.select_target') + '</option>';
             
             state.teams.forEach(team => {
                 if (team.color !== TEAM_COLOR) {
                     const opt = document.createElement('option');
                     opt.value = team.color;
-                    opt.textContent = team.name + ' (' + team.color + ')';
+                    opt.textContent = _('action.bomb.team_option', {name: team.name, color: team.color});
                     select.appendChild(opt);
                 }
             });
@@ -853,7 +880,7 @@
         async function removeShip() {
             const coord = document.getElementById('remove-coord').value;
             if (!coord) {
-                showToast('Enter a coordinate!', 'error');
+                showToast(_('error.enter_coord'), 'error');
                 return;
             }
 
@@ -863,7 +890,7 @@
             const row = parseInt(coordUpper.substring(1)) - 1;
 
             if (col < 0 || col > 9 || row < 0 || row > 9) {
-                showToast('Invalid coordinate! Use A1-J10', 'error');
+                showToast(_('error.invalid_coord'), 'error');
                 return;
             }
 
@@ -882,11 +909,11 @@
             const coord = document.getElementById('bomb-coord').value;
 
             if (!target) {
-                showToast('Select a target!', 'error');
+                showToast(_('error.select_target'), 'error');
                 return;
             }
             if (!coord) {
-                showToast('Enter a coordinate!', 'error');
+                showToast(_('error.enter_coord'), 'error');
                 return;
             }
 
@@ -930,11 +957,11 @@
             const code = document.getElementById('code-val').value;
 
             if (!locNum) {
-                showToast('Enter location number!', 'error');
+                showToast(_('error.enter_location'), 'error');
                 return;
             }
             if (!code) {
-                showToast('Enter code!', 'error');
+                showToast(_('error.enter_code'), 'error');
                 return;
             }
 
@@ -945,6 +972,10 @@
             });
             showToast(result.message, result.success ? 'success' : 'error');
             updateStats();
+        }
+
+        function switchLanguage(lang) {
+            window.location.href = window.location.pathname + '?lang=' + lang;
         }
 
         // Initial load

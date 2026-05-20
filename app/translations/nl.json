@@ -1,0 +1,78 @@
+{
+  "page": {
+    "title": "Live Battlefield - Team Spel",
+    "heading": "🎮 Team Spel"
+  },
+  "team": {
+    "not_joined": "{color} (niet deelgenomen)",
+    "bombs": "💣",
+    "ships": "🚢",
+    "sunk": "💥 gezonken"
+  },
+  "status": {
+    "started": "🎮 Spel gestart - Gooi bommen!",
+    "ended": "🏁 Spel afgelopen",
+    "waiting": "⏳ Wachten op start",
+    "loading": "Laden..."
+  },
+  "board": {
+    "private": {
+      "heading": "🚢 Jouw Geheime Bord"
+    },
+    "public": {
+      "heading": "💥 Openbare Bord (Alle Teams)",
+      "team_label": "{name} ({color})"
+    }
+  },
+  "action": {
+    "loading": "Acties laden...",
+    "game_ended": "Het spel is afgelopen. Geen acties beschikbaar.",
+    "ship": {
+      "heading": "🚢 Schepen Plaatsen",
+      "auto": "Plaats Alle Schepen (Auto)",
+      "coord_placeholder": "A1",
+      "type_airplane": "vliegdekschip (6)",
+      "type_battleship": "slagschip (4)",
+      "type_torpedo": "torpedojager (3)",
+      "type_patrol": "patrouilleboot (2)",
+      "dir_horizontal": "horizontaal",
+      "dir_vertical": "verticaal",
+      "place": "Plaats Schip",
+      "remove_placeholder": "A1 (verwijder)",
+      "remove": "Verwijder Schip"
+    },
+    "bomb": {
+      "heading": "💥 Bombardeer Vijand",
+      "select_target": "Selecteer doelwit",
+      "coord_placeholder": "A1",
+      "throw": "Gooi Bom",
+      "team_option": "{name} ({color})"
+    },
+    "code": {
+      "heading": "🔑 Code Inwisselen",
+      "location_placeholder": "Locatie #",
+      "value_placeholder": "ABCD",
+      "redeem": "Inwisselen"
+    }
+  },
+  "bomb_confirm": {
+    "title": "💥 {target} bombarderen?",
+    "button": "💥 Gooi Bom!",
+    "cancel": "Annuleren"
+  },
+  "error": {
+    "select_target": "Selecteer een doelwit!",
+    "enter_coord": "Voer een coördinaat in!",
+    "invalid_coord": "Ongeldig coördinaat! Gebruik A1-J10",
+    "enter_location": "Voer locatienummer in!",
+    "enter_code": "Voer code in!",
+    "game_not_started": "Spel is niet gestart!",
+    "cannot_bomb_self": "Je kunt jezelf niet bombarderen!",
+    "fetch_prefix": "Fout: "
+  },
+  "lang": {
+    "label": "Taal",
+    "en": "🇬🇧 English",
+    "nl": "🇳🇱 Nederlands"
+  }
+}
