@@ -524,7 +524,7 @@ def run_server():
 
 if __name__ == "__main__":
     import sys
-    import logging
+    import time
 
     logging.basicConfig(
         level=logging.INFO,
@@ -537,8 +537,6 @@ if __name__ == "__main__":
         run_server()
     else:
         from concurrent.futures import ThreadPoolExecutor
-        import threading
-        import asyncio
 
         executor = ThreadPoolExecutor(max_workers=1)
 
@@ -553,4 +551,20 @@ if __name__ == "__main__":
         server_thread.start()
 
         print("Server started, starting bot...")
-        run_bot()
+        max_retries = 5
+        base_delay = 5
+        for attempt in range(max_retries):
+            try:
+                print(f"Starting bot (attempt {attempt + 1}/{max_retries})...")
+                run_bot()
+                break
+            except Exception as e:
+                print(f"Bot failed to start: {e}")
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    print(f"Retrying in {delay}s...")
+                    time.sleep(delay)
+                else:
+                    print("Bot failed after max retries, server continuing without bot.")
+                    while True:
+                        time.sleep(3600)

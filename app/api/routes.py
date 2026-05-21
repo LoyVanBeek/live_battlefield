@@ -253,18 +253,56 @@ async def admin_create_game(db: AsyncSession = Depends(get_api_db)):
     return {"token": token}
 
 
+@app.get("/api/team-state")
+async def get_team_state(
+    db: AsyncSession = Depends(get_api_db),
+    team_token: str = Query(...),
+):
+    from app.team_view import get_team_view
+
+    view = await get_team_view(team_token, db)
+    if view.get("error"):
+        return {"error": True}
+    return view
+
+
 @app.get("/api/events/stream")
-async def event_stream(request: Request):
+async def event_stream(request: Request, team_token: Optional[str] = Query(None)):
+    from app.team_view import get_team_view
+
+    if not team_token:
+        return HTMLResponse("Missing team_token", status_code=400)
+
+    async with api_session_maker() as sse_db:
+        view = await get_team_view(team_token, sse_db)
+        if view.get("error"):
+            return HTMLResponse("Unauthorized", status_code=401)
+
     q = await manager.connect()
 
     async def event_generator():
         try:
+            # Send initial state immediately
+            async with api_session_maker() as sse_db:
+                view = await get_team_view(team_token, sse_db)
+                yield f"data: {json.dumps(view, separators=(',', ':'))}\n\n"
+
             while True:
                 try:
-                    message = await asyncio.wait_for(q.get(), timeout=30)
-                    yield f"data: {message}\n\n"
+                    await asyncio.wait_for(q.get(), timeout=30)
+                    # Drain any queued signals so we recompute once per batch
+                    while not q.empty():
+                        try:
+                            q.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
+                    continue
+
+                async with api_session_maker() as sse_db:
+                    view = await get_team_view(team_token, sse_db)
+                    yield f"data: {json.dumps(view, separators=(',', ':'))}\n\n"
         except asyncio.CancelledError:
             pass
         finally:
@@ -317,6 +355,7 @@ async def team_page(
             "current_lang": chosen_lang,
         },
     )
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.set_cookie(key="lang", value=chosen_lang, max_age=365 * 24 * 3600)
     return response
 
