@@ -600,7 +600,7 @@
                 var match = child.id && child.id.match(/^public-board-item-(.+)$/);
                 if (match && !currentColors.has(match[1])) {
                     grid.removeChild(child);
-                    boardGridCache['delete'](match[1]);
+                    boardGridCache['delete']('public-board-' + match[1]);
                 }
             }
 
@@ -865,9 +865,11 @@
         // SSE for subsequent updates
         connectSSE();
 
-        // Fallback: reconnect SSE every 30s as safety net
+        // Fallback: reconnect SSE if it ever silently dies
         setInterval(function () {
-            connectSSE();
+            if (currentES && currentES.readyState === EventSource.CLOSED) {
+                connectSSE();
+            }
         }, 30000);
     </script>
 </body>
