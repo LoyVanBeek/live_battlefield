@@ -67,12 +67,31 @@
             border-radius: 50%;
         }
         .team-name { font-size: 24px; font-weight: bold; }
+        .team-status-badge {
+            font-size: 13px;
+            font-weight: bold;
+            padding: 4px 10px;
+            border-radius: 12px;
+            white-space: nowrap;
+        }
+        .team-status-badge.started { background: #4caf50; color: white; }
+        .team-status-badge.waiting { background: #ff9800; color: white; }
+        .team-status-badge.ended { background: #f44336; color: white; }
         .team-stats {
             display: flex;
             gap: 20px;
             font-size: 18px;
         }
         .team-stats span { display: flex; align-items: center; gap: 5px; }
+        .team-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
         .lang-select {
             padding: 6px 10px;
             font-size: 14px;
@@ -86,19 +105,6 @@
         .bomb-count-ok { color: #4caf50; }
         .bomb-count-low { color: #ff9800; }
         .bomb-count-empty { color: #f44336; font-weight: bold; }
-
-        /* Game Status */
-        .game-status {
-            background: #16213e;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-            font-size: 18px;
-        }
-        .game-status.started { border-left: 4px solid #4caf50; }
-        .game-status.waiting { border-left: 4px solid #ff9800; }
-        .game-status.ended { border-left: 4px solid #f44336; }
 
         /* Board */
         .board-section {
@@ -304,34 +310,25 @@
 <body>
     <div class="container">
         
-        <h1>{{ tr.page.heading }}</h1>
-
-        <!-- Team Header -->
+        <!-- Team Header (name + status + stats + actions) -->
         <div class="team-header" id="team-header">
             <div class="team-info">
                 <span class="team-color-dot" id="team-color-dot"></span>
                 <span class="team-name" id="team-name">{{ tr.status.loading }}</span>
+                <span class="team-status-badge waiting" id="game-status-badge">{{ tr.status.loading }}</span>
             </div>
             <div class="team-stats">
                 <span>💣 <span id="bomb-count">-</span></span>
                 <span>🚢 <span id="ship-count">-</span>/10</span>
                 <span>💥 <span id="sunk-count">-</span> {{ tr.team.sunk }}</span>
             </div>
-            <select class="lang-select" id="lang-select" onchange="switchLanguage(this.value)">
-                <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
-                <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>{{ tr.lang.nl }}</option>
-            </select>
-        </div>
-
-        <!-- Game Status -->
-        <div class="game-status waiting" id="game-status">
-            {{ tr.status.loading }}
-        </div>
-
-        <!-- Private Board -->
-        <div class="board-section">
-            <h2>{{ tr.board.private.heading }}</h2>
-            <div id="private-board"></div>
+            <div class="team-actions">
+                <button class="btn btn-primary btn-small" onclick="quickRedeem()">🔑 {{ tr.action.code.redeem }}</button>
+                <select class="lang-select" id="lang-select" onchange="switchLanguage(this.value)">
+                    <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
+                    <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>{{ tr.lang.nl }}</option>
+                </select>
+            </div>
         </div>
 
         <!-- Public Boards -->
@@ -345,6 +342,12 @@
         <!-- Actions -->
         <div class="actions" id="actions">
             {{ tr.action.loading }}
+        </div>
+
+        <!-- Private Board -->
+        <div class="board-section">
+            <h2>{{ tr.board.private.heading }}</h2>
+            <div id="private-board"></div>
         </div>
     </div>
 
@@ -530,17 +533,17 @@
 
             gameStatus = data.s;
 
-            // Game status bar
-            var statusEl = document.getElementById('game-status');
+            // Game status badge (inline in header)
+            var badgeEl = document.getElementById('game-status-badge');
             if (data.s === 'started') {
-                statusEl.textContent = _('status.started');
-                statusEl.className = 'game-status started';
+                badgeEl.textContent = _('status.started');
+                badgeEl.className = 'team-status-badge started';
             } else if (data.s === 'ended') {
-                statusEl.textContent = _('status.ended');
-                statusEl.className = 'game-status ended';
+                badgeEl.textContent = _('status.ended');
+                badgeEl.className = 'team-status-badge ended';
             } else {
-                statusEl.textContent = _('status.waiting');
-                statusEl.className = 'game-status waiting';
+                badgeEl.textContent = _('status.waiting');
+                badgeEl.className = 'team-status-badge waiting';
             }
 
             // Team header
@@ -819,6 +822,13 @@
             window.location.href = window.location.pathname + '?lang=' + lang;
         }
 
+        function quickRedeem() {
+            var actionsEl = document.getElementById('actions');
+            if (actionsEl) actionsEl.scrollIntoView({ behavior: 'smooth' });
+            var codeLoc = document.getElementById('code-loc');
+            if (codeLoc) setTimeout(function () { codeLoc.focus(); }, 400);
+        }
+
         // SSE: pushes state updates when events occur
         var currentES = null;
         function connectSSE() {
@@ -832,6 +842,7 @@
                         '<div class="team-info">' +
                             '<span class="team-color-dot" style="background:' + TEAM_COLOR + '"></span>' +
                             '<span class="team-name">' + _('team.not_joined', {color: TEAM_COLOR}) + '</span>' +
+                            '<span class="team-status-badge waiting">' + _('status.waiting') + '</span>' +
                         '</div>';
                     return;
                 }
@@ -852,6 +863,7 @@
                     '<div class="team-info">' +
                         '<span class="team-color-dot" style="background:' + TEAM_COLOR + '"></span>' +
                         '<span class="team-name">' + _('team.not_joined', {color: TEAM_COLOR}) + '</span>' +
+                        '<span class="team-status-badge waiting">' + _('status.waiting') + '</span>' +
                     '</div>';
             }
         });
