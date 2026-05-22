@@ -550,9 +550,6 @@
             document.getElementById('ship-count').textContent = myTeam.sp;
             document.getElementById('sunk-count').textContent = myTeam.sk;
 
-            // Page background: very light tint of own team's color
-            document.body.style.backgroundColor = getRgba(TEAM_COLOR, 0.12);
-
             // Private board
             renderGrid('private-board', myTeam.g, true, TEAM_COLOR);
 
