@@ -20,7 +20,7 @@
       "heading": "🚢 Your Private Board"
     },
     "public": {
-      "heading": "💥 Public Boards (All Teams)",
+      "heading": "💥 Public Boards (Opposing Teams)",
       "team_label": "{name} ({color})"
     }
   },

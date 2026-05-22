@@ -20,7 +20,7 @@
       "heading": "🚢 Jouw Geheime Bord"
     },
     "public": {
-      "heading": "💥 Openbare Bord (Alle Teams)",
+      "heading": "💥 Openbare Borden (Andere Teams)",
       "team_label": "{name} ({color})"
     }
   },

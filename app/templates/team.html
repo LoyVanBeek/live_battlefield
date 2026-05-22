@@ -565,6 +565,7 @@
             var currentColors = new Set();
 
             allTeams.forEach(function (team) {
+                if (team.c === TEAM_COLOR) return;
                 currentColors.add(team.c);
                 var boardId = 'public-board-' + team.c;
                 var boardItem = document.getElementById('public-board-item-' + team.c);
