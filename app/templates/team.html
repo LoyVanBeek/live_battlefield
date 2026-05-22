@@ -430,62 +430,32 @@
         let pendingBombTarget = null;
         let pendingBombCoord = null;
 
+        // Last rendered state for target team dropdown
+        let lastTeamsData = null;
+
         // Cache for board grids to avoid rebuilding
         const boardGridCache = new Map();
 
-        function renderBoard(containerId, jsonUrl) {
-            return new Promise((resolve, reject) => {
-                fetch(jsonUrl)
-                    .then(resp => resp.json())
-                    .then(data => {
-                        if (data.error) {
-                            document.getElementById(containerId).innerHTML = '<p>' + data.error + '</p>';
-                            resolve();
-                            return;
-                        }
-                        updateBoardFromData(containerId, data, true);
-                        resolve();
-                    })
-                    .catch(err => {
-                        console.error('Failed to load board:', err);
-                        reject(err);
-                    });
-            });
-        }
-
-        function updateBoardFromData(containerId, data, includeShips) {
+        function renderGrid(containerId, gridData, includeShips) {
             const container = document.getElementById(containerId);
-            
-            // Check if we already have a grid for this container
             let grid = boardGridCache.get(containerId);
             if (!grid) {
-                // Create new grid
                 grid = document.createElement('div');
                 grid.className = 'board-grid';
-                grid.dataset.containerId = containerId; // Store reference
-                
-                // Create header row
                 const corner = document.createElement('div');
                 corner.className = 'board-cell header';
                 grid.appendChild(corner);
-                
-                // Column headers A-J
                 for (let c = 0; c < 10; c++) {
                     const header = document.createElement('div');
                     header.className = 'board-cell header';
                     header.textContent = COLS[c];
                     grid.appendChild(header);
                 }
-                
-                // Create cell placeholders for rows 1-10
                 for (let r = 0; r < 10; r++) {
-                    // Row header
                     const rowHeader = document.createElement('div');
                     rowHeader.className = 'board-cell header';
                     rowHeader.textContent = r + 1;
                     grid.appendChild(rowHeader);
-                    
-                    // Cells
                     for (let c = 0; c < 10; c++) {
                         const cell = document.createElement('div');
                         cell.className = 'board-cell';
@@ -494,62 +464,42 @@
                         grid.appendChild(cell);
                     }
                 }
-                
                 container.innerHTML = '';
                 container.appendChild(grid);
                 boardGridCache.set(containerId, grid);
             }
-            
-            // Update cell content without recreating elements
+
             for (let r = 0; r < 10; r++) {
                 for (let c = 0; c < 10; c++) {
-                    const cellData = data.grid[r][c];
-                    // Find the cell: 1 corner + 10 col headers + r*11 (row header + 10 cells per row) + c
-                    const cellIndex = 1 + 10 + r * 11 + 1 + c; // = 12 + r*11 + c
+                    const cellData = gridData[r][c] || {};
+                    const cellIndex = 1 + 10 + r * 11 + 1 + c;
                     const cell = grid.children[cellIndex];
-                    
                     if (!cell) continue;
-                    
-                    // Reset cell classes
+
                     cell.className = 'board-cell';
-                    
-                    // Private board: show ships
-                    if (includeShips && cellData.has_ship) {
+
+                    if (includeShips && cellData.p) {
                         cell.classList.add('ship');
-                        if (cellData.ship_sunk) {
-                            cell.classList.add('sunk');
-                        }
+                        if (cellData.k) cell.classList.add('sunk');
                     }
-                    
-                    // Clear any existing markers
-                    while (cell.firstChild) {
-                        cell.removeChild(cell.firstChild);
-                    }
-                    
-                    // Show hit/miss markers (both public and private)
-                    if (cellData.status === 'hit') {
+
+                    while (cell.firstChild) cell.removeChild(cell.firstChild);
+
+                    const status = cellData.s;
+                    const color = cellData.a || 'gray';
+                    if (status === 'h') {
                         const marker = document.createElement('div');
                         marker.className = 'hit';
-                        const color = cellData.attacker_color || 'gray';
                         marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
                         cell.appendChild(marker);
-                    } else if (cellData.status === 'miss') {
+                    } else if (status === 'm') {
                         const marker = document.createElement('div');
                         marker.className = 'miss';
-                        const color = cellData.attacker_color || 'gray';
                         marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
                         cell.appendChild(marker);
                     }
                 }
             }
-        }
-
-        function renderPrivateBoard() {
-            renderBoard('private-board', `/api/board/${TEAM_COLOR}/private.json`);
-        }
-
-        function renderPublicBoard(color) {
-            return renderBoard(`public-board-${color}`, `/api/board/${color}/public.json`);
         }
 
         async function apiCall(url, method = 'GET', body = null) {
@@ -583,18 +533,19 @@
             el.className = count <= 0 ? 'bomb-count-empty' : count <= 2 ? 'bomb-count-low' : 'bomb-count-ok';
         }
 
-        async function loadGameStatus() {
-            const status = await apiCall('/api/game-status');
-            if (!status) return;
+        // Render everything from a single compact state object pushed via SSE
+        function renderState(data) {
+            var myTeam = data.t;
+            var allTeams = data.ts;
 
-            gameStatus = status.status;
-            
-            const statusEl = document.getElementById('game-status');
-            
-            if (status.status === 'started') {
+            gameStatus = data.s;
+
+            // Game status bar
+            var statusEl = document.getElementById('game-status');
+            if (data.s === 'started') {
                 statusEl.textContent = _('status.started');
                 statusEl.className = 'game-status started';
-            } else if (status.status === 'ended') {
+            } else if (data.s === 'ended') {
                 statusEl.textContent = _('status.ended');
                 statusEl.className = 'game-status ended';
             } else {
@@ -602,130 +553,63 @@
                 statusEl.className = 'game-status waiting';
             }
 
+            // Team header
+            document.getElementById('team-color-dot').style.background = myTeam.c;
+            document.getElementById('team-name').textContent = myTeam.n;
+            updateBombCountDisplay(myTeam.b);
+            document.getElementById('ship-count').textContent = myTeam.sp;
+            document.getElementById('sunk-count').textContent = myTeam.sk;
+
+            // Private board
+            renderGrid('private-board', myTeam.g, true);
+
+            // Public boards
+            renderPublicBoards(allTeams);
+
+            // Actions
             renderActions();
         }
 
-        async function loadTeam() {
-            const state = await apiCall('/api/state');
-            if (!state) return;
+        function renderPublicBoards(allTeams) {
+            var grid = document.getElementById('public-boards-grid');
+            var currentColors = new Set();
 
-            const team = state.teams?.find(t => t.color === TEAM_COLOR);
-            
-            if (!team) {
-                    document.getElementById('team-header').innerHTML = `
-                    <div class="team-info">
-                        <span class="team-color-dot" style="background: ${TEAM_COLOR}"></span>
-                        <span class="team-name">${_('team.not_joined', {color: TEAM_COLOR})}</span>
-                    </div>
-                `;
-                renderActions();
-                return;
-            }
-
-            document.getElementById('team-color-dot').style.background = TEAM_COLOR;
-            document.getElementById('team-name').textContent = team.name;
-            updateBombCountDisplay(team.bombs);
-            document.getElementById('ship-count').textContent = team.ships_placed;
-            document.getElementById('sunk-count').textContent = team.ships_sunk;
-
-            renderPrivateBoard();
-
-            // Load public boards
-            loadPublicBoards();
-
-            renderActions();
-        }
-
-        async function updateStats() {
-            const state = await apiCall('/api/state');
-            if (!state) return;
-
-            const team = state.teams?.find(t => t.color === TEAM_COLOR);
-            
-            if (!team) {
-                document.getElementById('team-header').innerHTML = `
-                    <div class="team-info">
-                        <span class="team-color-dot" style="background: ${TEAM_COLOR}"></span>
-                        <span class="team-name">${_('team.not_joined', {color: TEAM_COLOR})}</span>
-                    </div>
-                `;
-                return;
-            }
-
-            document.getElementById('team-color-dot').style.background = TEAM_COLOR;
-            document.getElementById('team-name').textContent = team.name;
-            updateBombCountDisplay(team.bombs);
-            document.getElementById('ship-count').textContent = team.ships_placed;
-            document.getElementById('sunk-count').textContent = team.ships_sunk;
-        }
-
-        function refreshBoards() {
-            renderPrivateBoard();
-            loadPublicBoards();
-        }
-
-        async function loadPublicBoards() {
-            const state = await apiCall('/api/state');
-            if (!state || !state.teams) return;
-
-            const grid = document.getElementById('public-boards-grid');
-            
-            // Keep track of existing boards to avoid rebuilding
-            const existingBoards = new Set();
-            for (let i = 0; i < grid.children.length; i++) {
-                const child = grid.children[i];
-                const boardDiv = child.querySelector('[id^="public-board-"]');
-                if (boardDiv) {
-                    const id = boardDiv.id;
-                    existingBoards.add(id);
-                }
-            }
-
-            // Create or update boards for each team
-            state.teams.forEach(team => {
-                const boardId = `public-board-${team.color}`;
-                
-                // Check if board element already exists
-                let boardItem = document.getElementById(`public-board-item-${team.color}`);
+            allTeams.forEach(function (team) {
+                currentColors.add(team.c);
+                var boardId = 'public-board-' + team.c;
+                var boardItem = document.getElementById('public-board-item-' + team.c);
                 if (!boardItem) {
-                    // Create new board item
                     boardItem = document.createElement('div');
                     boardItem.className = 'public-board-item';
-                    boardItem.id = `public-board-item-${team.color}`;
-                    boardItem.innerHTML = `
-                        <p>${_('board.public.team_label', {name: team.name, color: team.color})}</p>
-                        <div id="${boardId}"></div>
-                    `;
+                    boardItem.id = 'public-board-item-' + team.c;
+                    boardItem.innerHTML =
+                        '<p>' + _('board.public.team_label', {name: team.n, color: team.c}) + '</p>' +
+                        '<div id="' + boardId + '"></div>';
                     grid.appendChild(boardItem);
                 } else {
-                    const nameElement = boardItem.querySelector('p');
-                    const expectedLabel = _('board.public.team_label', {name: team.name, color: team.color});
-                    if (nameElement && nameElement.textContent !== expectedLabel) {
-                        nameElement.textContent = expectedLabel;
-                    }
+                    var nameEl = boardItem.querySelector('p');
+                    var expected = _('board.public.team_label', {name: team.n, color: team.c});
+                    if (nameEl && nameEl.textContent !== expected) nameEl.textContent = expected;
                 }
-                
-                // Render the board
-                renderPublicBoard(team.color);
+                renderGrid(boardId, team.g, false);
             });
-            
-            // Remove boards for teams that no longer exist
-            const currentTeams = new Set(state.teams.map(t => t.color));
-            for (let i = grid.children.length - 1; i >= 0; i--) {
-                const child = grid.children[i];
-                const match = child.id && child.id.match(/^public-board-item-(.+)$/);
-                if (match) {
-                    const color = match[1];
-                    if (!currentTeams.has(color)) {
-                        grid.removeChild(child);
-                    }
+
+            // Remove stale boards
+            for (var i = grid.children.length - 1; i >= 0; i--) {
+                var child = grid.children[i];
+                var match = child.id && child.id.match(/^public-board-item-(.+)$/);
+                if (match && !currentColors.has(match[1])) {
+                    grid.removeChild(child);
+                    boardGridCache['delete']('public-board-' + match[1]);
                 }
             }
+
+            lastTeamsData = allTeams;
         }
 
         // Click-to-bomb: delegate clicks on public board cells
         document.getElementById('public-boards-grid').addEventListener('click', function (e) {
-            const cell = e.target.closest('.board-cell');
+            var cell = e.target.closest('.board-cell');
             if (!cell) return;
             if (cell.classList.contains('header')) return;
             if (gameStatus !== 'started') {
@@ -733,10 +617,10 @@
                 return;
             }
 
-            const boardItem = cell.closest('[id^="public-board-item-"]');
+            var boardItem = cell.closest('[id^="public-board-item-"]');
             if (!boardItem) return;
 
-            const match = boardItem.id.match(/^public-board-item-(.+)$/);
+            var match = boardItem.id.match(/^public-board-item-(.+)$/);
             if (!match) return;
             if (match[1] === TEAM_COLOR) {
                 showToast(_('error.cannot_bomb_self'), 'error');
@@ -746,21 +630,20 @@
             pendingBombTarget = match[1];
             pendingBombCoord = COLS[parseInt(cell.dataset.col)] + (parseInt(cell.dataset.row) + 1);
 
-            document.getElementById('bomb-confirm-content').innerHTML = `
-                <p>${_('bomb_confirm.title', {target: match[1]})}</p>
-                <div class="coord-display">${pendingBombCoord}</div>
-                <div class="bomb-confirm-actions">
-                    <button onclick="confirmBomb()" class="btn btn-primary">${_('bomb_confirm.button')}</button>
-                    <button onclick="closeBombConfirm()" class="btn btn-danger">${_('bomb_confirm.cancel')}</button>
-                </div>
-            `;
+            document.getElementById('bomb-confirm-content').innerHTML =
+                '<p>' + _('bomb_confirm.title', {target: match[1]}) + '</p>' +
+                '<div class="coord-display">' + pendingBombCoord + '</div>' +
+                '<div class="bomb-confirm-actions">' +
+                    '<button onclick="confirmBomb()" class="btn btn-primary">' + _('bomb_confirm.button') + '</button>' +
+                    '<button onclick="closeBombConfirm()" class="btn btn-danger">' + _('bomb_confirm.cancel') + '</button>' +
+                '</div>';
             document.getElementById('bomb-confirm').classList.add('active');
         });
 
         function showModal(imgEl, caption) {
-            const modal = document.getElementById('modal');
-            const modalImg = document.getElementById('modal-img');
-            const modalCaption = document.getElementById('modal-caption');
+            var modal = document.getElementById('modal');
+            var modalImg = document.getElementById('modal-img');
+            var modalCaption = document.getElementById('modal-caption');
             modalImg.src = imgEl.src;
             modalCaption.textContent = caption;
             modal.classList.add('active');
@@ -771,179 +654,150 @@
         }
 
         function renderActions() {
-            const actionsEl = document.getElementById('actions');
-            
+            var actionsEl = document.getElementById('actions');
+
             if (gameStatus === 'ended') {
                 actionsEl.innerHTML = '<p>' + _('action.game_ended') + '</p>';
                 return;
             }
 
-            let html = '';
+            var html = '';
 
             if (gameStatus === 'waiting') {
-                html += `
-                    <div class="action-group">
-                        <h3>${_('action.ship.heading')}</h3>
-                        <button class="btn btn-primary" onclick="placeAllShips()">${_('action.ship.auto')}</button>
-                        <div class="action-inputs">
-                            <input type="text" id="coord-input" placeholder="${_('action.ship.coord_placeholder')}">
-                            <select id="ship-type">
-                                <option value="airplane_carrier">${_('action.ship.type_airplane')}</option>
-                                <option value="battleship">${_('action.ship.type_battleship')}</option>
-                                <option value="torpedo_hunter">${_('action.ship.type_torpedo')}</option>
-                                <option value="patrol_boat">${_('action.ship.type_patrol')}</option>
-                            </select>
-                            <select id="direction">
-                                <option value="horizontal">${_('action.ship.dir_horizontal')}</option>
-                                <option value="vertical">${_('action.ship.dir_vertical')}</option>
-                            </select>
-                            <button class="btn btn-primary" onclick="placeShip()">${_('action.ship.place')}</button>
-                        </div>
-                        <div class="action-inputs">
-                            <input type="text" id="remove-coord" placeholder="${_('action.ship.remove_placeholder')}">
-                            <button class="btn btn-danger" onclick="removeShip()">${_('action.ship.remove')}</button>
-                        </div>
-                    </div>
-                `;
+                html +=
+                    '<div class="action-group">' +
+                        '<h3>' + _('action.ship.heading') + '</h3>' +
+                        '<button class="btn btn-primary" onclick="placeAllShips()">' + _('action.ship.auto') + '</button>' +
+                        '<div class="action-inputs">' +
+                            '<input type="text" id="coord-input" placeholder="' + _('action.ship.coord_placeholder') + '">' +
+                            '<select id="ship-type">' +
+                                '<option value="airplane_carrier">' + _('action.ship.type_airplane') + '</option>' +
+                                '<option value="battleship">' + _('action.ship.type_battleship') + '</option>' +
+                                '<option value="torpedo_hunter">' + _('action.ship.type_torpedo') + '</option>' +
+                                '<option value="patrol_boat">' + _('action.ship.type_patrol') + '</option>' +
+                            '</select>' +
+                            '<select id="direction">' +
+                                '<option value="horizontal">' + _('action.ship.dir_horizontal') + '</option>' +
+                                '<option value="vertical">' + _('action.ship.dir_vertical') + '</option>' +
+                            '</select>' +
+                            '<button class="btn btn-primary" onclick="placeShip()">' + _('action.ship.place') + '</button>' +
+                        '</div>' +
+                        '<div class="action-inputs">' +
+                            '<input type="text" id="remove-coord" placeholder="' + _('action.ship.remove_placeholder') + '">' +
+                            '<button class="btn btn-danger" onclick="removeShip()">' + _('action.ship.remove') + '</button>' +
+                        '</div>' +
+                    '</div>';
             }
 
             if (gameStatus === 'started') {
-                html += `
-                    <div class="action-group">
-                        <h3>${_('action.bomb.heading')}</h3>
-                        <div class="action-inputs">
-                            <select id="target-team">
-                                <option value="">${_('action.bomb.select_target')}</option>
-                            </select>
-                            <input type="text" id="bomb-coord" placeholder="${_('action.bomb.coord_placeholder')}" onkeypress="if(event.key==='Enter')throwBomb()">
-                            <button class="btn btn-primary" onclick="throwBomb()">${_('action.bomb.throw')}</button>
-                        </div>
-                    </div>
-                    <div class="action-group">
-                        <h3>${_('action.code.heading')}</h3>
-                        <div class="action-inputs">
-                            <input type="number" id="code-loc" placeholder="${_('action.code.location_placeholder')}" onkeypress="if(event.key==='Enter')redeemCode()">
-                            <input type="text" id="code-val" placeholder="${_('action.code.value_placeholder')}" onkeypress="if(event.key==='Enter')redeemCode()">
-                            <button class="btn btn-primary" onclick="redeemCode()">${_('action.code.redeem')}</button>
-                        </div>
-                    </div>
-                `;
+                html +=
+                    '<div class="action-group">' +
+                        '<h3>' + _('action.bomb.heading') + '</h3>' +
+                        '<div class="action-inputs">' +
+                            '<select id="target-team">' +
+                                '<option value="">' + _('action.bomb.select_target') + '</option>' +
+                            '</select>' +
+                            '<input type="text" id="bomb-coord" placeholder="' + _('action.bomb.coord_placeholder') + '" onkeypress="if(event.key===\'Enter\')throwBomb()">' +
+                            '<button class="btn btn-primary" onclick="throwBomb()">' + _('action.bomb.throw') + '</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="action-group">' +
+                        '<h3>' + _('action.code.heading') + '</h3>' +
+                        '<div class="action-inputs">' +
+                            '<input type="number" id="code-loc" placeholder="' + _('action.code.location_placeholder') + '" onkeypress="if(event.key===\'Enter\')redeemCode()">' +
+                            '<input type="text" id="code-val" placeholder="' + _('action.code.value_placeholder') + '" onkeypress="if(event.key===\'Enter\')redeemCode()">' +
+                            '<button class="btn btn-primary" onclick="redeemCode()">' + _('action.code.redeem') + '</button>' +
+                        '</div>' +
+                    '</div>';
             }
 
             actionsEl.innerHTML = html;
 
-            // Populate target team dropdown
-            if (gameStatus === 'started') {
-                loadTargetTeams();
+            if (gameStatus === 'started' && lastTeamsData) {
+                renderTargetTeams(lastTeamsData);
             }
         }
 
-        async function loadTargetTeams() {
-            const state = await apiCall('/api/state');
-            if (!state || !state.teams) return;
-
-            const select = document.getElementById('target-team');
+        function renderTargetTeams(allTeams) {
+            var select = document.getElementById('target-team');
+            if (!select) return;
             select.innerHTML = '<option value="">' + _('action.bomb.select_target') + '</option>';
-            
-            state.teams.forEach(team => {
-                if (team.color !== TEAM_COLOR) {
-                    const opt = document.createElement('option');
-                    opt.value = team.color;
-                    opt.textContent = _('action.bomb.team_option', {name: team.name, color: team.color});
+            allTeams.forEach(function (team) {
+                if (team.c !== TEAM_COLOR) {
+                    var opt = document.createElement('option');
+                    opt.value = team.c;
+                    opt.textContent = _('action.bomb.team_option', {name: team.n, color: team.c});
                     select.appendChild(opt);
                 }
             });
         }
 
         async function placeAllShips() {
-            const result = await apiCall('/api/quick/place_all_ships', 'POST', { team_color: TEAM_COLOR });
+            var result = await apiCall('/api/quick/place_all_ships', 'POST', { team_color: TEAM_COLOR });
             showToast(result.message, result.success ? 'success' : 'error');
-            updateStats();
-            refreshBoards();
         }
 
         async function placeShip() {
-            const coord = document.getElementById('coord-input').value || 'A1';
-            const shipType = document.getElementById('ship-type').value;
-            const direction = document.getElementById('direction').value;
-
-            const result = await apiCall('/api/execute', 'POST', {
+            var coord = document.getElementById('coord-input').value || 'A1';
+            var shipType = document.getElementById('ship-type').value;
+            var direction = document.getElementById('direction').value;
+            var result = await apiCall('/api/execute', 'POST', {
                 team_color: TEAM_COLOR,
                 command: 'place',
                 args: { ship_type: shipType, coordinate: coord, direction: direction }
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            updateStats();
-            refreshBoards();
         }
 
         async function removeShip() {
-            const coord = document.getElementById('remove-coord').value;
-            if (!coord) {
-                showToast(_('error.enter_coord'), 'error');
-                return;
-            }
+            var coord = document.getElementById('remove-coord').value;
+            if (!coord) { showToast(_('error.enter_coord'), 'error'); return; }
 
-            const coordUpper = coord.toUpperCase().trim();
-            const colLetter = coordUpper.charAt(0);
-            const col = colLetter.charCodeAt(0) - 65;
-            const row = parseInt(coordUpper.substring(1)) - 1;
+            var coordUpper = coord.toUpperCase().trim();
+            var col = coordUpper.charCodeAt(0) - 65;
+            var row = parseInt(coordUpper.substring(1)) - 1;
 
             if (col < 0 || col > 9 || row < 0 || row > 9) {
                 showToast(_('error.invalid_coord'), 'error');
                 return;
             }
 
-            const result = await apiCall('/api/quick/remove_ship', 'POST', {
-                team_color: TEAM_COLOR,
-                row: row,
-                col: col
+            var result = await apiCall('/api/quick/remove_ship', 'POST', {
+                team_color: TEAM_COLOR, row: row, col: col
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            updateStats();
-            refreshBoards();
         }
 
         async function throwBomb() {
-            const target = document.getElementById('target-team').value;
-            const coord = document.getElementById('bomb-coord').value;
+            var target = document.getElementById('target-team').value;
+            var coord = document.getElementById('bomb-coord').value;
 
-            if (!target) {
-                showToast(_('error.select_target'), 'error');
-                return;
-            }
-            if (!coord) {
-                showToast(_('error.enter_coord'), 'error');
-                return;
-            }
+            if (!target) { showToast(_('error.select_target'), 'error'); return; }
+            if (!coord) { showToast(_('error.enter_coord'), 'error'); return; }
 
-            const result = await apiCall('/api/execute', 'POST', {
+            var result = await apiCall('/api/execute', 'POST', {
                 team_color: TEAM_COLOR,
                 command: 'bomb',
                 args: { target: target, coordinate: coord }
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            updateStats();
-            refreshBoards();
         }
 
         async function confirmBomb() {
             document.getElementById('bomb-confirm').classList.remove('active');
             if (!pendingBombTarget || !pendingBombCoord) return;
 
-            const target = pendingBombTarget;
-            const coord = pendingBombCoord;
+            var target = pendingBombTarget;
+            var coord = pendingBombCoord;
             pendingBombTarget = null;
             pendingBombCoord = null;
 
-            const result = await apiCall('/api/execute', 'POST', {
+            var result = await apiCall('/api/execute', 'POST', {
                 team_color: TEAM_COLOR,
                 command: 'bomb',
                 args: { target: target, coordinate: coord }
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            updateStats();
-            refreshBoards();
         }
 
         function closeBombConfirm() {
@@ -953,37 +807,70 @@
         }
 
         async function redeemCode() {
-            const locNum = document.getElementById('code-loc').value;
-            const code = document.getElementById('code-val').value;
+            var locNum = document.getElementById('code-loc').value;
+            var code = document.getElementById('code-val').value;
 
-            if (!locNum) {
-                showToast(_('error.enter_location'), 'error');
-                return;
-            }
-            if (!code) {
-                showToast(_('error.enter_code'), 'error');
-                return;
-            }
+            if (!locNum) { showToast(_('error.enter_location'), 'error'); return; }
+            if (!code) { showToast(_('error.enter_code'), 'error'); return; }
 
-            const result = await apiCall('/api/execute', 'POST', {
+            var result = await apiCall('/api/execute', 'POST', {
                 team_color: TEAM_COLOR,
                 command: 'code',
                 args: { location_number: parseInt(locNum), code: code }
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            updateStats();
         }
 
         function switchLanguage(lang) {
             window.location.href = window.location.pathname + '?lang=' + lang;
         }
 
-        // Initial load
-        loadGameStatus();
-        loadTeam();
+        // SSE: pushes state updates when events occur
+        var currentES = null;
+        function connectSSE() {
+            if (currentES) currentES.close();
+            var es = new EventSource('/api/events/stream?team_token=' + encodeURIComponent(TEAM_TOKEN));
+            currentES = es;
+            es.onmessage = function (event) {
+                var data = JSON.parse(event.data);
+                if (data.error) {
+                    document.getElementById('team-header').innerHTML =
+                        '<div class="team-info">' +
+                            '<span class="team-color-dot" style="background:' + TEAM_COLOR + '"></span>' +
+                            '<span class="team-name">' + _('team.not_joined', {color: TEAM_COLOR}) + '</span>' +
+                        '</div>';
+                    return;
+                }
+                renderState(data);
+            };
+            es.onerror = function () {
+                es.close();
+                setTimeout(connectSSE, 5000);
+            };
+        }
 
-        // Refresh boards every 2 seconds (reduced from 1 second to reduce flickering)
-        setInterval(refreshBoards, 2000);
+        // Fetch initial state directly (so page renders even without SSE)
+        apiCall('/api/team-state').then(function (data) {
+            if (data && !data.error) {
+                renderState(data);
+            } else {
+                document.getElementById('team-header').innerHTML =
+                    '<div class="team-info">' +
+                        '<span class="team-color-dot" style="background:' + TEAM_COLOR + '"></span>' +
+                        '<span class="team-name">' + _('team.not_joined', {color: TEAM_COLOR}) + '</span>' +
+                    '</div>';
+            }
+        });
+
+        // SSE for subsequent updates
+        connectSSE();
+
+        // Fallback: reconnect SSE if it ever silently dies
+        setInterval(function () {
+            if (currentES && currentES.readyState === EventSource.CLOSED) {
+                connectSSE();
+            }
+        }, 30000);
     </script>
 </body>
 </html>
