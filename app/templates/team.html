@@ -338,7 +338,7 @@
         <div class="public-boards-section">
             <h2>{{ tr.board.public.heading }}</h2>
             <div class="public-boards-grid" id="public-boards-grid">
-                {{ tr.status.loading }}
+                <!-- {{ tr.status.loading }} -->
             </div>
         </div>
 
@@ -475,12 +475,12 @@
                         cell.classList.add('ship');
                         if (cellData.k) {
                             cell.classList.add('sunk');
-                            cell.style.backgroundColor = getRgba(boardColor, 0.75);
+                            cell.style.backgroundColor = getRgba(boardColor, 0.90);
                         } else {
-                            cell.style.backgroundColor = getRgba(boardColor, 0.55);
+                            cell.style.backgroundColor = getRgba(boardColor, 0.70);
                         }
                     } else if (status === 'h') {
-                        cell.style.backgroundColor = getRgba(boardColor, 0.25);
+                        cell.style.backgroundColor = getRgba(boardColor, 0.40);
                     }
 
                     if (status === 'h' && attackerColor) {
@@ -551,7 +551,7 @@
             document.getElementById('sunk-count').textContent = myTeam.sk;
 
             // Page background: very light tint of own team's color
-            document.body.style.backgroundColor = getRgba(TEAM_COLOR, 0.06);
+            document.body.style.backgroundColor = getRgba(TEAM_COLOR, 0.12);
 
             // Private board
             renderGrid('private-board', myTeam.g, true, TEAM_COLOR);
@@ -575,7 +575,7 @@
                     boardItem = document.createElement('div');
                     boardItem.className = 'public-board-item';
                     boardItem.id = 'public-board-item-' + team.c;
-                    boardItem.style.backgroundColor = getRgba(team.c, 0.1);
+                    boardItem.style.backgroundColor = getRgba(team.c, 0.3);
                     boardItem.style.borderRadius = '8px';
                     boardItem.innerHTML =
                         '<p>' + _('board.public.team_label', {name: team.n, color: team.c}) + '</p>' +
@@ -585,7 +585,7 @@
                     var nameEl = boardItem.querySelector('p');
                     var expected = _('board.public.team_label', {name: team.n, color: team.c});
                     if (nameEl && nameEl.textContent !== expected) nameEl.textContent = expected;
-                    boardItem.style.backgroundColor = getRgba(team.c, 0.1);
+                    boardItem.style.backgroundColor = getRgba(team.c, 0.3);
                 }
                 renderGrid(boardId, team.g, false, team.c);
             });
