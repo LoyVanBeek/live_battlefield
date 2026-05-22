@@ -184,6 +184,7 @@
             flex: 0 0 auto;
             text-align: center;
             min-height: 380px; /* Prevent layout shift during refresh */
+            padding: 10px;
         }
         .public-board-item p {
             margin-bottom: 8px;
@@ -262,44 +263,10 @@
             color: #333;
         }
         .board-cell.ship {
-            background: #222;
+            /* background set inline by JS with team color */
         }
         .board-cell.ship.sunk {
-            background: #8B0000;
-        }
-        .board-cell .marker {
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .board-cell .hit {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-        }
-        .board-cell .miss {
-            width: 18px;
-            height: 18px;
-            position: relative;
-        }
-        .board-cell .miss::before,
-        .board-cell .miss::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 14px;
-            height: 3px;
-            background-color: inherit;
-            border-radius: 1px;
-        }
-        .board-cell .miss::before {
-            transform: translate(-50%, -50%) rotate(45deg);
-        }
-        .board-cell .miss::after {
-            transform: translate(-50%, -50%) rotate(-45deg);
+            /* background set inline by JS with team color */
         }
 
         /* Clickable cells on public boards */
@@ -411,6 +378,27 @@
         };
         const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
         const TR = {{ tr_json|safe }};
+        function getRgba(color, alpha) {
+            var rgb = TEAM_COLORS_RGB[color];
+            if (!rgb) return 'rgba(128,128,128,' + alpha + ')';
+            return 'rgba(' + rgb.slice(4, -1) + ',' + alpha + ')';
+        }
+        function createCross(color) {
+            var container = document.createElement('div');
+            container.style.cssText = 'position:relative;width:22px;height:22px;';
+            var line1 = document.createElement('div');
+            line1.style.cssText = 'position:absolute;top:50%;left:50%;width:20px;height:3px;background:' + (TEAM_COLORS_RGB[color] || 'gray') + ';transform:translate(-50%,-50%) rotate(45deg);border-radius:1px;';
+            container.appendChild(line1);
+            var line2 = document.createElement('div');
+            line2.style.cssText = 'position:absolute;top:50%;left:50%;width:20px;height:3px;background:' + (TEAM_COLORS_RGB[color] || 'gray') + ';transform:translate(-50%,-50%) rotate(-45deg);border-radius:1px;';
+            container.appendChild(line2);
+            return container;
+        }
+        function createDot(color) {
+            var dot = document.createElement('div');
+            dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:' + (TEAM_COLORS_RGB[color] || 'gray') + ';';
+            return dot;
+        }
         function _(key, params) {
             let val = TR;
             for (const part of key.split('.')) {
@@ -436,7 +424,7 @@
         // Cache for board grids to avoid rebuilding
         const boardGridCache = new Map();
 
-        function renderGrid(containerId, gridData, includeShips) {
+        function renderGrid(containerId, gridData, includeShips, boardColor) {
             const container = document.getElementById(containerId);
             let grid = boardGridCache.get(containerId);
             if (!grid) {
@@ -477,26 +465,28 @@
                     if (!cell) continue;
 
                     cell.className = 'board-cell';
-
-                    if (includeShips && cellData.p) {
-                        cell.classList.add('ship');
-                        if (cellData.k) cell.classList.add('sunk');
-                    }
-
+                    cell.style.backgroundColor = '';
                     while (cell.firstChild) cell.removeChild(cell.firstChild);
 
                     const status = cellData.s;
-                    const color = cellData.a || 'gray';
-                    if (status === 'h') {
-                        const marker = document.createElement('div');
-                        marker.className = 'hit';
-                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
-                        cell.appendChild(marker);
-                    } else if (status === 'm') {
-                        const marker = document.createElement('div');
-                        marker.className = 'miss';
-                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
-                        cell.appendChild(marker);
+                    const attackerColor = cellData.a || null;
+
+                    if (includeShips && cellData.p) {
+                        cell.classList.add('ship');
+                        if (cellData.k) {
+                            cell.classList.add('sunk');
+                            cell.style.backgroundColor = getRgba(boardColor, 0.75);
+                        } else {
+                            cell.style.backgroundColor = getRgba(boardColor, 0.55);
+                        }
+                    } else if (status === 'h') {
+                        cell.style.backgroundColor = getRgba(boardColor, 0.25);
+                    }
+
+                    if (status === 'h' && attackerColor) {
+                        cell.appendChild(createCross(attackerColor));
+                    } else if (status === 'm' && attackerColor) {
+                        cell.appendChild(createDot(attackerColor));
                     }
                 }
             }
@@ -560,8 +550,11 @@
             document.getElementById('ship-count').textContent = myTeam.sp;
             document.getElementById('sunk-count').textContent = myTeam.sk;
 
+            // Page background: very light tint of own team's color
+            document.body.style.backgroundColor = getRgba(TEAM_COLOR, 0.06);
+
             // Private board
-            renderGrid('private-board', myTeam.g, true);
+            renderGrid('private-board', myTeam.g, true, TEAM_COLOR);
 
             // Public boards
             renderPublicBoards(allTeams);
@@ -582,6 +575,8 @@
                     boardItem = document.createElement('div');
                     boardItem.className = 'public-board-item';
                     boardItem.id = 'public-board-item-' + team.c;
+                    boardItem.style.backgroundColor = getRgba(team.c, 0.1);
+                    boardItem.style.borderRadius = '8px';
                     boardItem.innerHTML =
                         '<p>' + _('board.public.team_label', {name: team.n, color: team.c}) + '</p>' +
                         '<div id="' + boardId + '"></div>';
@@ -590,8 +585,9 @@
                     var nameEl = boardItem.querySelector('p');
                     var expected = _('board.public.team_label', {name: team.n, color: team.c});
                     if (nameEl && nameEl.textContent !== expected) nameEl.textContent = expected;
+                    boardItem.style.backgroundColor = getRgba(team.c, 0.1);
                 }
-                renderGrid(boardId, team.g, false);
+                renderGrid(boardId, team.g, false, team.c);
             });
 
             // Remove stale boards
