@@ -338,7 +338,7 @@
         </div>
 
         <!-- Public Boards -->
-        <div class="public-boards-section">
+        <div class="public-boards-section" id="public-boards-section">
             <h2>{{ tr.board.public.heading }}</h2>
             <div class="public-boards-grid" id="public-boards-grid">
                 <!-- {{ tr.status.loading }} -->
@@ -354,6 +354,10 @@
         <div class="board-section">
             <h2>{{ tr.board.private.heading }}</h2>
             <div id="private-board"></div>
+        </div>
+
+        <!-- Ship Actions (bottom of page during PREPARING) -->
+        <div class="actions" id="ship-actions" style="display:none">
         </div>
     </div>
 
@@ -569,6 +573,16 @@
 
             // Actions
             renderActions();
+
+            // Hide sections during preparing
+            var publicSection = document.getElementById('public-boards-section');
+            if (publicSection) {
+                publicSection.style.display = gameStatus === 'preparing' ? 'none' : '';
+            }
+            var actionsSection = document.getElementById('actions');
+            if (actionsSection) {
+                actionsSection.style.display = gameStatus === 'preparing' ? 'none' : '';
+            }
         }
 
         function renderPublicBoards(allTeams) {
@@ -679,16 +693,19 @@
 
         function renderActions() {
             var actionsEl = document.getElementById('actions');
+            var shipActionsEl = document.getElementById('ship-actions');
 
             if (gameStatus === 'ended') {
                 actionsEl.innerHTML = '<p>' + _('action.game_ended') + '</p>';
+                shipActionsEl.style.display = 'none';
                 return;
             }
 
             var html = '';
+            var shipHtml = '';
 
-            if (gameStatus === 'waiting') {
-                html +=
+            if (gameStatus === 'preparing') {
+                shipHtml +=
                     '<div class="action-group">' +
                         '<h3>' + _('action.ship.heading') + '</h3>' +
                         '<button class="btn btn-primary" onclick="placeAllShips()">' + _('action.ship.auto') + '</button>' +
@@ -736,6 +753,9 @@
             }
 
             actionsEl.innerHTML = html;
+
+            shipActionsEl.innerHTML = shipHtml;
+            shipActionsEl.style.display = shipHtml ? 'block' : 'none';
 
             if (gameStatus === 'started' && lastTeamsData) {
                 renderTargetTeams(lastTeamsData);

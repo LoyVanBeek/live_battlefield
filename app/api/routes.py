@@ -916,7 +916,7 @@ async def execute_command(
         if winner is not None and state.status == GameStatusField.STARTED:
             from app.database import GameStatus
 
-            end_event = GameEndedEvent()
+            end_event = GameEndedEvent(winner=winner.name)
             await save_event(db, end_event)
             await update_game_settings(db, status=GameStatus.ENDED)
             state.status = GameStatusField.ENDED
@@ -1534,16 +1534,23 @@ async def start_game(
     if state.status == GameStatusField.ENDED:
         return {"success": False, "message": "Game has ended! Reset first."}
 
-    if len(locations) == 0:
-        return {
-            "success": False,
-            "message": "Cannot start game - no locations defined!",
-        }
-
     if len(state.teams) < 2:
         return {
             "success": False,
             "message": f"Cannot start game - need at least 2 teams, currently have {len(state.teams)}",
+        }
+
+    teams_without_ships = [t.name for t in state.teams.values() if not t.has_all_ships()]
+    if teams_without_ships:
+        return {
+            "success": False,
+            "message": f"Cannot start game - not all teams have placed all ships: {', '.join(teams_without_ships)}",
+        }
+
+    if len(locations) == 0:
+        return {
+            "success": False,
+            "message": "Cannot start game - no locations defined!",
         }
 
     event = GameStartedEvent()

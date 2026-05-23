@@ -496,14 +496,17 @@
                 // Check preconditions
                 const hasLocations = status.locations_placed > 0;
                 const hasEnoughTeams = status.total_teams >= 2;
-                const canStart = hasLocations && hasEnoughTeams;
+                const allShipsPlaced = status.teams_with_all_ships === status.total_teams;
+                const canStart = hasLocations && hasEnoughTeams && allShipsPlaced;
                 
                 btnStart.disabled = !canStart;
                 if (!canStart) {
-                    if (!hasLocations) {
-                        btnStart.title = `Need at least 1 location (currently ${status.locations_placed})`;
-                    } else {
+                    if (!hasEnoughTeams) {
                         btnStart.title = `Need at least 2 teams (currently ${status.total_teams})`;
+                    } else if (!allShipsPlaced) {
+                        btnStart.title = `Not all teams have placed ships (${status.teams_with_all_ships}/${status.total_teams})`;
+                    } else if (!hasLocations) {
+                        btnStart.title = `Need at least 1 location (currently ${status.locations_placed})`;
                     }
                 } else {
                     btnStart.title = 'Start the game';
@@ -665,7 +668,7 @@
                             </div>
                             <div class="team-stats">
                                 <span class="team-bombs">💣 <span class="bombs-count">${team.bombs}</span></span>
-                                <span class="team-ships">🚢 <span class="ships-count">${team.ships_remaining}</span>/${team.total_ships}</span>
+                                <span class="team-ships">🚢 <span class="ships-count">${gameStatus === 'waiting' ? team.ships_placed : team.ships_remaining}</span>/${team.total_ships}</span>
                                 <span class="team-sunk">💥 <span class="sunk-count">${team.ships_sunk}</span> sunk</span>
                             </div>
                             <div class="team-board" id="team-board-${team.color}">
@@ -703,8 +706,9 @@
                         }
                         
                         const shipsElement = card.querySelector('.ships-count');
-                        if (shipsElement && shipsElement.textContent !== String(team.ships_remaining)) {
-                            shipsElement.textContent = team.ships_remaining;
+                        const shipsDisplay = gameStatus === 'waiting' ? team.ships_placed : team.ships_remaining;
+                        if (shipsElement && shipsElement.textContent !== String(shipsDisplay)) {
+                            shipsElement.textContent = shipsDisplay;
                         }
                         
                         const sunkElement = card.querySelector('.sunk-count');

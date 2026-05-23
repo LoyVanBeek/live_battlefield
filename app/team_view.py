@@ -15,8 +15,8 @@ async def get_team_view(team_token: str, db: AsyncSession) -> dict:
     result = {
         "s": state.status.value,
         "ec": len(events),
-        "t": _serialize_team(state.teams[color], private=True),
-        "ts": [_serialize_team(t, private=False) for t in state.teams.values()],
+        "t": _serialize_team(state.teams[color], private=True, status=state.status.value),
+        "ts": [_serialize_team(t, private=False, status=state.status.value) for t in state.teams.values()],
     }
     winner = state.get_winner()
     if winner and state.status.value == "ended":
@@ -24,12 +24,12 @@ async def get_team_view(team_token: str, db: AsyncSession) -> dict:
     return result
 
 
-def _serialize_team(team, private: bool) -> dict:
+def _serialize_team(team, private: bool, status: str = "preparing") -> dict:
     result: dict = {
         "n": team.name,
         "c": team.color,
         "b": team.bombs,
-        "sp": sum(SHIP_COUNTS.values()) - len(team.get_sunk_ships()),
+        "sp": sum(team.placed_ship_types.values()) if status == "preparing" else sum(SHIP_COUNTS.values()) - len(team.get_sunk_ships()),
         "sk": len(team.get_sunk_ships()),
     }
     result["g"] = _serialize_grid(team, include_ships=private)
