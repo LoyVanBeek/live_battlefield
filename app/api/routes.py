@@ -1,6 +1,10 @@
 from fastapi import FastAPI, Depends, Request, HTTPException, Query
 from fastapi.responses import Response, HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from contextlib import asynccontextmanager
+import logging
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
@@ -97,7 +101,20 @@ async def verify_team_or_admin_token(
     raise HTTPException(status_code=404)
 
 
-app = FastAPI(title="Live Battlefield API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        async with api_session_maker() as db:
+            from app.models import get_or_create_game_settings
+            game_settings = await get_or_create_game_settings(db)
+            if game_settings.admin_token:
+                logger.info("Admin panel: /admin/%s", game_settings.admin_token)
+    except Exception:
+        logger.warning("Could not check admin token on startup")
+    yield
+
+
+app = FastAPI(title="Live Battlefield API", lifespan=lifespan)
 
 templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 templates = Jinja2Templates(directory=templates_dir)
@@ -189,14 +206,7 @@ async def get_public_state(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_bootstrap(request: Request, db: AsyncSession = Depends(get_api_db)):
-    from app.models import get_or_create_game_settings
-
-    settings = await get_or_create_game_settings(db)
-    if settings.admin_token:
-        from fastapi.responses import RedirectResponse
-
-        return RedirectResponse(url=f"/admin/{settings.admin_token}")
+async def admin_bootstrap(request: Request):
     return templates.TemplateResponse(
         request, "admin_create.html", {"request": request}
     )
@@ -252,6 +262,7 @@ async def admin_create_game(db: AsyncSession = Depends(get_api_db)):
     token = generate_team_token()
     await reset_game_settings(db)
     await set_admin_token(db, token)
+    logger.info("Admin panel created: /admin/%s", token)
     return {"token": token}
 
 

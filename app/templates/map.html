@@ -179,13 +179,19 @@
         
         async function loadLocations() {
             try {
-                const resp = await fetch('/api/locations');
-                const data = await resp.json();
-                
-                if (data.locations && data.locations.length > 0) {
+                const [locResp, stateResp] = await Promise.all([
+                    fetch('/api/locations'),
+                    fetch('/api/public-state')
+                ]);
+                const locData = await locResp.json();
+                const stateData = await stateResp.json();
+
+                if (stateData.status === 'waiting') return;
+
+                if (locData.locations && locData.locations.length > 0) {
                     const bounds = [];
                     
-                    data.locations.forEach(loc => {
+                    locData.locations.forEach(loc => {
                         bounds.push([loc.latitude, loc.longitude]);
                         
                         const marker = L.marker([loc.latitude, loc.longitude], {
