@@ -69,6 +69,7 @@
     "enter_code": "Enter code!",
     "game_not_started": "Game is not started!",
     "cannot_bomb_self": "Cannot bomb yourself!",
+    "no_bombs": "No bombs left! Redeem codes to get more!",
     "fetch_prefix": "Error: "
   },
   "lang": {

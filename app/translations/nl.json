@@ -69,6 +69,7 @@
     "enter_code": "Voer code in!",
     "game_not_started": "Spel is niet gestart!",
     "cannot_bomb_self": "Je kunt jezelf niet bombarderen!",
+    "no_bombs": "Geen bommen over! Wis codes in om meer te krijgen!",
     "fetch_prefix": "Fout: "
   },
   "lang": {

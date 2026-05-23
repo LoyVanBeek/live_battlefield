@@ -431,6 +431,7 @@
         let pendingBombTarget = null;
         let pendingBombCoord = null;
         let winnerName = null;
+        let currentBombCount = 0;
 
         // Last rendered state for target team dropdown
         let lastTeamsData = null;
@@ -561,6 +562,7 @@
             // Team header
             document.getElementById('team-color-dot').style.background = myTeam.c;
             document.getElementById('team-name').textContent = myTeam.n;
+            currentBombCount = myTeam.b;
             updateBombCountDisplay(myTeam.b);
             document.getElementById('ship-count').textContent = myTeam.sp;
             document.getElementById('sunk-count').textContent = myTeam.sk;
@@ -662,6 +664,11 @@
             if (!match) return;
             if (match[1] === TEAM_COLOR) {
                 showToast(_('error.cannot_bomb_self'), 'error');
+                return;
+            }
+
+            if (currentBombCount <= 0) {
+                showToast(_('error.no_bombs'), 'error');
                 return;
             }
 
