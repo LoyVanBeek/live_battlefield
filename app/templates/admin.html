@@ -659,6 +659,7 @@
                                 <span class="team-name">
                                     <span class="team-color-dot" style="background: ${team.color}"></span>
                                     <span class="team-name-text">${team.name}</span>
+                                    <span class="trophy-icon" id="trophy-${team.color}" style="display:none">🏆</span>
                                     ${aiIndicator}
                                 </span>
                             </div>
@@ -671,7 +672,7 @@
                             </div>
                             <a href="/team/${team.token}" class="team-play-link">🎮 Play as ${team.color}</a>
                             <button class="btn btn-primary" style="margin-top: 10px;" onclick="copyTeamUrl('${team.token}', '${team.color}')">📋 Copy URL</button>
-                            <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')">💣 +5 Bombs</button>
+                            <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')" id="add-bombs-${team.color}">💣 +5 Bombs</button>
                             <div class="ai-buttons" id="ai-buttons-${team.color}"></div>
                         `;
                         grid.appendChild(card);
@@ -722,6 +723,19 @@
                             } else {
                                 aiButtonsContainer.innerHTML = '';
                             }
+                        }
+
+                        // Trophy icon on winning team
+                        const trophyEl = document.getElementById('trophy-' + team.color);
+                        if (trophyEl) {
+                            const isWinner = state.winner && state.winner.color === team.color;
+                            trophyEl.style.display = isWinner ? 'inline' : 'none';
+                        }
+
+                        // Disable bombs button when game ended
+                        const bombsBtn = document.getElementById('add-bombs-' + team.color);
+                        if (bombsBtn) {
+                            bombsBtn.disabled = gameStatus === 'ended';
                         }
                     }
                     
@@ -949,6 +963,7 @@
 
         // Refresh boards every 2 seconds (reduced from 1 second to reduce flickering)
         setInterval(() => {
+            loadGameStatus();
             loadPublicBoards();
             loadTeams();
         }, 2000);

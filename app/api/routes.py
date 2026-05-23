@@ -914,8 +914,11 @@ async def execute_command(
         # Auto-end game if only one team remains
         winner = state.get_winner()
         if winner is not None and state.status == GameStatusField.STARTED:
+            from app.database import GameStatus
+
             end_event = GameEndedEvent()
             await save_event(db, end_event)
+            await update_game_settings(db, status=GameStatus.ENDED)
             state.status = GameStatusField.ENDED
             result["message"] += f" 🏆 {winner.name} ({winner.color}) wins!"
 
