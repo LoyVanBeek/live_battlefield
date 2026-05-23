@@ -668,7 +668,12 @@
             }
 
             if (currentBombCount <= 0) {
-                showToast(_('error.no_bombs'), 'error');
+                document.getElementById('bomb-confirm-content').innerHTML =
+                    '<p>' + _('error.no_bombs') + '</p>' +
+                    '<div class="bomb-confirm-actions">' +
+                        '<button onclick="closeBombConfirm()" class="btn btn-primary">OK</button>' +
+                    '</div>';
+                document.getElementById('bomb-confirm').classList.add('active');
                 return;
             }
 
