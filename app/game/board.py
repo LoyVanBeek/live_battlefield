@@ -173,7 +173,9 @@ def create_public_board_gif(events: list, team_color: str) -> bytes:
             last = frames[-1].copy()
             draw = ImageDraw.Draw(last)
             bar_h = 36
-            draw.rectangle((0, last.height - bar_h, last.width, last.height), fill=(0, 0, 0))
+            bar_color = COLOR_MAP.get(winner.color, (0, 0, 0))
+            y_center = (last.height - bar_h) // 2
+            draw.rectangle((0, y_center, last.width, y_center + bar_h), fill=bar_color)
             try:
                 font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
             except:
@@ -182,7 +184,7 @@ def create_public_board_gif(events: list, team_color: str) -> bytes:
             bbox = draw.textbbox((0, 0), text, font=font)
             tw = bbox[2] - bbox[0]
             th = bbox[3] - bbox[1]
-            draw.text(((last.width - tw) // 2, last.height - bar_h + (bar_h - th) // 2), text, fill="white", font=font)
+            draw.text(((last.width - tw) // 2, y_center + (bar_h - th) // 2), text, fill="white", font=font)
             frames[-1] = last
 
     buf = io.BytesIO()
