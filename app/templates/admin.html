@@ -664,7 +664,7 @@
                             </div>
                             <div class="team-stats">
                                 <span class="team-bombs">💣 <span class="bombs-count">${team.bombs}</span></span>
-                                <span class="team-ships">🚢 <span class="ships-count">${team.ships_placed}</span>/${team.total_ships}</span>
+                                <span class="team-ships">🚢 <span class="ships-count">${team.ships_remaining}</span>/${team.total_ships}</span>
                                 <span class="team-sunk">💥 <span class="sunk-count">${team.ships_sunk}</span> sunk</span>
                             </div>
                             <div class="team-board" id="team-board-${team.color}">
@@ -702,8 +702,8 @@
                         }
                         
                         const shipsElement = card.querySelector('.ships-count');
-                        if (shipsElement && shipsElement.textContent !== String(team.ships_placed)) {
-                            shipsElement.textContent = team.ships_placed;
+                        if (shipsElement && shipsElement.textContent !== String(team.ships_remaining)) {
+                            shipsElement.textContent = team.ships_remaining;
                         }
                         
                         const sunkElement = card.querySelector('.sunk-count');

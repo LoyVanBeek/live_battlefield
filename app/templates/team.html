@@ -420,6 +420,7 @@
         // Pending bomb state (set by clicking a public board cell)
         let pendingBombTarget = null;
         let pendingBombCoord = null;
+        let winnerName = null;
 
         // Last rendered state for target team dropdown
         let lastTeamsData = null;
@@ -539,7 +540,8 @@
                 badgeEl.textContent = _('status.started');
                 badgeEl.className = 'team-status-badge started';
             } else if (data.s === 'ended') {
-                badgeEl.textContent = _('status.ended');
+                winnerName = data.w || null;
+                badgeEl.textContent = winnerName ? _('status.ended') + ' 🏆 ' + winnerName : _('status.ended');
                 badgeEl.className = 'team-status-badge ended';
             } else {
                 badgeEl.textContent = _('status.waiting');
@@ -609,6 +611,10 @@
             var cell = e.target.closest('.board-cell');
             if (!cell) return;
             if (cell.classList.contains('header')) return;
+            if (gameStatus === 'ended') {
+                showToast(winnerName ? _('status.ended') + ' 🏆 ' + winnerName : _('status.ended'), 'error');
+                return;
+            }
             if (gameStatus !== 'started') {
                 showToast(_('error.game_not_started'), 'error');
                 return;

@@ -175,6 +175,7 @@ async def get_public_state(db: AsyncSession = Depends(get_api_db)):
                 "color": team.color,
                 "bombs": team.bombs,
                 "ships_placed": sum(team.placed_ship_types.values()),
+                "ships_remaining": sum(SHIP_COUNTS.values()) - len(team.get_sunk_ships()),
                 "ships_sunk": len(team.get_sunk_ships()),
                 "is_ai": ai is not None,
             }
@@ -487,6 +488,7 @@ async def get_game_state(db: AsyncSession = Depends(get_api_db)):
                 "color": team.color,
                 "bombs": team.bombs,
                 "ships_placed": sum(team.placed_ship_types.values()),
+                "ships_remaining": sum(SHIP_COUNTS.values()) - len(team.get_sunk_ships()),
                 "total_ships": sum(SHIP_COUNTS.values()),
                 "ships_sunk": len(team.get_sunk_ships()),
                 "is_destroyed": team.is_destroyed(),
@@ -705,7 +707,11 @@ async def execute_command(
 
     # Status-based checks
     if state.status == GameStatusField.ENDED:
-        return {"success": False, "message": "Game has ended! No more actions allowed."}
+        winner = state.get_winner()
+        msg = "Game has ended! No more actions allowed."
+        if winner:
+            msg = f"Game has ended! {winner.name} ({winner.color}) wins!"
+        return {"success": False, "message": msg}
 
     result = {"success": False, "message": ""}
 
@@ -804,6 +810,11 @@ async def execute_command(
             return result
 
         target = state.teams[target_color]
+        if target.is_destroyed():
+            result["message"] = f"Team {target_color} is already destroyed!"
+            team.bombs += 1
+            return result
+
         if (row, col) in target.bombed_cells:
             result["message"] = f"{coord} already bombed!"
             return result
@@ -875,6 +886,14 @@ async def execute_command(
                     )
                 except Exception as e:
                     print(f"Failed to send notification: {e}")
+
+        # Auto-end game if only one team remains
+        winner = state.get_winner()
+        if winner is not None and state.status == GameStatusField.STARTED:
+            end_event = GameEndedEvent()
+            await save_event(db, end_event)
+            state.status = GameStatusField.ENDED
+            result["message"] += f" 🏆 {winner.name} ({winner.color}) wins!"
 
     elif cmd.command == "code":
         # Code redemption is only allowed during STARTED

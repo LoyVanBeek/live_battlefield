@@ -291,13 +291,8 @@ class GameState:
         return any(t.name.lower() == name.lower() for t in self.teams.values())
 
     def get_winner(self) -> Optional[TeamState]:
-        active_teams = [t for t in self.teams.values() if t.has_all_ships()]
-        if len(active_teams) <= 1:
-            for team in active_teams:
-                if team.is_destroyed():
-                    continue
-                return team
-        survivors = [t for t in active_teams if not t.is_destroyed()]
+        teams_in_play = [t for t in self.teams.values() if t.ships]
+        survivors = [t for t in teams_in_play if not t.is_destroyed()]
         if len(survivors) == 1:
             return survivors[0]
         return None
