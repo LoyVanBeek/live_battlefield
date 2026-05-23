@@ -519,7 +519,7 @@ def run_bot():
 def run_server():
     import uvicorn
 
-    uvicorn.run(fastapi_app, host=settings.host, port=settings.port)
+    uvicorn.run(fastapi_app, host=settings.host, port=settings.port, reload=settings.dev_mode)
 
 
 if __name__ == "__main__":
@@ -544,7 +544,7 @@ if __name__ == "__main__":
             import uvicorn
 
             uvicorn.run(
-                fastapi_app, host=settings.host, port=settings.port, log_level="info"
+                fastapi_app, host=settings.host, port=settings.port, log_level="info", reload=settings.dev_mode
             )
 
         server_thread = threading.Thread(target=run_server_block, daemon=True)
