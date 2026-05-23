@@ -1,4 +1,4 @@
-from app.game.state import TeamState
+from app.game.state import TeamState, GameState
 from app.game.ships import COLS, BOARD_SIZE
 from PIL import Image, ImageDraw, ImageFont
 from typing import Optional
@@ -120,3 +120,38 @@ def boards_to_bytes(img: Image.Image) -> bytes:
 
 def render_private_board(team: TeamState) -> Image.Image:
     return render_board(team, show_private=True)
+
+
+def create_public_board_gif(events: list, team_color: str) -> bytes:
+    from app.events.factory import create_events
+
+    typed_events = create_events(events)
+    frames = []
+    prev_board_repr = None
+
+    state = GameState()
+    for event in typed_events:
+        state, _ = event.apply(state)
+        if team_color in state.teams:
+            team = state.teams[team_color]
+            board_repr = str(team.public_board)
+            if board_repr != prev_board_repr:
+                prev_board_repr = board_repr
+                frame = render_board(team, show_private=False)
+                frames.append(frame)
+
+    if not frames:
+        return b""
+
+    buf = io.BytesIO()
+    frames[0].save(
+        buf,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=500,
+        loop=0,
+        optimize=True,
+    )
+    buf.seek(0)
+    return buf.getvalue()

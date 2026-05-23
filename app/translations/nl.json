@@ -21,7 +21,8 @@
     },
     "public": {
       "heading": "💥 Openbare Borden (Andere Teams)",
-      "team_label": "{name} ({color})"
+      "team_label": "{name} ({color})",
+      "replay_alt": "Herhaling van {name}'s bord"
     }
   },
   "action": {

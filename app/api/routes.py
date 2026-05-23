@@ -22,6 +22,7 @@ from app.game.board import (
     render_private_board,
     render_board,
     boards_to_bytes,
+    create_public_board_gif,
 )
 from app.game.ships import (
     SHIP_SIZES,
@@ -620,6 +621,29 @@ async def get_public_board(team_color: str, db: AsyncSession = Depends(get_api_d
     img = render_board(team, show_private=False)
     img_bytes = boards_to_bytes(img)
     return Response(content=img_bytes, media_type="image/png")
+
+
+@app.get("/api/board/{team_color}/replay.gif")
+async def get_board_replay_gif(
+    team_color: str,
+    team_token: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if state.team_tokens.get(team_token) is None:
+        return Response("Unauthorized", status_code=401)
+
+    gif_bytes = create_public_board_gif(events, team_color)
+    if not gif_bytes:
+        return Response("No replay data", status_code=404)
+
+    return Response(
+        content=gif_bytes,
+        media_type="image/gif",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @app.get("/api/admin/events/{event_index}/board/public.png")

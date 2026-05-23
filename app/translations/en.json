@@ -21,7 +21,8 @@
     },
     "public": {
       "heading": "💥 Public Boards (Opposing Teams)",
-      "team_label": "{name} ({color})"
+      "team_label": "{name} ({color})",
+      "replay_alt": "Replay of {name}'s board"
     }
   },
   "action": {

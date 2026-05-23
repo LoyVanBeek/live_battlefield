@@ -275,6 +275,12 @@
             /* background set inline by JS with team color */
         }
 
+        .board-replay-gif {
+            width: 332px;
+            height: 332px;
+            border-radius: 4px;
+        }
+
         /* Clickable cells on public boards */
         .public-board-item .board-cell { cursor: pointer; }
         .public-board-item .board-cell.header { cursor: default; }
@@ -590,7 +596,22 @@
                     if (nameEl && nameEl.textContent !== expected) nameEl.textContent = expected;
                     boardItem.style.backgroundColor = getRgba(team.c, 0.3);
                 }
-                renderGrid(boardId, team.g, false, team.c);
+
+                if (gameStatus === 'ended') {
+                    var boardDiv = document.getElementById(boardId);
+                    var replayImg = document.getElementById('replay-gif-' + team.c);
+                    if (!replayImg) {
+                        boardDiv.innerHTML = '';
+                        replayImg = document.createElement('img');
+                        replayImg.id = 'replay-gif-' + team.c;
+                        replayImg.className = 'board-replay-gif';
+                        replayImg.src = '/api/board/' + team.c + '/replay.gif?team_token=' + TEAM_TOKEN;
+                        replayImg.alt = _('board.public.replay_alt', {name: team.n});
+                        boardDiv.appendChild(replayImg);
+                    }
+                } else {
+                    renderGrid(boardId, team.g, false, team.c);
+                }
             });
 
             // Remove stale boards
