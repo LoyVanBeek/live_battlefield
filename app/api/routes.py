@@ -162,12 +162,12 @@ async def verify_team_or_admin_token(
 async def lifespan(app: FastAPI):
     try:
         async with api_session_maker() as db:
-            from app.models import get_or_create_game_settings
-            game_settings = await get_or_create_game_settings(db)
-            if game_settings.admin_token:
-                logger.info("Admin panel: /admin/%s", game_settings.admin_token)
+            from app.models import get_super_admin
+            sa = await get_super_admin(db)
+            if sa:
+                logger.info("Super admin panel: /admin/%s", sa.token)
     except Exception:
-        logger.warning("Could not check admin token on startup")
+        logger.warning("Could not check super admin token on startup")
     yield
 
 
@@ -263,34 +263,77 @@ async def get_public_state(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_bootstrap(request: Request):
+async def super_admin_login(request: Request):
     return templates.TemplateResponse(
-        request, "admin_create.html", {"request": request}
+        request, "super_admin_login.html", {"request": request}
     )
 
 
-@app.get("/admin/{token}", response_class=HTMLResponse)
-async def admin_page(
-    request: Request, token: str, db: AsyncSession = Depends(get_api_db)
+@app.get("/admin/{super_token}", response_class=HTMLResponse)
+async def super_admin_dashboard(
+    request: Request, super_token: str, db: AsyncSession = Depends(get_api_db)
 ):
-    from app.models import get_or_create_game_settings
+    from app.models import get_super_admin
 
-    settings = await get_or_create_game_settings(db)
-    if not settings.admin_token or settings.admin_token != token:
+    sa = await get_super_admin(db)
+    if not sa or sa.token != super_token:
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
-        request, "admin.html", {"request": request, "token": token}
+        request, "super_admin.html", {"request": request, "token": super_token}
     )
 
 
+@app.get("/admin/game/{gm_token}", response_class=HTMLResponse)
+async def game_master_page(
+    request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_game_by_gm_token
+
+    game = await get_game_by_gm_token(db, gm_token)
+    if not game:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "admin.html", {"request": request, "token": gm_token}
+    )
+
+
+@app.get("/admin/game/{gm_token}/locations-secret", response_class=HTMLResponse)
+async def game_master_locations_page(
+    request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_game_by_gm_token
+
+    game = await get_game_by_gm_token(db, gm_token)
+    if not game:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "locations.html", {"request": request, "token": gm_token}
+    )
+
+
+@app.get("/admin/game/{gm_token}/events", response_class=HTMLResponse)
+async def game_master_events_page(
+    request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_game_by_gm_token
+
+    game = await get_game_by_gm_token(db, gm_token)
+    if not game:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "events.html", {"request": request, "token": gm_token}
+    )
+
+
+# Keep old /admin/{token} sub-routes for backward compat (now check gm_token)
 @app.get("/admin/{token}/locations-secret", response_class=HTMLResponse)
-async def admin_locations_page(
+async def admin_locations_page_legacy(
     request: Request, token: str, db: AsyncSession = Depends(get_api_db)
 ):
-    from app.models import get_or_create_game_settings
+    from app.models import get_game_by_gm_token
 
-    settings = await get_or_create_game_settings(db)
-    if not settings.admin_token or settings.admin_token != token:
+    game = await get_game_by_gm_token(db, token)
+    if not game:
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
         request, "locations.html", {"request": request, "token": token}
@@ -298,13 +341,13 @@ async def admin_locations_page(
 
 
 @app.get("/admin/{token}/events", response_class=HTMLResponse)
-async def admin_events_page(
+async def admin_events_page_legacy(
     request: Request, token: str, db: AsyncSession = Depends(get_api_db)
 ):
-    from app.models import get_or_create_game_settings
+    from app.models import get_game_by_gm_token
 
-    settings = await get_or_create_game_settings(db)
-    if not settings.admin_token or settings.admin_token != token:
+    game = await get_game_by_gm_token(db, token)
+    if not game:
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
         request, "events.html", {"request": request, "token": token}
@@ -312,15 +355,70 @@ async def admin_events_page(
 
 
 @app.post("/api/admin/create-game")
-async def admin_create_game(db: AsyncSession = Depends(get_api_db)):
+async def admin_create_game(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_super_admin),
+):
+    from app.models import create_game
     from app.events.models import generate_team_token
-    from app.models import set_admin_token, reset_game_settings
 
-    token = generate_team_token()
-    await reset_game_settings(db)
-    await set_admin_token(db, token)
-    logger.info("Admin panel created: /admin/%s", token)
-    return {"token": token}
+    game = await create_game(
+        db,
+        name=None,
+        gm_token=generate_team_token(),
+    )
+    logger.info("Game created: id=%s gm_token=%s", game.id, game.gm_token)
+    return {"token": game.gm_token}
+
+
+class CreateGameRequest(BaseModel):
+    name: Optional[str] = None
+
+
+@app.get("/api/super-admin/games")
+async def super_admin_list_games(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_super_admin),
+):
+    from app.models import get_all_games
+
+    games = await get_all_games(db)
+    return {
+        "games": [
+            {
+                "id": str(g.id),
+                "name": g.name,
+                "status": g.status.value,
+                "gm_token": g.gm_token,
+                "team_count": 0,
+                "location_count": 0,
+                "created_at": g.created_at.isoformat() if g.created_at else None,
+            }
+            for g in games
+        ],
+    }
+
+
+@app.post("/api/super-admin/games")
+async def super_admin_create_game(
+    body: CreateGameRequest,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_super_admin),
+):
+    from app.models import create_game
+    from app.events.models import generate_team_token
+
+    game = await create_game(
+        db,
+        name=body.name,
+        gm_token=generate_team_token(),
+    )
+    logger.info("Game created: id=%s gm_token=%s", game.id, game.gm_token)
+    return {
+        "id": str(game.id),
+        "name": game.name,
+        "gm_token": game.gm_token,
+    }
 
 
 @app.get("/api/team-state")
