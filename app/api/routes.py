@@ -1132,14 +1132,6 @@ async def execute_command(
         team.bombs -= 1
         bomb_result, ship, _ = target.receive_bomb(row, col, cmd.team_color)
 
-        from app.game.ships import parse_coordinate
-
-        coord_str = cmd.args.get("coordinate", "A1")
-        try:
-            row_val, col_val = parse_coordinate(coord_str)
-        except:
-            row_val, col_val = 0, 0
-
         if bomb_result == BombResult.HIT:
             msg = f"HIT at {coord}!"
             if ship and ship.is_sunk():
@@ -1155,8 +1147,8 @@ async def execute_command(
         event = BombThrownEvent(
             attacker_color=cmd.team_color,
             target_color=target_color,
-            row=row_val,
-            col=col_val,
+            row=row,
+            col=col,
             result=bomb_result.value,
         )
         await save_event(db, event, game_uuid)

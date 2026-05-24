@@ -141,7 +141,7 @@ def downgrade() -> None:
             ),
             {
                 "status": legacy_game[0],
-                "total_locations_needed": legacy_game[1],
+                "total_locations_needed": legacy_game[2],
                 "started_at": legacy_game[3],
                 "admin_token": legacy_game[1],  # gm_token as admin_token
             },

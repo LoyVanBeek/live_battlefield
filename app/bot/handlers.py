@@ -591,26 +591,24 @@ async def handle_add_ai(
     if color in existing_colors:
         return f"Team {color} already exists! Use /removeai {color} first, or choose a different color."
 
-    from app.services.ai_player import add_ai_player, get_ai_player
-
-    existing_ai = get_ai_player(game_id, color)
-    if existing_ai:
-        return f"AI player for {color} already exists!"
-
-    new_player = await create_player(db, game_id=game_id, name=name, color=color, chat_id=None, role=Role.AI)
-
-    ai = add_ai_player(game_id, color, name)
-
-    from app.services.ship_placement import place_all_ships_game_scoped
-
-    await place_all_ships_game_scoped(db, str(game_id), color)
-
     from app.events.models import generate_team_token
 
     token = generate_team_token()
     event = TeamJoinedEvent(name=name, color=color, chat_id=0, bombs=3, token=token)
     await save_event(db, event, game_id=game_id)
     await create_team_token(db, game_id, token, color)
+
+    new_player = await create_player(db, game_id=game_id, name=name, color=color, chat_id=None, role=Role.AI)
+
+    from app.services.ai_player import add_ai_player, get_ai_player
+
+    existing_ai = get_ai_player(str(game_id), color)
+    if not existing_ai:
+        add_ai_player(str(game_id), color, name)
+
+    from app.services.ship_placement import place_all_ships_game_scoped
+
+    await place_all_ships_game_scoped(db, str(game_id), color)
 
     return f"🤖 Added AI player '{name}' ({color})! Ships auto-placed. Use /aistatus to see all AI players."
 
@@ -636,16 +634,20 @@ async def handle_remove_ai(
 
     from app.services.ai_player import remove_ai_player, get_ai_player
 
-    ai = get_ai_player(game_id, color)
+    game_id_str = str(player.game_id)
+
+    from app.services.ai_player import remove_ai_player, get_ai_player
+
+    ai = get_ai_player(game_id_str, color)
     if not ai:
         return f"No AI player with color {color}!"
-    player_to_remove = await get_player_by_color_in_game(db, game_id, color)
+    player_to_remove = await get_player_by_color_in_game(db, player.game_id, color)
     if player_to_remove:
         await db.delete(player_to_remove)
         await db.commit()
 
-    await delete_team_token(db, game_id, color)
-    remove_ai_player(game_id, color)
+    await delete_team_token(db, player.game_id, color)
+    remove_ai_player(game_id_str, color)
 
     return f"🤖 Removed AI player {color}!"
 
@@ -657,16 +659,16 @@ async def handle_ai_status(db, update: Update, context: ContextTypes.DEFAULT_TYP
     player = await get_player_by_chat(db, chat_id)
     if not player or player.role != Role.GAMEMASTER:
         return "Only game masters can check AI status!"
-    game_id = player.game_id
     from app.services.ai_player import get_all_ai_players, is_all_ai_paused
 
-    all_ais = get_all_ai_players(game_id)
+    game_id_str = str(player.game_id)
+    all_ais = get_all_ai_players(game_id_str)
 
     if not all_ais:
         return "No AI players currently active. Use /addai <color> to add one."
 
     status = "🤖 AI Players:\n\n"
-    global_paused = is_all_ai_paused(game_id)
+    global_paused = is_all_ai_paused(game_id_str)
     if global_paused:
         status += "⏸️ All AI players are PAUSED\n\n"
 
