@@ -387,7 +387,7 @@ class TestBoardJson:
         assert sunk_cell["ship_sunk"] == True
 
     def test_api_public_board_json_endpoint(self):
-        from app.api.routes import app, get_api_db
+        from app.api.routes import app, get_api_db, verify_gm_token
         from app.game.state import GameState
         from app.events.models import TeamJoinedEvent
 
@@ -415,12 +415,13 @@ class TestBoardJson:
             yield MockSession()
 
         app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
 
         try:
             with patch("app.api.routes.GameState.from_events", return_value=state):
                 with patch("app.models.get_game_events", return_value=[]):
                     client = TestClient(app)
-                    response = client.get("/api/board/red/public.json?game_id=00000000-0000-0000-0000-000000000000")
+                    response = client.get("/api/board/red/public.json")
 
             assert response.status_code == 200
             data = response.json()
@@ -430,7 +431,7 @@ class TestBoardJson:
             app.dependency_overrides.clear()
 
     def test_api_private_board_json_endpoint(self):
-        from app.api.routes import app, get_api_db
+        from app.api.routes import app, get_api_db, verify_gm_token
         from app.game.state import GameState
         from app.events.models import TeamJoinedEvent
 
@@ -458,12 +459,13 @@ class TestBoardJson:
             yield MockSession()
 
         app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
 
         try:
             with patch("app.api.routes.GameState.from_events", return_value=state):
                 with patch("app.models.get_game_events", return_value=[]):
                     client = TestClient(app)
-                    response = client.get("/api/board/blue/private.json?game_id=00000000-0000-0000-0000-000000000000")
+                    response = client.get("/api/board/blue/private.json")
 
             assert response.status_code == 200
             data = response.json()
@@ -474,7 +476,7 @@ class TestBoardJson:
             app.dependency_overrides.clear()
 
     def test_api_board_json_team_not_found(self):
-        from app.api.routes import app, get_api_db
+        from app.api.routes import app, get_api_db, verify_gm_token
         from app.game.state import GameState
         from app.events.models import TeamJoinedEvent
 
@@ -502,12 +504,13 @@ class TestBoardJson:
             yield MockSession()
 
         app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
 
         try:
             with patch("app.api.routes.GameState.from_events", return_value=state):
                 with patch("app.models.get_game_events", return_value=[]):
                     client = TestClient(app)
-                    response = client.get("/api/board/nonexistent/private.json?game_id=00000000-0000-0000-0000-000000000000")
+                    response = client.get("/api/board/nonexistent/private.json")
 
             assert response.status_code == 200
             data = response.json()

@@ -651,7 +651,7 @@ async def get_state_at_event(
 
 @app.get("/api/state")
 async def get_game_state(
-    game_id: str = Query(...),
+    game_id: str = Depends(verify_gm_token),
     db: AsyncSession = Depends(get_api_db),
 ):
     from app.models import get_game_events, get_all_players_in_game
@@ -714,7 +714,7 @@ async def get_game_state(
 @app.get("/api/board/{team_color}/public.json")
 async def get_public_board_json(
     team_color: str,
-    game_id: str = Query(...),
+    game_id: str = Depends(verify_gm_token),
     db: AsyncSession = Depends(get_api_db),
 ):
     from app.models import get_game_events
@@ -732,7 +732,7 @@ async def get_public_board_json(
 @app.get("/api/board/{team_color}/private.json")
 async def get_private_board_json(
     team_color: str,
-    game_id: str = Query(...),
+    game_id: str = Depends(verify_gm_token),
     db: AsyncSession = Depends(get_api_db),
 ):
     from app.models import get_game_events

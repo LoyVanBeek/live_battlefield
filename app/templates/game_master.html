@@ -335,10 +335,9 @@
 
         async function renderBoard(containerId, jsonUrl) {
             try {
-                const resp = await fetch(jsonUrl);
-                const data = await resp.json();
-                if (data.error) {
-                    document.getElementById(containerId).innerHTML = '<p>' + data.error + '</p>';
+                const data = await apiCall(jsonUrl);
+                if (!data || data.error) {
+                    document.getElementById(containerId).innerHTML = '<p>' + (data?.error || 'Failed to load board') + '</p>';
                     return;
                 }
                 updateBoardFromData(containerId, data, true);
