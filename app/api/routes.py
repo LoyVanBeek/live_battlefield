@@ -78,12 +78,12 @@ async def _get_legacy_game_id(db: AsyncSession) -> uuid.UUID:
 
 # --- New auth dependencies ---
 
-async def verify_super_admin(
+async def verify_admin(
     token: str = Query(...),
     db: AsyncSession = Depends(get_api_db),
 ):
-    from app.models import get_super_admin
-    sa = await get_super_admin(db)
+    from app.models import get_admin
+    sa = await get_admin(db)
     if not sa or sa.token != token:
         raise HTTPException(status_code=404)
     return token
@@ -133,47 +133,14 @@ async def verify_team_or_gm(
     raise HTTPException(status_code=404)
 
 
-# --- Old auth dependencies (backward compat, use new models) ---
-
-async def verify_admin_token(
-    admin_token: str = Query(...),
-    db: AsyncSession = Depends(get_api_db),
-):
-    from app.models import get_super_admin
-    sa = await get_super_admin(db)
-    if not sa or sa.token != admin_token:
-        raise HTTPException(status_code=404)
-    return admin_token
-
-
-async def verify_team_or_admin_token(
-    admin_token: Optional[str] = Query(None),
-    team_token: Optional[str] = Query(None),
-    db: AsyncSession = Depends(get_api_db),
-):
-    if admin_token:
-        from app.models import get_super_admin
-        sa = await get_super_admin(db)
-        if sa and sa.token == admin_token:
-            return admin_token
-
-    if team_token:
-        from app.models import lookup_team_token
-        result = await lookup_team_token(db, team_token)
-        if result:
-            return team_token
-
-    raise HTTPException(status_code=404)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         async with api_session_maker() as db:
-            from app.models import get_super_admin
-            sa = await get_super_admin(db)
+            from app.models import get_admin
+            sa = await get_admin(db)
             if sa:
-                logger.info("Super admin panel: /admin/%s", sa.token)
+                logger.info("Admin panel: /admin/%s", sa.token)
     except Exception:
         logger.warning("Could not check super admin token on startup")
     yield
@@ -277,27 +244,27 @@ async def get_public_state(
 
 
 @app.get("/admin", response_class=HTMLResponse)
-async def super_admin_login(request: Request):
+async def admin_login_page(request: Request):
     return templates.TemplateResponse(
-        request, "super_admin_login.html", {"request": request}
+        request, "admin_login.html", {"request": request}
     )
 
 
-@app.get("/admin/{super_token}", response_class=HTMLResponse)
-async def super_admin_dashboard(
-    request: Request, super_token: str, db: AsyncSession = Depends(get_api_db)
+@app.get("/admin/{admin_token}", response_class=HTMLResponse)
+async def admin_dashboard(
+    request: Request, admin_token: str, db: AsyncSession = Depends(get_api_db)
 ):
-    from app.models import get_super_admin
+    from app.models import get_admin
 
-    sa = await get_super_admin(db)
-    if not sa or sa.token != super_token:
+    sa = await get_admin(db)
+    if not sa or sa.token != admin_token:
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
-        request, "super_admin.html", {"request": request, "token": super_token}
+        request, "admin_dashboard.html", {"request": request, "token": admin_token}
     )
 
 
-@app.get("/admin/game/{gm_token}", response_class=HTMLResponse)
+@app.get("/game-master/{gm_token}", response_class=HTMLResponse)
 async def game_master_page(
     request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db)
 ):
@@ -307,11 +274,11 @@ async def game_master_page(
     if not game:
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
-        request, "admin.html", {"request": request, "token": gm_token}
+        request, "game_master.html", {"request": request, "gm_token": gm_token}
     )
 
 
-@app.get("/admin/game/{gm_token}/locations-secret", response_class=HTMLResponse)
+@app.get("/game-master/{gm_token}/locations-secret", response_class=HTMLResponse)
 async def game_master_locations_page(
     request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db)
 ):
@@ -321,11 +288,11 @@ async def game_master_locations_page(
     if not game:
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
-        request, "locations.html", {"request": request, "token": gm_token}
+        request, "locations.html", {"request": request, "gm_token": gm_token}
     )
 
 
-@app.get("/admin/game/{gm_token}/events", response_class=HTMLResponse)
+@app.get("/game-master/{gm_token}/events", response_class=HTMLResponse)
 async def game_master_events_page(
     request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db)
 ):
@@ -335,7 +302,7 @@ async def game_master_events_page(
     if not game:
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
-        request, "events.html", {"request": request, "token": gm_token}
+        request, "events.html", {"request": request, "gm_token": gm_token}
     )
 
 
@@ -371,7 +338,7 @@ async def admin_events_page_legacy(
 @app.post("/api/admin/create-game")
 async def admin_create_game(
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_super_admin),
+    _=Depends(verify_admin),
 ):
     from app.models import create_game
     from app.events.models import generate_team_token
@@ -389,10 +356,10 @@ class CreateGameRequest(BaseModel):
     name: Optional[str] = None
 
 
-@app.get("/api/super-admin/games")
-async def super_admin_list_games(
+@app.get("/api/admin/games")
+async def admin_list_games(
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_super_admin),
+    _=Depends(verify_admin),
 ):
     from app.models import get_all_games
 
@@ -413,11 +380,11 @@ async def super_admin_list_games(
     }
 
 
-@app.post("/api/super-admin/games")
-async def super_admin_create_game(
+@app.post("/api/admin/games")
+async def admin_create_games(
     body: CreateGameRequest,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_super_admin),
+    _=Depends(verify_admin),
 ):
     from app.models import create_game
     from app.events.models import generate_team_token
@@ -576,7 +543,7 @@ async def team_page(
 async def get_admin_locations(
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    _=Depends(verify_admin),
 ):
     from app.models import get_game_locations, get_game_events
     from app.database import EventType
@@ -621,7 +588,7 @@ async def get_admin_locations(
 async def get_all_events_for_timeline(
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    _=Depends(verify_admin),
 ):
     from app.models import get_game_events
 
@@ -657,7 +624,7 @@ async def get_state_at_event(
     event_index: int,
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    _=Depends(verify_admin),
 ):
     from app.models import get_game_events
 
@@ -917,7 +884,7 @@ async def get_public_boards_at_event(
     event_index: int,
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    _=Depends(verify_admin),
 ):
     from app.models import get_game_events
 
@@ -943,7 +910,7 @@ async def get_single_public_board_at_event(
     team_color: str,
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    _=Depends(verify_admin),
 ):
     from app.models import get_game_events
 
@@ -974,7 +941,7 @@ async def get_private_board_at_event(
     team_color: str,
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    _=Depends(verify_admin),
 ):
     from app.models import get_game_events
 
