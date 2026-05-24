@@ -68,14 +68,72 @@ async def get_api_db():
         yield session
 
 
+# --- New auth dependencies ---
+
+async def verify_super_admin(
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_super_admin
+    sa = await get_super_admin(db)
+    if not sa or sa.token != token:
+        raise HTTPException(status_code=404)
+    return token
+
+
+async def verify_gm_token(
+    gm_token: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_game_by_gm_token
+    game = await get_game_by_gm_token(db, gm_token)
+    if not game:
+        raise HTTPException(status_code=404)
+    return str(game.id)
+
+
+async def verify_team_token(
+    team_token: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import lookup_team_token
+    result = await lookup_team_token(db, team_token)
+    if not result:
+        raise HTTPException(status_code=404)
+    game_id, color = result
+    return {"game_id": game_id, "color": color}
+
+
+async def verify_team_or_gm(
+    gm_token: Optional[str] = Query(None),
+    team_token: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_api_db),
+):
+    if gm_token:
+        from app.models import get_game_by_gm_token
+        game = await get_game_by_gm_token(db, gm_token)
+        if game:
+            return {"role": "gm", "game_id": str(game.id)}
+
+    if team_token:
+        from app.models import lookup_team_token
+        result = await lookup_team_token(db, team_token)
+        if result:
+            game_id, color = result
+            return {"role": "team", "game_id": game_id, "color": color, "team_token": team_token}
+
+    raise HTTPException(status_code=404)
+
+
+# --- Old auth dependencies (backward compat, use new models) ---
+
 async def verify_admin_token(
     admin_token: str = Query(...),
     db: AsyncSession = Depends(get_api_db),
 ):
-    from app.models import get_or_create_game_settings
-
-    settings = await get_or_create_game_settings(db)
-    if not settings.admin_token or settings.admin_token != admin_token:
+    from app.models import get_super_admin
+    sa = await get_super_admin(db)
+    if not sa or sa.token != admin_token:
         raise HTTPException(status_code=404)
     return admin_token
 
@@ -86,16 +144,15 @@ async def verify_team_or_admin_token(
     db: AsyncSession = Depends(get_api_db),
 ):
     if admin_token:
-        from app.models import get_or_create_game_settings
-
-        settings = await get_or_create_game_settings(db)
-        if settings.admin_token and settings.admin_token == admin_token:
+        from app.models import get_super_admin
+        sa = await get_super_admin(db)
+        if sa and sa.token == admin_token:
             return admin_token
 
     if team_token:
-        events = await get_all_events(db)
-        state = GameState.from_events(events)
-        if team_token in state.team_tokens:
+        from app.models import lookup_team_token
+        result = await lookup_team_token(db, team_token)
+        if result:
             return team_token
 
     raise HTTPException(status_code=404)
