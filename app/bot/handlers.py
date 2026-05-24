@@ -633,13 +633,13 @@ async def handle_remove_ai(
     if player.role != Role.GAMEMASTER:
         return "Only game masters can remove AI players!"
 
+    game_id = player.game_id
+
     from app.services.ai_player import remove_ai_player, get_ai_player
 
     ai = get_ai_player(game_id, color)
     if not ai:
         return f"No AI player with color {color}!"
-
-    game_id = player.game_id
     player_to_remove = await get_player_by_color_in_game(db, game_id, color)
     if player_to_remove:
         await db.delete(player_to_remove)

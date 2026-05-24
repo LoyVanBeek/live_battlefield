@@ -1079,7 +1079,7 @@ async def execute_command(
             result["message"] = str(e)
             return result
 
-        success = team.place_ship(ship_type, row, col, direction)
+        success, _ = team.place_ship(ship_type, row, col, direction)
         if success:
             result["success"] = True
             remaining = SHIP_COUNTS.get(ship_type, 0) - team.placed_ship_types.get(
@@ -1123,7 +1123,6 @@ async def execute_command(
         target = state.teams[target_color]
         if target.is_destroyed():
             result["message"] = f"Team {target_color} is already destroyed!"
-            team.bombs += 1
             return result
 
         if (row, col) in target.bombed_cells:
