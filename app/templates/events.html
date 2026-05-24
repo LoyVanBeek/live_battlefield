@@ -300,8 +300,8 @@
             return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
         }
 
-        function getAdminToken() {
-            const m = window.location.pathname.match(/^\/admin\/game\/([^/]+)/);
+        function getGmToken() {
+            const m = window.location.pathname.match(/^\/game-master\/([^/]+)/);
             if (m) return m[1];
             const m2 = window.location.pathname.match(/^\/admin\/([^/]+)/);
             return m2 ? m2[1] : '';
@@ -309,14 +309,14 @@
 
         async function apiCall(url, method = 'GET', body = null) {
             try {
-                const token = getAdminToken();
+                const token = getGmToken();
                 const sep = url.includes('?') ? '&' : '?';
                 const options = { method };
                 if (body) {
                     options.headers = { 'Content-Type': 'application/json' };
                     options.body = JSON.stringify(body);
                 }
-                const resp = await fetch(url + sep + 'admin_token=' + encodeURIComponent(token), options);
+                const resp = await fetch(url + sep + 'token=' + encodeURIComponent(token), options);
                 if (!resp.ok) {
                     return { success: false, message: `HTTP error: ${resp.status}` };
                 }
@@ -414,7 +414,7 @@
             html += '<td class="row-label">Public</td>';
             for (const color of teamColors) {
                 html += `<td class="board-cell">
-                    <img src="/api/admin/events/${index}/board/${color}/public.png?admin_token=${getAdminToken()}&_=${Date.now()}" alt="${color} public">
+                    <img src="/api/admin/events/${index}/board/${color}/public.png?token=${getGmToken()}&_=${Date.now()}" alt="${color} public">
                 </td>`;
             }
             html += '</tr>';
@@ -424,7 +424,7 @@
             html += '<td class="row-label">Private</td>';
             for (const color of teamColors) {
                 html += `<td class="board-cell">
-                    <img src="/api/admin/events/${index}/board/${color}/private.png?admin_token=${getAdminToken()}&_=${Date.now()}" alt="${color} private">
+                    <img src="/api/admin/events/${index}/board/${color}/private.png?token=${getGmToken()}&_=${Date.now()}" alt="${color} private">
                 </td>`;
             }
             html += '</tr>';

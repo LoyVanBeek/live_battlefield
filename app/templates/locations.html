@@ -233,8 +233,8 @@
     </div>
 
     <script>
-        function getAdminToken() {
-            const m = window.location.pathname.match(/^\/admin\/game\/([^/]+)/);
+        function getGmToken() {
+            const m = window.location.pathname.match(/^\/game-master\/([^/]+)/);
             if (m) return m[1];
             const m2 = window.location.pathname.match(/^\/admin\/([^/]+)/);
             return m2 ? m2[1] : '';
@@ -266,7 +266,7 @@
             
             map.on('click', async function(e) {
                 try {
-                    const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getAdminToken()), {
+                    const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getGmToken()), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -314,7 +314,7 @@
             }
             
             try {
-                const resp = await fetch('/api/admin/locations?admin_token=' + encodeURIComponent(getAdminToken()));
+                const resp = await fetch('/api/admin/locations?token=' + encodeURIComponent(getGmToken()));
                 const data = await resp.json();
                 
                 const tbody = document.getElementById('locations-body');
@@ -365,7 +365,7 @@
             }
             
             try {
-                const resp = await fetch('/api/quick/remove_location?gm_token=' + encodeURIComponent(getAdminToken()), {
+                const resp = await fetch('/api/quick/remove_location?gm_token=' + encodeURIComponent(getGmToken()), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ location_number: locationNumber })
@@ -400,7 +400,7 @@
             }
             
             try {
-                const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getAdminToken()), {
+                const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getGmToken()), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

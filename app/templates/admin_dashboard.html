@@ -130,7 +130,7 @@
         }
 
         async function loadGames() {
-            const data = await apiCall('/api/super-admin/games');
+            const data = await apiCall('/api/admin/games');
             if (!data) return;
 
             const list = document.getElementById('games-list');
@@ -141,7 +141,7 @@
             list.innerHTML = data.games.map(g => {
                 const statusClass = g.status === 'started' ? 'started' : g.status === 'ended' ? 'ended' : 'waiting';
                 const statusLabel = g.status === 'started' ? '🎮 Started' : g.status === 'ended' ? '🏁 Ended' : '⏳ Waiting';
-                const gmUrl = window.location.origin + '/admin/game/' + g.gm_token;
+                const gmUrl = window.location.origin + '/game-master/' + g.gm_token;
                 return '<div class="game-row">' +
                     '<div><div class="name">' + (g.name || 'Game ' + g.id.slice(0, 8)) + '</div>' +
                     '<div class="status ' + statusClass + '">' + statusLabel + ' — ' + g.team_count + ' teams, ' + g.location_count + ' locations</div></div>' +
@@ -154,11 +154,11 @@
 
         async function createGame() {
             const name = document.getElementById('game-name').value.trim() || null;
-            const data = await apiCall('/api/super-admin/games', 'POST', { name: name });
+            const data = await apiCall('/api/admin/games', 'POST', { name: name });
             if (data) {
                 showToast('Game created!', 'success');
                 document.getElementById('game-name').value = '';
-                const gmUrl = window.location.origin + '/admin/game/' + data.gm_token;
+                const gmUrl = window.location.origin + '/game-master/' + data.gm_token;
                 copyText(gmUrl);
                 loadGames();
             }
