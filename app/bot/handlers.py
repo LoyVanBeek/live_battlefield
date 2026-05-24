@@ -10,7 +10,7 @@ from app.game.ships import (
     parse_coordinate,
     coordinate_to_string,
 )
-from app.game.state import GameState, BombResult, TEAM_COLORS
+from app.game.state import GameState, BombResult, TEAM_COLORS, GameStatusField
 from app.game.board import (
     render_all_public_boards,
     render_private_board,
@@ -24,7 +24,6 @@ from app.models import (
     create_player,
     get_all_teams_in_game,
     get_all_players_in_game,
-    get_all_game_masters,
     get_game_events,
     get_location_by_number,
     create_location,
@@ -155,6 +154,7 @@ async def handle_leave(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await db.delete(existing_player)
         await db.commit()
+        await delete_team_token(db, game_id, existing_player.color)
 
         return "You have left the game. Use /join <team_name> to rejoin."
     except Exception as e:
@@ -636,8 +636,6 @@ async def handle_remove_ai(
 
     game_id_str = str(player.game_id)
 
-    from app.services.ai_player import remove_ai_player, get_ai_player
-
     ai = get_ai_player(game_id_str, color)
     if not ai:
         return f"No AI player with color {color}!"
@@ -815,9 +813,12 @@ async def handle_start_game(db, update: Update, context: ContextTypes.DEFAULT_TY
     game = await get_game(db, game_id)
     if not game:
         return "Game not found!"
-    if game.status == GameStatus.STARTED:
+
+    events = await get_game_events(db, game_id)
+    state = GameState.from_events(events)
+    if state.status == GameStatusField.STARTED:
         return "The game has already started!"
-    if game.status == GameStatus.ENDED:
+    if state.status == GameStatusField.ENDED:
         return "The game has ended! Use /resetgame to start a new game."
 
     await update_game_status(db, game_id, GameStatus.STARTED, started_at=datetime.now(timezone.utc))
@@ -846,7 +847,9 @@ async def handle_reset_game(db, update: Update, context: ContextTypes.DEFAULT_TY
 
     await update_game_status(db, game_id, GameStatus.WAITING, started_at=None)
 
-    all_gms = await get_all_game_masters(db)
+    from app.models import get_all_players_in_game
+
+    all_gms = [p for p in await get_all_players_in_game(db, game_id) if p.role == Role.GAMEMASTER]
     for gm in all_gms:
         await db.delete(gm)
     await db.commit()

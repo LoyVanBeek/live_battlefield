@@ -27,12 +27,6 @@ async def get_player_by_id(db: AsyncSession, player_id: int) -> Optional[Player]
     return result.scalar_one_or_none()
 
 
-async def get_player_by_color(db: AsyncSession, color: str) -> Optional[Player]:
-    result = await db.execute(
-        select(Player).where(Player.color == color, Player.role == Role.TEAM)
-    )
-    return result.scalar_one_or_none()
-
 
 async def create_player(
     db: AsyncSession, game_id: uuid.UUID, name: str, color: str, chat_id: int | None, role: Role = Role.TEAM
@@ -42,16 +36,6 @@ async def create_player(
     await db.commit()
     await db.refresh(player)
     return player
-
-
-async def get_all_teams(db: AsyncSession) -> list[Player]:
-    result = await db.execute(select(Player).where(Player.role == Role.TEAM))
-    return list(result.scalars().all())
-
-
-async def get_all_game_masters(db: AsyncSession) -> list[Player]:
-    result = await db.execute(select(Player).where(Player.role == Role.GAMEMASTER))
-    return list(result.scalars().all())
 
 
 async def get_all_players(db: AsyncSession) -> list[Player]:
@@ -77,10 +61,6 @@ async def add_event(
     await db.refresh(event)
     return event
 
-
-async def get_all_events(db: AsyncSession) -> list[GameEvent]:
-    result = await db.execute(select(GameEvent).order_by(GameEvent.created_at))
-    return list(result.scalars().all())
 
 
 async def get_location_by_number(db: AsyncSession, game_id: uuid.UUID, number: int) -> Optional[Location]:
@@ -113,11 +93,6 @@ async def create_location(
     await db.commit()
     await db.refresh(location)
     return location
-
-
-async def get_all_locations(db: AsyncSession) -> list[Location]:
-    result = await db.execute(select(Location).order_by(Location.number))
-    return list(result.scalars().all())
 
 
 async def delete_all_events(db: AsyncSession, game_id: uuid.UUID) -> int:

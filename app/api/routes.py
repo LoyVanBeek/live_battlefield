@@ -654,7 +654,7 @@ async def get_game_state(
     game_id: str = Query(...),
     db: AsyncSession = Depends(get_api_db),
 ):
-    from app.models import get_game_events, get_all_players
+    from app.models import get_game_events, get_all_players_in_game
     from app.services.ai_player import get_all_ai_players
     from app.database import Role
 
@@ -664,8 +664,10 @@ async def get_game_state(
 
     ai_players = get_all_ai_players(game_id)
 
-    all_players = await get_all_players(db)
-    db_ai_colors = {p.color for p in all_players if p.game_id == game_uuid and p.role == Role.AI}
+    from app.models import get_all_players_in_game
+
+    all_players = await get_all_players_in_game(db, game_uuid)
+    db_ai_colors = {p.color for p in all_players if p.role == Role.AI}
 
     teams = []
     for color, team in state.teams.items():
@@ -1316,15 +1318,15 @@ async def trigger_ai_move(
 ):
     from app.services.ai_player import get_ai_player, add_ai_player
     from app.database import Role
-    from app.models import get_game_events, get_all_players
+    from app.models import get_game_events, get_all_players_in_game
 
     game_uuid = uuid.UUID(game_id)
     ai = get_ai_player(game_id, action.team_color)
 
     if not ai:
-        all_players = await get_all_players(db)
+        all_players = await get_all_players_in_game(db, game_uuid)
         for p in all_players:
-            if p.game_id == game_uuid and p.color == action.team_color and p.role == Role.AI:
+            if p.color == action.team_color and p.role == Role.AI:
                 ai = add_ai_player(game_id, p.color, p.name)
                 break
 
