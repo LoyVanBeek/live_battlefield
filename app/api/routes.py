@@ -1016,6 +1016,7 @@ async def execute_command(
 
         team_name = cmd.args.get("name", cmd.team_color)
         from app.events.models import TeamJoinedEvent, generate_team_token
+        from app.models import create_team_token
 
         token = generate_team_token()
         event = TeamJoinedEvent(
@@ -1027,6 +1028,7 @@ async def execute_command(
         )
         state.handle_team_joined(event)
         await save_event(db, event, game_uuid)
+        await create_team_token(db, game_uuid, token, cmd.team_color)
         result["success"] = True
         result["message"] = f"Joined {team_name} as {cmd.team_color} team!"
 
@@ -1426,10 +1428,12 @@ async def quick_add_ai(
     await create_player(db, game_uuid, name, color, None, Role.AI)
 
     from app.events.models import generate_team_token
+    from app.models import create_team_token
 
     token = generate_team_token()
     event = TeamJoinedEvent(name=name, color=color, chat_id=0, bombs=3, token=token)
     await save_event(db, event, game_uuid)
+    await create_team_token(db, game_uuid, token, color)
 
     from app.services.ai_player import add_ai_player
 

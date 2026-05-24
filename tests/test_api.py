@@ -21,19 +21,20 @@ class TestExecuteCommand:
         try:
             with patch("app.models.get_game_events", return_value=[]):
                 with patch("app.api.routes.save_event") as mock_save:
-                    with patch("app.api.routes.GameState.from_events") as mock_from_events:
-                        mock_state = GameState()
-                        mock_from_events.return_value = mock_state
+                    with patch("app.models.create_team_token", new_callable=AsyncMock):
+                        with patch("app.api.routes.GameState.from_events") as mock_from_events:
+                            mock_state = GameState()
+                            mock_from_events.return_value = mock_state
 
-                        client = TestClient(app)
-                        response = client.post(
-                            "/api/execute",
-                            json={
-                                "team_color": "blue",
-                                "command": "join",
-                                "args": {"name": "Blue Team"},
-                            },
-                        )
+                            client = TestClient(app)
+                            response = client.post(
+                                "/api/execute",
+                                json={
+                                    "team_color": "blue",
+                                    "command": "join",
+                                    "args": {"name": "Blue Team"},
+                                },
+                            )
         finally:
             app.dependency_overrides.clear()
 

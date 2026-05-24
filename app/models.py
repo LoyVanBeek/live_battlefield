@@ -59,6 +59,12 @@ async def get_all_players(db: AsyncSession) -> list[Player]:
     return list(result.scalars().all())
 
 
+async def get_all_players_in_game(db: AsyncSession, game_id: uuid.UUID) -> list[Player]:
+    result = await db.execute(select(Player).where(Player.game_id == game_id))
+    return list(result.scalars().all())
+
+
+
 async def add_event(
     db: AsyncSession,
     event_type: EventType,

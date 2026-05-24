@@ -23,6 +23,7 @@ from app.models import (
     get_player_by_color_in_game,
     create_player,
     get_all_teams_in_game,
+    get_all_players_in_game,
     get_all_game_masters,
     get_game_events,
     get_location_by_number,
@@ -30,6 +31,7 @@ from app.models import (
     get_next_location_number,
     get_game_locations,
     update_game_status,
+    create_team_token,
 )
 from app.events import (
     EventType,
@@ -101,7 +103,7 @@ async def handle_join(
         from app.models import get_all_players
 
         all_players = await get_all_players(db)
-        colors_in_db = {p.color for p in all_players}
+        colors_in_db = {p.color for p in all_players if p.game_id == game_id}
 
         taken_colors = colors_in_game | colors_in_db
 
@@ -119,10 +121,12 @@ async def handle_join(
         logger.info(f"handle_join: player created id={player.id}")
 
         from app.events.models import generate_team_token
+        from app.models import create_team_token
 
         token = generate_team_token()
         event = TeamJoinedEvent(name=team_name, color=color, chat_id=chat_id, bombs=3, token=token)
         await save_event(db, event, game_id=game_id)
+        await create_team_token(db, game_id, token, color)
         logger.info(f"handle_join: event saved")
 
         return f"Welcome {team_name}! You are the {color} team.\nYou have 0 bombs to start. Visit locations to earn bombs!"
@@ -583,27 +587,33 @@ async def handle_add_ai(
         return f"Invalid color! Choose from: {', '.join(TEAM_COLORS)}"
 
     game_id = player.game_id
-    all_teams = await get_all_teams_in_game(db, game_id)
-    existing_colors = [p.color for p in all_teams]
+
+    all_players_in_game = await get_all_players_in_game(db, game_id)
+    existing_colors = [p.color for p in all_players_in_game]
 
     if color in existing_colors:
         return f"Team {color} already exists! Use /removeai {color} first, or choose a different color."
 
     from app.services.ai_player import add_ai_player, get_ai_player
 
-    existing_ai = get_ai_player(color)
+    existing_ai = get_ai_player(game_id, color)
     if existing_ai:
         return f"AI player for {color} already exists!"
 
     new_player = await create_player(db, game_id=game_id, name=name, color=color, chat_id=None, role=Role.AI)
 
-    ai = add_ai_player(color, name)
+    ai = add_ai_player(game_id, color, name)
 
     from app.services.ship_placement import place_all_ships_game_scoped
 
     await place_all_ships_game_scoped(db, str(game_id), color)
 
-    return f"🤖 Added AI player '{name}' ({color})! Ships auto-placed. Use /aistatus to see all AI players."
+    from app.events.models import generate_team_token
+
+    token = generate_team_token()
+    event = TeamJoinedEvent(name=name, color=color, chat_id=0, bombs=3, token=token)
+    await save_event(db, event, game_id=game_id)
+    await create_team_token(db, game_id, token, color)
 
 
 async def handle_remove_ai(
@@ -625,7 +635,7 @@ async def handle_remove_ai(
 
     from app.services.ai_player import remove_ai_player, get_ai_player
 
-    ai = get_ai_player(color)
+    ai = get_ai_player(game_id, color)
     if not ai:
         return f"No AI player with color {color}!"
 
@@ -635,21 +645,28 @@ async def handle_remove_ai(
         await db.delete(player_to_remove)
         await db.commit()
 
-    remove_ai_player(color)
+    remove_ai_player(game_id, color)
 
     return f"🤖 Removed AI player {color}!"
 
 
 async def handle_ai_status(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
+    chat_id = update.effective_chat.id
+    player = await get_player_by_chat(db, chat_id)
+    if not player or player.role != Role.GAMEMASTER:
+        return "Only game masters can check AI status!"
+    game_id = player.game_id
     from app.services.ai_player import get_all_ai_players, is_all_ai_paused
 
-    all_ais = get_all_ai_players()
+    all_ais = get_all_ai_players(game_id)
 
     if not all_ais:
         return "No AI players currently active. Use /addai <color> to add one."
 
     status = "🤖 AI Players:\n\n"
-    global_paused = is_all_ai_paused()
+    global_paused = is_all_ai_paused(game_id)
     if global_paused:
         status += "⏸️ All AI players are PAUSED\n\n"
 
