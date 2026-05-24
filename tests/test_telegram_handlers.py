@@ -21,7 +21,6 @@ class TestHandleJoin:
     @pytest.mark.asyncio
     async def test_new_user_can_join(self):
         from app.bot.handlers import handle_join
-        from app.database import GameStatus
 
         mock_update = create_mock_update(123)
         mock_context = create_mock_context()
@@ -32,42 +31,35 @@ class TestHandleJoin:
             "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
         ) as mock_get_player:
             with patch(
-                "app.bot.handlers.get_all_events", new_callable=AsyncMock
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock
             ) as mock_events:
                 with patch(
-                    "app.models.get_or_create_game_settings", new_callable=AsyncMock
-                ) as mock_settings:
+                    "app.bot.handlers.create_player", new_callable=AsyncMock
+                ) as mock_create:
                     with patch(
-                        "app.bot.handlers.create_player", new_callable=AsyncMock
-                    ) as mock_create:
+                        "app.bot.handlers.save_event", new_callable=AsyncMock
+                    ) as mock_save:
                         with patch(
-                            "app.bot.handlers.save_event", new_callable=AsyncMock
-                        ) as mock_save:
-                            with patch(
-                                "app.models.get_all_players",
-                                new_callable=AsyncMock,
-                            ) as mock_get_all:
-                                mock_get_all.return_value = []
-                                mock_get_player.return_value = None
-                                mock_events.return_value = []
-                                mock_settings_obj = MagicMock()
-                                mock_settings_obj.status = GameStatus.WAITING
-                                mock_settings.return_value = mock_settings_obj
+                            "app.models.get_all_players",
+                            new_callable=AsyncMock,
+                        ) as mock_get_all:
+                            mock_get_all.return_value = []
+                            mock_get_player.return_value = None
+                            mock_events.return_value = []
 
-                                result = await handle_join(
-                                    mock_db,
-                                    mock_update,
-                                    mock_context,
-                                    "Blue Team",
-                                )
+                            result = await handle_join(
+                                mock_db,
+                                mock_update,
+                                mock_context,
+                                "Blue Team",
+                            )
 
-                                assert "Welcome" in result
-                                assert "Blue Team" in result
+                            assert "Welcome" in result
+                            assert "Blue Team" in result
 
     @pytest.mark.asyncio
     async def test_gm_can_join_as_team(self):
         from app.bot.handlers import handle_join
-        from app.database import GameStatus
 
         mock_update = create_mock_update(123)
         mock_context = create_mock_context()
@@ -79,44 +71,37 @@ class TestHandleJoin:
             "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
         ) as mock_get_player:
             with patch(
-                "app.bot.handlers.get_all_events", new_callable=AsyncMock
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock
             ) as mock_events:
                 with patch(
-                    "app.models.get_or_create_game_settings", new_callable=AsyncMock
-                ) as mock_settings:
+                    "app.bot.handlers.create_player", new_callable=AsyncMock
+                ) as mock_create:
                     with patch(
-                        "app.bot.handlers.create_player", new_callable=AsyncMock
-                    ) as mock_create:
+                        "app.bot.handlers.save_event", new_callable=AsyncMock
+                    ) as mock_save:
                         with patch(
-                            "app.bot.handlers.save_event", new_callable=AsyncMock
-                        ) as mock_save:
-                            with patch(
-                                "app.models.get_all_players",
-                                new_callable=AsyncMock,
-                            ) as mock_get_all:
-                                mock_get_all.return_value = []
-                                mock_player = MagicMock()
-                                mock_player.role = Role.GAMEMASTER
-                                mock_get_player.return_value = mock_player
+                            "app.models.get_all_players",
+                            new_callable=AsyncMock,
+                        ) as mock_get_all:
+                            mock_get_all.return_value = []
+                            mock_player = MagicMock()
+                            mock_player.role = Role.GAMEMASTER
+                            mock_get_player.return_value = mock_player
 
-                                mock_events.return_value = []
-                                mock_settings_obj = MagicMock()
-                                mock_settings_obj.status = GameStatus.WAITING
-                                mock_settings.return_value = mock_settings_obj
+                            mock_events.return_value = []
 
-                                result = await handle_join(
-                                    mock_db,
-                                    mock_update,
-                                    mock_context,
-                                    "Red Team",
-                                )
+                            result = await handle_join(
+                                mock_db,
+                                mock_update,
+                                mock_context,
+                                "Red Team",
+                            )
 
-                                assert "Welcome" in result
+                            assert "Welcome" in result
 
     @pytest.mark.asyncio
     async def test_team_player_can_rejoin(self):
         from app.bot.handlers import handle_join
-        from app.database import GameStatus
 
         mock_update = create_mock_update(123)
         mock_context = create_mock_context()
@@ -128,44 +113,37 @@ class TestHandleJoin:
             "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
         ) as mock_get_player:
             with patch(
-                "app.bot.handlers.get_all_events", new_callable=AsyncMock
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock
             ) as mock_events:
                 with patch(
-                    "app.models.get_or_create_game_settings", new_callable=AsyncMock
-                ) as mock_settings:
+                    "app.bot.handlers.create_player", new_callable=AsyncMock
+                ) as mock_create:
                     with patch(
-                        "app.bot.handlers.create_player", new_callable=AsyncMock
-                    ) as mock_create:
+                        "app.bot.handlers.save_event", new_callable=AsyncMock
+                    ) as mock_save:
                         with patch(
-                            "app.bot.handlers.save_event", new_callable=AsyncMock
-                        ) as mock_save:
-                            with patch(
-                                "app.models.get_all_players",
-                                new_callable=AsyncMock,
-                            ) as mock_get_all:
-                                mock_get_all.return_value = []
-                                mock_player = MagicMock()
-                                mock_player.role = Role.TEAM
-                                mock_get_player.return_value = mock_player
+                            "app.models.get_all_players",
+                            new_callable=AsyncMock,
+                        ) as mock_get_all:
+                            mock_get_all.return_value = []
+                            mock_player = MagicMock()
+                            mock_player.role = Role.TEAM
+                            mock_get_player.return_value = mock_player
 
-                                mock_events.return_value = []
-                                mock_settings_obj = MagicMock()
-                                mock_settings_obj.status = GameStatus.WAITING
-                                mock_settings.return_value = mock_settings_obj
+                            mock_events.return_value = []
 
-                                result = await handle_join(
-                                    mock_db,
-                                    mock_update,
-                                    mock_context,
-                                    "New Team",
-                                )
+                            result = await handle_join(
+                                mock_db,
+                                mock_update,
+                                mock_context,
+                                "New Team",
+                            )
 
-                                assert "Welcome" in result
+                            assert "Welcome" in result
 
     @pytest.mark.asyncio
     async def test_game_started_blocks_join(self):
         from app.bot.handlers import handle_join
-        from app.database import GameStatus
 
         mock_update = create_mock_update(123)
         mock_context = create_mock_context()
@@ -175,27 +153,20 @@ class TestHandleJoin:
             "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
         ) as mock_get_player:
             with patch(
-                "app.bot.handlers.get_all_events", new_callable=AsyncMock
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock
             ) as mock_events:
-                with patch(
-                    "app.models.get_or_create_game_settings", new_callable=AsyncMock
-                ) as mock_settings:
-                    mock_get_player.return_value = None
-                    mock_events.return_value = []
-                    mock_settings_obj = MagicMock()
-                    mock_settings_obj.status = GameStatus.STARTED
-                    mock_settings.return_value = mock_settings_obj
+                mock_get_player.return_value = None
+                mock_events.return_value = []
 
-                    result = await handle_join(
-                        mock_db, mock_update, mock_context, "Blue Team"
-                    )
+                result = await handle_join(
+                    mock_db, mock_update, mock_context, "Blue Team"
+                )
 
-                    assert "already started" in result.lower()
+                assert "already started" in result.lower()
 
     @pytest.mark.asyncio
     async def test_game_ended_message(self):
         from app.bot.handlers import handle_join
-        from app.database import GameStatus
 
         mock_update = create_mock_update(123)
         mock_context = create_mock_context()
@@ -205,22 +176,16 @@ class TestHandleJoin:
             "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
         ) as mock_get_player:
             with patch(
-                "app.bot.handlers.get_all_events", new_callable=AsyncMock
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock
             ) as mock_events:
-                with patch(
-                    "app.models.get_or_create_game_settings", new_callable=AsyncMock
-                ) as mock_settings:
-                    mock_get_player.return_value = None
-                    mock_events.return_value = []
-                    mock_settings_obj = MagicMock()
-                    mock_settings_obj.status = GameStatus.ENDED
-                    mock_settings.return_value = mock_settings_obj
+                mock_get_player.return_value = None
+                mock_events.return_value = []
 
-                    result = await handle_join(
-                        mock_db, mock_update, mock_context, "Blue Team"
-                    )
+                result = await handle_join(
+                    mock_db, mock_update, mock_context, "Blue Team"
+                )
 
-                    assert "ended" in result.lower()
+                assert "ended" in result.lower()
 
 
 class TestHandlePlace:
@@ -321,39 +286,31 @@ class TestHandleBomb:
             "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
         ) as mock_get_player:
             with patch(
-                "app.bot.handlers.get_all_events", new_callable=AsyncMock
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock
             ) as mock_events:
-                with patch(
-                    "app.models.get_or_create_game_settings", new_callable=AsyncMock
-                ) as mock_settings:
-                    with patch.object(
-                        GameState, "from_events", return_value=GameState()
-                    ) as mock_from_events:
-                        mock_player = MagicMock()
-                        mock_player.color = "blue"
-                        mock_get_player.return_value = mock_player
+                with patch.object(
+                    GameState, "from_events", return_value=GameState()
+                ) as mock_from_events:
+                    mock_player = MagicMock()
+                    mock_player.color = "blue"
+                    mock_get_player.return_value = mock_player
 
-                        mock_team = TeamState(
-                            name="Blue", color="blue", bombs=3, chat_id=123
-                        )
-                        mock_state = GameState()
-                        mock_state.teams = {"blue": mock_team}
-                        mock_from_events.return_value = mock_state
-                        mock_events.return_value = []
+                    mock_team = TeamState(
+                        name="Blue", color="blue", bombs=3, chat_id=123
+                    )
+                    mock_state = GameState()
+                    mock_state.teams = {"blue": mock_team}
+                    mock_from_events.return_value = mock_state
+                    mock_events.return_value = []
 
-                        mock_settings_obj = MagicMock()
-                        mock_settings_obj.status = MagicMock()
-                        mock_settings_obj.status.value = "started"
-                        mock_settings.return_value = mock_settings_obj
+                    result = await handle_bomb(
+                        mock_db, mock_update, mock_context, "blue", "A1"
+                    )
 
-                        result = await handle_bomb(
-                            mock_db, mock_update, mock_context, "blue", "A1"
-                        )
-
-                        assert (
-                            result is not None
-                            and "cannot bomb yourself" in result.lower()
-                        )
+                    assert (
+                        result is not None
+                        and "cannot bomb yourself" in result.lower()
+                    )
 
 
 class TestHandleCode:
@@ -520,7 +477,7 @@ class TestHandleOverview:
             "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
         ) as mock_get_player:
             with patch(
-                "app.bot.handlers.get_all_events", new_callable=AsyncMock
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock
             ) as mock_events:
                 with patch.object(GameState, "from_events") as mock_from_events:
                     with patch(
@@ -584,7 +541,7 @@ class TestHandleOverview:
             "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
         ) as mock_get_player:
             with patch(
-                "app.bot.handlers.get_all_events", new_callable=AsyncMock
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock
             ) as mock_events:
                 mock_player = MagicMock()
                 mock_player.color = "blue"
@@ -609,7 +566,7 @@ class TestHandleOverview:
             "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
         ) as mock_get_player:
             with patch(
-                "app.bot.handlers.get_all_events", new_callable=AsyncMock
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock
             ) as mock_events:
                 with patch.object(GameState, "from_events") as mock_from_events:
                     with patch("app.bot.handlers.send_photo", new_callable=AsyncMock):
@@ -649,7 +606,7 @@ class TestHandleOverview:
             "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
         ) as mock_get_player:
             with patch(
-                "app.bot.handlers.get_all_events", new_callable=AsyncMock
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock
             ) as mock_events:
                 with patch.object(GameState, "from_events") as mock_from_events:
                     with patch(
