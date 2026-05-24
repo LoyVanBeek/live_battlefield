@@ -32,6 +32,7 @@ from app.models import (
     get_game_locations,
     update_game_status,
     create_team_token,
+    delete_team_token,
 )
 from app.events import (
     EventType,
@@ -73,12 +74,8 @@ async def handle_join(
         existing_player = await get_player_by_chat(db, chat_id)
         logger.info(f"handle_join: existing_player={existing_player}")
         if existing_player:
-            if existing_player.role == Role.GAMEMASTER:
-                await db.delete(existing_player)
-                await db.commit()
-            else:
-                await db.delete(existing_player)
-                await db.commit()
+            await db.delete(existing_player)
+            await db.commit()
 
         from app.models import get_all_games
         games = await get_all_games(db)
@@ -100,10 +97,10 @@ async def handle_join(
 
         colors_in_game = set(state.teams.keys())
 
-        from app.models import get_all_players
+        from app.models import get_all_players_in_game
 
-        all_players = await get_all_players(db)
-        colors_in_db = {p.color for p in all_players if p.game_id == game_id}
+        all_players = await get_all_players_in_game(db, game_id)
+        colors_in_db = {p.color for p in all_players}
 
         taken_colors = colors_in_game | colors_in_db
 
@@ -615,6 +612,8 @@ async def handle_add_ai(
     await save_event(db, event, game_id=game_id)
     await create_team_token(db, game_id, token, color)
 
+    return f"🤖 Added AI player '{name}' ({color})! Ships auto-placed. Use /aistatus to see all AI players."
+
 
 async def handle_remove_ai(
     db, update: Update, context: ContextTypes.DEFAULT_TYPE, color: str
@@ -645,6 +644,7 @@ async def handle_remove_ai(
         await db.delete(player_to_remove)
         await db.commit()
 
+    await delete_team_token(db, game_id, color)
     remove_ai_player(game_id, color)
 
     return f"🤖 Removed AI player {color}!"

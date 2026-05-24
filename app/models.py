@@ -218,6 +218,18 @@ async def create_team_token(db: AsyncSession, game_id: uuid.UUID, token: str, co
     return tt
 
 
+async def delete_team_token(db: AsyncSession, game_id: uuid.UUID, color: str) -> bool:
+    result = await db.execute(
+        select(TeamToken).where(TeamToken.game_id == game_id, TeamToken.color == color)
+    )
+    tt = result.scalar_one_or_none()
+    if tt:
+        await db.delete(tt)
+        await db.commit()
+        return True
+    return False
+
+
 async def get_game_events(db: AsyncSession, game_id: uuid.UUID) -> list[GameEvent]:
     result = await db.execute(
         select(GameEvent)

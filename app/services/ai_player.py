@@ -158,8 +158,10 @@ class AIPlayer:
                         # Check if ship was sunk
                         ship = target_team.get_ship_at(row, col)
                         notify_msg = f"💥 HIT! {self.name} ({self.color}) bombed you at {coord_display}!"
-                        if ship and ship.is_sunk():
-                            notify_msg = notify_msg.replace("was hit!", "was SUNK!")
+                        if ship:
+                            notify_msg += f" Your {ship.ship_type} was hit!"
+                            if ship.is_sunk():
+                                notify_msg = notify_msg.replace("was hit!", "was SUNK!")
                     else:  # Miss
                         notify_msg = f"💨 MISS! {self.name} ({self.color}) missed at {coord_display}!"
 
