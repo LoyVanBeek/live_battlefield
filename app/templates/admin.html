@@ -438,8 +438,10 @@
         }
 
         function getAdminToken() {
-            const m = window.location.pathname.match(/^\/admin\/([^/]+)/);
-            return m ? m[1] : '';
+            const m = window.location.pathname.match(/^\/admin\/game\/([^/]+)/);
+            if (m) return m[1];
+            const m2 = window.location.pathname.match(/^\/admin\/([^/]+)/);
+            return m2 ? m2[1] : '';
         }
 
         async function apiCall(url, method = 'GET', body = null) {
@@ -451,7 +453,7 @@
                     options.headers = { 'Content-Type': 'application/json' };
                     options.body = JSON.stringify(body);
                 }
-                const resp = await fetch(url + sep + 'admin_token=' + encodeURIComponent(token), options);
+                const resp = await fetch(url + sep + 'gm_token=' + encodeURIComponent(token), options);
                 return await resp.json();
             } catch (error) {
                 showToast('Error: ' + error.message, 'error');

@@ -3,6 +3,7 @@ from fastapi.responses import Response, HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
@@ -19,7 +20,6 @@ import string
 import asyncio
 
 from app.config import settings
-from app.models import get_all_events
 from app.game.state import GameState, TEAM_COLORS, TeamState
 from app.game.board import (
     render_all_public_boards,
@@ -66,6 +66,14 @@ api_session_maker = async_sessionmaker(
 async def get_api_db():
     async with api_session_maker() as session:
         yield session
+
+
+async def _get_legacy_game_id(db: AsyncSession) -> uuid.UUID:
+    from app.models import get_all_games
+    games = await get_all_games(db)
+    if games:
+        return games[-1].id
+    return uuid.uuid4()
 
 
 # --- New auth dependencies ---
@@ -212,10 +220,13 @@ async def map_page(request: Request):
 
 
 @app.get("/api/locations")
-async def get_public_locations(db: AsyncSession = Depends(get_api_db)):
-    from app.models import get_all_locations
+async def get_public_locations(
+    game_id: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_game_locations
 
-    locations = await get_all_locations(db)
+    locations = await get_game_locations(db, uuid.UUID(game_id))
 
     return {
         "locations": [
@@ -231,19 +242,22 @@ async def get_public_locations(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.get("/api/public-state")
-async def get_public_state(db: AsyncSession = Depends(get_api_db)):
-    from app.models import get_or_create_game_settings
+async def get_public_state(
+    game_id: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_game_events, get_game
     from app.game.state import GameState
 
-    settings = await get_or_create_game_settings(db)
-    events = await get_all_events(db)
+    game = await get_game(db, uuid.UUID(game_id))
+    events = await get_game_events(db, uuid.UUID(game_id))
     state = GameState.from_events(events)
 
     teams = []
     for color, team in state.teams.items():
         from app.services.ai_player import get_ai_player
 
-        ai = get_ai_player(color)
+        ai = get_ai_player(game_id, color)
         teams.append(
             {
                 "name": team.name,
@@ -257,7 +271,7 @@ async def get_public_state(db: AsyncSession = Depends(get_api_db)):
         )
 
     return {
-        "status": settings.status.value,
+        "status": game.status.value if game else "PREPARING",
         "teams": teams,
     }
 
@@ -435,30 +449,50 @@ async def get_team_state(
 
 
 @app.get("/api/events/stream")
-async def event_stream(request: Request, team_token: Optional[str] = Query(None)):
+async def event_stream(
+    request: Request,
+    team_token: Optional[str] = Query(None),
+    gm_token: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_api_db),
+):
     from app.team_view import get_team_view
+    from app.models import lookup_team_token, get_game_by_gm_token
 
-    if not team_token:
-        return HTMLResponse("Missing team_token", status_code=400)
+    game_id = None
+    use_team_token = None
 
-    async with api_session_maker() as sse_db:
-        view = await get_team_view(team_token, sse_db)
-        if view.get("error"):
-            return HTMLResponse("Unauthorized", status_code=401)
+    if team_token:
+        result = await lookup_team_token(db, team_token)
+        if result:
+            game_id, _ = result
+            use_team_token = team_token
 
-    q = await manager.connect()
+    if gm_token and not game_id:
+        game = await get_game_by_gm_token(db, gm_token)
+        if game:
+            game_id = str(game.id)
+
+    if not game_id:
+        return HTMLResponse("Missing or invalid team_token/gm_token", status_code=400)
+
+    if use_team_token:
+        async with api_session_maker() as sse_db:
+            view = await get_team_view(use_team_token, sse_db)
+            if view.get("error"):
+                return HTMLResponse("Unauthorized", status_code=401)
+
+    q = await manager.connect(game_id)
 
     async def event_generator():
         try:
-            # Send initial state immediately
-            async with api_session_maker() as sse_db:
-                view = await get_team_view(team_token, sse_db)
-                yield f"data: {json.dumps(view, separators=(',', ':'))}\n\n"
+            if use_team_token:
+                async with api_session_maker() as sse_db:
+                    view = await get_team_view(use_team_token, sse_db)
+                    yield f"data: {json.dumps(view, separators=(',', ':'))}\n\n"
 
             while True:
                 try:
                     await asyncio.wait_for(q.get(), timeout=30)
-                    # Drain any queued signals so we recompute once per batch
                     while not q.empty():
                         try:
                             q.get_nowait()
@@ -468,13 +502,14 @@ async def event_stream(request: Request, team_token: Optional[str] = Query(None)
                     yield ": keepalive\n\n"
                     continue
 
-                async with api_session_maker() as sse_db:
-                    view = await get_team_view(team_token, sse_db)
-                    yield f"data: {json.dumps(view, separators=(',', ':'))}\n\n"
+                if use_team_token:
+                    async with api_session_maker() as sse_db:
+                        view = await get_team_view(use_team_token, sse_db)
+                        yield f"data: {json.dumps(view, separators=(',', ':'))}\n\n"
         except asyncio.CancelledError:
             pass
         finally:
-            await manager.disconnect(q)
+            await manager.disconnect(game_id, q)
 
     return StreamingResponse(
         event_generator(),
@@ -494,13 +529,22 @@ async def team_page(
     db: AsyncSession = Depends(get_api_db),
     lang: Optional[str] = Query(None),
 ):
-    events = await get_all_events(db)
+    from app.models import lookup_team_token, get_game_events
+
+    result = await lookup_team_token(db, token)
+    if not result:
+        return HTMLResponse("Team not found", status_code=404)
+    
+    game_id_str, color = result
+    game_id = uuid.UUID(game_id_str)
+    
+    events = await get_game_events(db, game_id)
     state = GameState.from_events(events)
-    color = state.team_tokens.get(token)
-    if color is None:
+    
+    team_token_color = state.team_tokens.get(token)
+    if team_token_color is None:
         return HTMLResponse("Team not found", status_code=404)
 
-    # Language detection: query param > cookie > Accept-Language > 'en'
     if lang and lang in SUPPORTED_LANGS:
         chosen_lang = lang
     else:
@@ -516,7 +560,7 @@ async def team_page(
         "team.html",
         {
             "request": request,
-            "team_color": color,
+            "team_color": team_token_color,
             "team_token": token,
             "tr": translations,
             "tr_json": json.dumps(translations),
@@ -530,14 +574,20 @@ async def team_page(
 
 @app.get("/api/admin/locations")
 async def get_admin_locations(
+    game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
     _=Depends(verify_admin_token),
 ):
-    from app.models import get_all_locations
+    from app.models import get_game_locations, get_game_events
     from app.database import EventType
 
-    locations = await get_all_locations(db)
-    events = await get_all_events(db)
+    if game_id is None:
+        game_uuid = await _get_legacy_game_id(db)
+    else:
+        game_uuid = uuid.UUID(game_id)
+
+    locations = await get_game_locations(db, game_uuid)
+    events = await get_game_events(db, game_uuid)
 
     location_visits = {}
     for event in events:
@@ -567,15 +617,20 @@ async def get_admin_locations(
     return {"locations": result}
 
 
-
 @app.get("/api/admin/events")
 async def get_all_events_for_timeline(
+    game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
     _=Depends(verify_admin_token),
 ):
-    from app.models import get_all_events as db_get_all_events
+    from app.models import get_game_events
 
-    events = await db_get_all_events(db)
+    if game_id is None:
+        game_uuid = await _get_legacy_game_id(db)
+    else:
+        game_uuid = uuid.UUID(game_id)
+
+    events = await get_game_events(db, game_uuid)
 
     return {
         "total_events": len(events),
@@ -600,12 +655,18 @@ async def get_all_events_for_timeline(
 @app.get("/api/admin/events/{event_index}/state")
 async def get_state_at_event(
     event_index: int,
+    game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
     _=Depends(verify_admin_token),
 ):
-    from app.models import get_all_events as db_get_all_events
+    from app.models import get_game_events
 
-    events = await db_get_all_events(db)
+    if game_id is None:
+        game_uuid = await _get_legacy_game_id(db)
+    else:
+        game_uuid = uuid.UUID(game_id)
+
+    events = await get_game_events(db, game_uuid)
 
     if event_index < 0 or event_index >= len(events):
         return {
@@ -622,29 +683,30 @@ async def get_state_at_event(
 
 
 @app.get("/api/state")
-async def get_game_state(db: AsyncSession = Depends(get_api_db)):
-    events = await get_all_events(db)
-    state = GameState.from_events(events)
-
+async def get_game_state(
+    game_id: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_game_events, get_all_players
     from app.services.ai_player import get_all_ai_players
     from app.database import Role
-    from app.models import get_all_players
 
-    ai_players = get_all_ai_players()
+    game_uuid = uuid.UUID(game_id)
+    events = await get_game_events(db, game_uuid)
+    state = GameState.from_events(events)
 
-    # Also check database for AI players (for persistence across restarts)
+    ai_players = get_all_ai_players(game_id)
+
     all_players = await get_all_players(db)
-    db_ai_colors = {p.color for p in all_players if p.role == Role.AI}
+    db_ai_colors = {p.color for p in all_players if p.game_id == game_uuid and p.role == Role.AI}
 
     teams = []
     for color, team in state.teams.items():
         is_ai = False
-        # Check in-memory first
         if color in ai_players:
             ai = ai_players.get(color)
             if ai and hasattr(ai, "color") and ai.color == color:
                 is_ai = True
-        # Also check database
         if not is_ai and color in db_ai_colors:
             is_ai = True
 
@@ -682,9 +744,13 @@ async def get_game_state(db: AsyncSession = Depends(get_api_db)):
 
 @app.get("/api/board/{team_color}/public.json")
 async def get_public_board_json(
-    team_color: str, db: AsyncSession = Depends(get_api_db)
+    team_color: str,
+    game_id: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
 ):
-    events = await get_all_events(db)
+    from app.models import get_game_events
+
+    events = await get_game_events(db, uuid.UUID(game_id))
     state = GameState.from_events(events)
 
     if team_color not in state.teams:
@@ -696,9 +762,13 @@ async def get_public_board_json(
 
 @app.get("/api/board/{team_color}/private.json")
 async def get_private_board_json(
-    team_color: str, db: AsyncSession = Depends(get_api_db)
+    team_color: str,
+    game_id: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
 ):
-    events = await get_all_events(db)
+    from app.models import get_game_events
+
+    events = await get_game_events(db, uuid.UUID(game_id))
     state = GameState.from_events(events)
 
     if team_color not in state.teams:
@@ -753,8 +823,13 @@ def _team_to_json(team: "TeamState", include_ships: bool) -> TeamJsonResult:
 
 
 @app.get("/api/board/public.png")
-async def get_public_boards(db: AsyncSession = Depends(get_api_db)):
-    events = await get_all_events(db)
+async def get_public_boards(
+    game_id: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_game_events
+
+    events = await get_game_events(db, uuid.UUID(game_id))
     state = GameState.from_events(events)
     img = render_all_public_boards(state)
     img_bytes = boards_to_bytes(img)
@@ -762,8 +837,14 @@ async def get_public_boards(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.get("/api/board/{team_color}/private.png")
-async def get_private_board(team_color: str, db: AsyncSession = Depends(get_api_db)):
-    events = await get_all_events(db)
+async def get_private_board(
+    team_color: str,
+    game_id: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_game_events
+
+    events = await get_game_events(db, uuid.UUID(game_id))
     state = GameState.from_events(events)
 
     if team_color not in state.teams:
@@ -776,8 +857,14 @@ async def get_private_board(team_color: str, db: AsyncSession = Depends(get_api_
 
 
 @app.get("/api/board/{team_color}/public.png")
-async def get_public_board(team_color: str, db: AsyncSession = Depends(get_api_db)):
-    events = await get_all_events(db)
+async def get_public_board(
+    team_color: str,
+    game_id: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_game_events
+
+    events = await get_game_events(db, uuid.UUID(game_id))
     state = GameState.from_events(events)
 
     if team_color not in state.teams:
@@ -793,12 +880,25 @@ async def get_public_board(team_color: str, db: AsyncSession = Depends(get_api_d
 async def get_board_replay_gif(
     team_color: str,
     team_token: str = Query(...),
+    game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
 ):
-    events = await get_all_events(db)
+    from app.models import lookup_team_token, get_game_events
+
+    actual_game_id = game_id
+    if team_token:
+        result = await lookup_team_token(db, team_token)
+        if result:
+            actual_game_id, _ = result
+
+    if actual_game_id is None:
+        return Response("Unauthorized", status_code=401)
+
+    game_uuid = uuid.UUID(actual_game_id)
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
-    if state.team_tokens.get(team_token) is None:
+    if state.team_tokens.get(team_token) is None and game_id is None:
         return Response("Unauthorized", status_code=401)
 
     gif_bytes = create_public_board_gif(events, team_color)
@@ -815,10 +915,18 @@ async def get_board_replay_gif(
 @app.get("/api/admin/events/{event_index}/board/public.png")
 async def get_public_boards_at_event(
     event_index: int,
+    game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
     _=Depends(verify_admin_token),
 ):
-    events = await get_all_events(db)
+    from app.models import get_game_events
+
+    if game_id is None:
+        game_uuid = await _get_legacy_game_id(db)
+    else:
+        game_uuid = uuid.UUID(game_id)
+
+    events = await get_game_events(db, game_uuid)
 
     if event_index < 0 or event_index >= len(events):
         return {"error": f"Invalid event index"}
@@ -833,10 +941,18 @@ async def get_public_boards_at_event(
 async def get_single_public_board_at_event(
     event_index: int,
     team_color: str,
+    game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
     _=Depends(verify_admin_token),
 ):
-    events = await get_all_events(db)
+    from app.models import get_game_events
+
+    if game_id is None:
+        game_uuid = await _get_legacy_game_id(db)
+    else:
+        game_uuid = uuid.UUID(game_id)
+
+    events = await get_game_events(db, game_uuid)
 
     if event_index < 0 or event_index >= len(events):
         return {"error": f"Invalid event index"}
@@ -856,10 +972,18 @@ async def get_single_public_board_at_event(
 async def get_private_board_at_event(
     event_index: int,
     team_color: str,
+    game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
     _=Depends(verify_admin_token),
 ):
-    events = await get_all_events(db)
+    from app.models import get_game_events
+
+    if game_id is None:
+        game_uuid = await _get_legacy_game_id(db)
+    else:
+        game_uuid = uuid.UUID(game_id)
+
+    events = await get_game_events(db, game_uuid)
 
     if event_index < 0 or event_index >= len(events):
         return {"error": f"Invalid event index"}
@@ -876,8 +1000,13 @@ async def get_private_board_at_event(
 
 
 @app.get("/game-state.png")
-async def get_game_state_png(db: AsyncSession = Depends(get_api_db)):
-    events = await get_all_events(db)
+async def get_game_state_png(
+    game_id: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_game_events
+
+    events = await get_game_events(db, uuid.UUID(game_id))
     state = GameState.from_events(events)
     img = render_all_public_boards(state)
     img_bytes = boards_to_bytes(img)
@@ -888,14 +1017,18 @@ async def get_game_state_png(db: AsyncSession = Depends(get_api_db)):
 async def execute_command(
     cmd: ExecuteCommand,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_team_or_admin_token),
+    auth_info: dict = Depends(verify_team_or_gm),
 ):
     from app.database import EventType
+    from app.models import get_game_events, get_game, update_game_status
 
-    events = await get_all_events(db)
+    game_id = auth_info["game_id"]
+    game_uuid = uuid.UUID(game_id)
+    team_color_from_auth = auth_info.get("color")
+
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
-    # Status-based checks
     if state.status == GameStatusField.ENDED:
         winner = state.get_winner()
         msg = "Game has ended! No more actions allowed."
@@ -906,7 +1039,6 @@ async def execute_command(
     result = {"success": False, "message": ""}
 
     if cmd.command == "join":
-        # Join is only allowed during PREPARING
         if state.status != GameStatusField.PREPARING:
             result["message"] = "Cannot join - game already started!"
             return result
@@ -927,12 +1059,11 @@ async def execute_command(
             token=token,
         )
         state.handle_team_joined(event)
-        await save_event(db, event)
+        await save_event(db, event, game_uuid)
         result["success"] = True
         result["message"] = f"Joined {team_name} as {cmd.team_color} team!"
 
     elif cmd.command == "place":
-        # Place is only allowed during PREPARING
         if state.status != GameStatusField.PREPARING:
             result["message"] = "Cannot place ships - game already started!"
             return result
@@ -970,7 +1101,6 @@ async def execute_command(
             result["message"] = f"Cannot place ship: check bounds and no-touching rule"
 
     elif cmd.command == "bomb":
-        # Bomb is only allowed during STARTED
         if state.status != GameStatusField.STARTED:
             result["message"] = "Cannot bomb - game hasn't started yet!"
             return result
@@ -1032,17 +1162,6 @@ async def execute_command(
             f"Bombed {target_color} at {coord}: {msg}. Bombs left: {team.bombs}"
         )
 
-        payload = {
-            "color": cmd.team_color,
-            "command": cmd.command,
-            **cmd.args,
-            "attacker_color": cmd.team_color,
-            "target_color": target_color,
-            "row": row_val,
-            "col": col_val,
-            "result": bomb_result.value,
-        }
-
         event = BombThrownEvent(
             attacker_color=cmd.team_color,
             target_color=target_color,
@@ -1050,13 +1169,12 @@ async def execute_command(
             col=col_val,
             result=bomb_result.value,
         )
-        await save_event(db, event)
+        await save_event(db, event, game_uuid)
 
-        # Send notification to target player
         if TELEGRAM_BOT_AVAILABLE and settings.telegram_bot_token:
-            from app.models import get_player_by_color
+            from app.models import get_player_by_color_in_game
 
-            target_player = await get_player_by_color(db, target_color)
+            target_player = await get_player_by_color_in_game(db, game_uuid, target_color)
             if target_player and target_player.chat_id:
                 try:
                     bot = Bot(token=settings.telegram_bot_token)
@@ -1077,19 +1195,17 @@ async def execute_command(
                 except Exception as e:
                     print(f"Failed to send notification: {e}")
 
-        # Auto-end game if only one team remains
         winner = state.get_winner()
         if winner is not None and state.status == GameStatusField.STARTED:
             from app.database import GameStatus
 
             end_event = GameEndedEvent(winner=winner.name)
-            await save_event(db, end_event)
-            await update_game_settings(db, status=GameStatus.ENDED)
+            await save_event(db, end_event, game_uuid)
+            await update_game_status(db, game_uuid, GameStatus.ENDED)
             state.status = GameStatusField.ENDED
             result["message"] += f" 🏆 {winner.name} ({winner.color}) wins!"
 
     elif cmd.command == "code":
-        # Code redemption is only allowed during STARTED
         if state.status != GameStatusField.STARTED:
             result["message"] = "Cannot redeem codes - game hasn't started yet!"
             return result
@@ -1120,10 +1236,9 @@ async def execute_command(
                     result["message"] = "You've already visited this location!"
                     return result
 
-        # Get location's bomb value from database (source of truth)
         from app.models import get_location_by_number
 
-        location = await get_location_by_number(db, location_num)
+        location = await get_location_by_number(db, game_uuid, location_num)
         bomb_value = location.bomb_value if location else 1
 
         team.bombs += bomb_value
@@ -1149,7 +1264,7 @@ async def execute_command(
                 col=col,
                 direction=cmd.args.get("direction", "horizontal"),
             )
-            await save_event(db, event)
+            await save_event(db, event, game_uuid)
         elif cmd.command == "code":
             event = CodeRedeemedEvent(
                 color=cmd.team_color,
@@ -1158,7 +1273,7 @@ async def execute_command(
                 success=True,
                 bombs_earned=bomb_value,
             )
-            await save_event(db, event)
+            await save_event(db, event, game_uuid)
 
     return result
 
@@ -1167,9 +1282,12 @@ async def execute_command(
 async def quick_add_bombs(
     action: QuickAction,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
-    events = await get_all_events(db)
+    from app.models import get_game_events
+
+    game_uuid = uuid.UUID(game_id)
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
     if state.status == GameStatusField.ENDED:
@@ -1184,7 +1302,7 @@ async def quick_add_bombs(
     )
     new_state, updated_event = event.apply(state)
 
-    await save_event(db, event)
+    await save_event(db, event, game_uuid)
 
     team = new_state.teams[action.team_color]
     return {
@@ -1197,11 +1315,11 @@ async def quick_add_bombs(
 async def quick_place_all_ships(
     action: QuickAction,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_team_or_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
-    from app.services.ship_placement import place_all_ships
+    from app.services.ship_placement import place_all_ships_game_scoped
 
-    success, message = await place_all_ships(db, action.team_color)
+    success, message = await place_all_ships_game_scoped(db, game_id, action.team_color)
     return {
         "success": success,
         "message": message,
@@ -1212,22 +1330,20 @@ async def quick_place_all_ships(
 async def trigger_ai_move(
     action: QuickAction,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
     from app.services.ai_player import get_ai_player, add_ai_player
     from app.database import Role
+    from app.models import get_game_events, get_all_players
 
-    ai = get_ai_player(action.team_color)
+    game_uuid = uuid.UUID(game_id)
+    ai = get_ai_player(game_id, action.team_color)
 
-    # If not in memory, check database (container may have restarted)
     if not ai:
-        from app.models import get_all_players
-
         all_players = await get_all_players(db)
         for p in all_players:
-            if p.color == action.team_color and p.role == Role.AI:
-                # Restore AI to memory
-                ai = add_ai_player(p.color, p.name)
+            if p.game_id == game_uuid and p.color == action.team_color and p.role == Role.AI:
+                ai = add_ai_player(game_id, p.color, p.name)
                 break
 
     if not ai:
@@ -1236,13 +1352,13 @@ async def trigger_ai_move(
             "message": f"No AI player with color {action.team_color}",
         }
 
-    events = await get_all_events(db)
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
     if state.status != GameStatusField.STARTED:
         return {"success": False, "message": "Game not started!"}
 
-    success = await ai.execute_bomb(db, state)
+    success = await ai.execute_bomb(db, state, game_id)
     if success:
         return {"success": True, "message": f"AI {action.team_color} threw a bomb!"}
     return {
@@ -1252,18 +1368,22 @@ async def trigger_ai_move(
 
 
 @app.post("/api/quick/pause-all-ai")
-async def pause_all_ai(_=Depends(verify_admin_token)):
+async def pause_all_ai(
+    game_id: str = Depends(verify_gm_token),
+):
     from app.services.ai_player import pause_all_ai as pause_all
 
-    pause_all()
+    pause_all(game_id)
     return {"success": True, "message": "All AI players paused!"}
 
 
 @app.post("/api/quick/resume-all-ai")
-async def resume_all_ai(_=Depends(verify_admin_token)):
+async def resume_all_ai(
+    game_id: str = Depends(verify_gm_token),
+):
     from app.services.ai_player import resume_all_ai as resume_all
 
-    resume_all()
+    resume_all(game_id)
     return {"success": True, "message": "All AI players resumed!"}
 
 
@@ -1271,12 +1391,13 @@ async def resume_all_ai(_=Depends(verify_admin_token)):
 async def quick_add_ai(
     action: AddAIAction,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
     from app.game.state import TEAM_COLORS
     from app.events import TeamJoinedEvent, save_event
     from app.database import Role
 
+    game_uuid = uuid.UUID(game_id)
     color = action.team_color.lower()
     name = action.name or f"{color.title()} AI"
 
@@ -1286,11 +1407,9 @@ async def quick_add_ai(
             "message": f"Invalid color! Choose from: {', '.join(TEAM_COLORS)}",
         }
 
-    from app.models import get_all_events
-    from app.game.state import GameState
+    from app.models import get_game_events
 
-    # Check game events first (current game state)
-    events = await get_all_events(db)
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
     if color in state.teams:
@@ -1301,51 +1420,35 @@ async def quick_add_ai(
 
     from app.services.ai_player import get_ai_player
 
-    # Check in-memory AI players (current session)
-    existing_ai = get_ai_player(color)
+    existing_ai = get_ai_player(game_id, color)
     if existing_ai:
         return {"success": False, "message": f"AI player for {color} already exists!"}
 
-    # Check in-memory AI players (current session)
-    existing_ai = get_ai_player(color)
-    if existing_ai:
-        return {"success": False, "message": f"AI player for {color} already exists!"}
-
-    # Create or update Player record for AI
     from app.models import create_player
     from sqlalchemy import select
     from app.database import Player
 
-    # Delete any old player record (any role) for this color
-    result = await db.execute(select(Player).where(Player.color == color))
+    result = await db.execute(select(Player).where(Player.game_id == game_uuid, Player.color == color))
     old_player = result.scalar_one_or_none()
     if old_player:
         await db.delete(old_player)
         await db.commit()
 
-    await create_player(db, name, color, None, Role.AI)
+    await create_player(db, game_uuid, name, color, None, Role.AI)
 
-    # Emit TeamJoinedEvent to create the team (like human teams)
     from app.events.models import generate_team_token
 
     token = generate_team_token()
     event = TeamJoinedEvent(name=name, color=color, chat_id=0, bombs=3, token=token)
-    await save_event(db, event)
+    await save_event(db, event, game_uuid)
 
-    # Add AI to in-memory player registry
     from app.services.ai_player import add_ai_player
 
-    add_ai_player(color, name)
+    add_ai_player(game_id, color, name)
 
-    # Place ships (this emits ShipPlacedEvent events)
-    from app.services.ship_placement import place_all_ships
+    from app.services.ship_placement import place_all_ships_game_scoped
 
-    await place_all_ships(db, color)
-
-    return {
-        "success": True,
-        "message": f"🤖 Added AI player '{name}' ({color})! Ships auto-placed.",
-    }
+    await place_all_ships_game_scoped(db, game_id, color)
 
     return {
         "success": True,
@@ -1357,9 +1460,12 @@ async def quick_add_ai(
 async def quick_reset_team(
     action: QuickAction,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
-    events = await get_all_events(db)
+    from app.models import get_game_events
+
+    game_uuid = uuid.UUID(game_id)
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
     if action.team_color not in state.teams:
@@ -1370,7 +1476,7 @@ async def quick_reset_team(
     )
     new_state, updated_event = event.apply(state)
 
-    await save_event(db, event)
+    await save_event(db, event, game_uuid)
 
     return {"success": True, "message": f"Reset team {action.team_color}!"}
 
@@ -1379,9 +1485,12 @@ async def quick_reset_team(
 async def quick_remove_ship(
     action: RemoveShipAction,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_team_or_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
-    events = await get_all_events(db)
+    from app.models import get_game_events
+
+    game_uuid = uuid.UUID(game_id)
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
     if state.status != GameStatusField.PREPARING:
@@ -1406,7 +1515,7 @@ async def quick_remove_ship(
             "message": f"Failed to remove ship: {updated_event.reason}",
         }
 
-    await save_event(db, updated_event)
+    await save_event(db, updated_event, game_uuid)
 
     return {
         "success": True,
@@ -1425,12 +1534,16 @@ class CreateLocations(BaseModel):
 async def create_locations(
     action: CreateLocations,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
-    from app.models import get_all_locations, get_next_location_number
+    from app.models import get_game_locations, get_next_location_number, create_location
     from app.database import Location
 
-    events = await get_all_events(db)
+    game_uuid = uuid.UUID(game_id)
+
+    from app.models import get_game_events
+
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
     if state.status != GameStatusField.PREPARING:
@@ -1439,19 +1552,16 @@ async def create_locations(
             "message": "Cannot create locations - game already started!",
         }
 
-    # Check existing locations
-    existing_locations = await get_all_locations(db)
+    existing_locations = await get_game_locations(db, game_uuid)
     if len(existing_locations) + action.count > 100:
         return {
             "success": False,
             "message": f"Cannot create {action.count} locations! Would exceed 100 maximum. Current: {len(existing_locations)}",
         }
 
-    # Calculate default bomb value - total should equal 100
     total_after = len(existing_locations) + action.count
     default_bomb_value = max(1, 100 // total_after)
 
-    # Update ALL existing locations to have equal bomb values
     for loc in existing_locations:
         loc.bomb_value = default_bomb_value
 
@@ -1472,9 +1582,10 @@ async def create_locations(
 
         code = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
 
-        number = await get_next_location_number(db)
+        number = await get_next_location_number(db, game_uuid)
 
         new_location = Location(
+            game_id=game_uuid,
             number=number,
             latitude=lat,
             longitude=lon,
@@ -1490,7 +1601,7 @@ async def create_locations(
             code=code,
             bomb_value=default_bomb_value,
         )
-        await save_event(db, event)
+        await save_event(db, event, game_uuid)
 
         created.append({"number": number, "code": code, "lat": lat, "lon": lon})
 
@@ -1512,13 +1623,15 @@ class RemoveLocation(BaseModel):
 async def remove_location(
     action: RemoveLocation,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
-    from app.models import get_location_by_number, get_all_locations
+    from app.models import get_location_by_number, get_game_locations, get_game_events
     from app.database import Location
     from app.events.models import LocationRemovedEvent
 
-    events = await get_all_events(db)
+    game_uuid = uuid.UUID(game_id)
+
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
     if state.status == GameStatusField.ENDED:
@@ -1527,14 +1640,14 @@ async def remove_location(
             "message": "Cannot remove location - game has ended!",
         }
 
-    location = await get_location_by_number(db, action.location_number)
+    location = await get_location_by_number(db, game_uuid, action.location_number)
     if not location:
         return {
             "success": False,
             "message": f"Location {action.location_number} doesn't exist!",
         }
 
-    existing_locations = await get_all_locations(db)
+    existing_locations = await get_game_locations(db, game_uuid)
     remaining_count = len(existing_locations) - 1
 
     was_visited = False
@@ -1559,7 +1672,7 @@ async def remove_location(
         number=action.location_number,
         bomb_value=location.bomb_value,
     )
-    await save_event(db, event)
+    await save_event(db, event, game_uuid)
 
     await db.commit()
 
@@ -1579,13 +1692,14 @@ async def remove_location(
 @app.post("/api/quick/reset-game")
 async def reset_game(
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
-    from app.models import delete_all_events
+    from app.models import delete_all_events, update_game_status
     from app.database import GameStatus
 
-    count = await delete_all_events(db)
-    await update_game_settings(db, status=GameStatus.WAITING, started_at=None)
+    game_uuid = uuid.UUID(game_id)
+    count = await delete_all_events(db, game_uuid)
+    await update_game_status(db, game_uuid, GameStatus.WAITING, started_at=None)
 
     return {
         "success": True,
@@ -1596,11 +1710,12 @@ async def reset_game(
 @app.post("/api/quick/clear-locations")
 async def clear_locations(
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
     from app.models import delete_all_locations
 
-    count = await delete_all_locations(db)
+    game_uuid = uuid.UUID(game_id)
+    count = await delete_all_locations(db, game_uuid)
 
     return {
         "success": True,
@@ -1611,26 +1726,31 @@ async def clear_locations(
 @app.post("/api/quick/reset-settings")
 async def reset_settings(
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
-    from app.models import reset_game_settings
+    from app.models import update_game_status, get_game
+    from app.database import GameStatus
 
-    settings = await reset_game_settings(db)
+    game_uuid = uuid.UUID(game_id)
+    game = await get_game(db, game_uuid)
+    await update_game_status(db, game_uuid, GameStatus.WAITING, started_at=None)
+    status_val = game.status.value if game else "WAITING"
 
     return {
         "success": True,
-        "message": f"Settings reset! Status: {settings.status.value}, Locations needed: {settings.total_locations_needed}",
+        "message": f"Settings reset! Status: {status_val}",
     }
 
 
 @app.post("/api/quick/clear-players")
 async def clear_players(
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
     from app.models import delete_all_players
 
-    count = await delete_all_players(db)
+    game_uuid = uuid.UUID(game_id)
+    count = await delete_all_players(db, game_uuid)
 
     return {
         "success": True,
@@ -1641,58 +1761,49 @@ async def clear_players(
 @app.post("/api/quick/clear-database")
 async def clear_database(
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
     from app.events.models import generate_team_token
     from app.models import (
         delete_all_players,
         delete_all_events,
         delete_all_locations,
-        reset_game_settings,
-        set_admin_token,
     )
     from app.database import GameStatus
 
-    players_count = await delete_all_players(db)
-    events_count = await delete_all_events(db)
-    locations_count = await delete_all_locations(db)
-    await reset_game_settings(db)
+    game_uuid = uuid.UUID(game_id)
 
-    new_token = generate_team_token()
-    await set_admin_token(db, new_token)
+    players_count = await delete_all_players(db, game_uuid)
+    events_count = await delete_all_events(db, game_uuid)
+    locations_count = await delete_all_locations(db, game_uuid)
+
+    from app.models import update_game_status
+
+    await update_game_status(db, game_uuid, GameStatus.WAITING, started_at=None)
 
     return {
         "success": True,
-        "message": f"Database cleared! Players: {players_count}, Events: {events_count}, Locations: {locations_count}. Settings reset.",
-        "new_token": new_token,
+        "message": f"Database cleared! Players: {players_count}, Events: {events_count}, Locations: {locations_count}.",
     }
-
-
-async def update_game_settings(db: AsyncSession, **kwargs):
-    from app.models import get_or_create_game_settings
-    from app.database import GameSettings as DBGameSettings
-
-    settings = await get_or_create_game_settings(db)
-    for key, value in kwargs.items():
-        if hasattr(settings, key):
-            setattr(settings, key, value)
-    await db.commit()
-    await db.refresh(settings)
-    return settings
 
 
 @app.post("/api/quick/start-game")
 async def start_game(
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
-    from app.models import get_or_create_game_settings, get_all_locations
+    from app.models import get_game_locations, update_game_status, get_game
     from app.database import GameStatus
+    from datetime import datetime, timezone
 
-    events = await get_all_events(db)
+    game_uuid = uuid.UUID(game_id)
+
+    from app.models import get_game_events
+
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
-    locations = await get_all_locations(db)
+    locations = await get_game_locations(db, game_uuid)
 
     if state.status == GameStatusField.STARTED:
         return {"success": False, "message": "Game has already started!"}
@@ -1721,9 +1832,9 @@ async def start_game(
 
     event = GameStartedEvent()
     new_state, updated_event = event.apply(state)
-    await save_event(db, updated_event)
+    await save_event(db, updated_event, game_uuid)
 
-    await update_game_settings(db, status=GameStatus.STARTED)
+    await update_game_status(db, game_uuid, GameStatus.STARTED, started_at=datetime.now(timezone.utc))
 
     return {
         "success": True,
@@ -1735,12 +1846,16 @@ async def start_game(
 async def end_game(
     winner: str = "",
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
-    from app.models import get_or_create_game_settings
+    from app.models import update_game_status
     from app.database import GameStatus
 
-    events = await get_all_events(db)
+    game_uuid = uuid.UUID(game_id)
+
+    from app.models import get_game_events
+
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
     if state.status == GameStatusField.PREPARING:
@@ -1751,9 +1866,9 @@ async def end_game(
 
     event = GameEndedEvent(winner=winner)
     new_state, updated_event = event.apply(state)
-    await save_event(db, updated_event)
+    await save_event(db, updated_event, game_uuid)
 
-    await update_game_settings(db, status=GameStatus.ENDED)
+    await update_game_status(db, game_uuid, GameStatus.ENDED)
 
     return {
         "success": True,
@@ -1762,17 +1877,34 @@ async def end_game(
 
 
 @app.get("/api/game-status")
-async def get_game_status(db: AsyncSession = Depends(get_api_db)):
+async def get_game_status(
+    game_id: Optional[str] = Query(None),
+    gm_token: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_api_db),
+):
     from app.models import (
-        get_or_create_game_settings,
-        get_all_locations,
-        get_all_events,
+        get_game_locations,
+        get_game_events,
+        get_game,
+        get_game_by_gm_token,
     )
     from app.game.state import GameState
 
-    settings = await get_or_create_game_settings(db)
-    locations = await get_all_locations(db)
-    events = await get_all_events(db)
+    actual_game_id = game_id
+
+    if gm_token:
+        game = await get_game_by_gm_token(db, gm_token)
+        if game:
+            actual_game_id = str(game.id)
+
+    if actual_game_id is None:
+        game_uuid = await _get_legacy_game_id(db)
+    else:
+        game_uuid = uuid.UUID(actual_game_id)
+
+    game = await get_game(db, game_uuid)
+    locations = await get_game_locations(db, game_uuid)
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
     teams_with_all_ships = sum(
@@ -1780,9 +1912,9 @@ async def get_game_status(db: AsyncSession = Depends(get_api_db)):
     )
 
     return {
-        "status": settings.status.value,
+        "status": game.status.value if game else "PREPARING",
         "locations_placed": len(locations),
-        "total_locations_needed": settings.total_locations_needed,
+        "total_locations_needed": 0,
         "total_teams": len(state.teams),
         "teams_with_all_ships": teams_with_all_ships,
     }
@@ -1797,11 +1929,12 @@ class SetLocationBombs(BaseModel):
 async def set_location_bombs(
     data: SetLocationBombs,
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_token),
+    game_id: str = Depends(verify_gm_token),
 ):
     from app.models import get_location_by_number
 
-    location = await get_location_by_number(db, data.location_number)
+    game_uuid = uuid.UUID(game_id)
+    location = await get_location_by_number(db, game_uuid, data.location_number)
     if not location:
         return {
             "success": False,

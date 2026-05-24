@@ -3,7 +3,7 @@ import random
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import get_all_events, get_player_by_color
+from app.models import get_game_events, get_player_by_color_in_game
 from app.game.state import GameState, GameStatusField
 from app.events import BombThrownEvent, save_event
 from app.game.ships import BOARD_SIZE
@@ -103,8 +103,9 @@ class AIPlayer:
 
         return coordinate_to_string(row, col)
 
-    async def execute_bomb(self, db: AsyncSession, game_state: GameState) -> bool:
+    async def execute_bomb(self, db: AsyncSession, game_state: GameState, game_id: str) -> bool:
         """Execute bomb throw"""
+        import uuid
         target_info = await self.select_target(game_state)
 
         if target_info is None:
@@ -115,6 +116,7 @@ class AIPlayer:
         from app.game.ships import parse_coordinate, coordinate_to_string
 
         row, col = parse_coordinate(coord)
+        game_uuid = uuid.UUID(game_id)
 
         event = BombThrownEvent(
             attacker_color=self.color,
@@ -123,14 +125,14 @@ class AIPlayer:
             col=col,
         )
 
-        await save_event(db, event)
+        await save_event(db, event, game_uuid)
 
         # Send notification to target player
-        from app.models import get_player_by_color
+        from app.models import get_player_by_color_in_game
         from app.config import settings
 
-        print(f"[AI] Looking for target player: {target_color}")
-        target_player = await get_player_by_color(db, target_color)
+        print(f"[AI] Looking for target player: {target_color} game: {game_id}")
+        target_player = await get_player_by_color_in_game(db, game_uuid, target_color)
         print(
             f"[AI] Target player found: {target_player}, chat_id: {target_player.chat_id if target_player else None}"
         )
@@ -139,9 +141,10 @@ class AIPlayer:
             try:
                 # Check if this is a hit or miss by applying the event to game state
                 from app.game.state import GameState, GameStatusField
+                from app.models import get_game_events
 
                 # Get fresh state with the new event
-                events = await get_all_events(db)
+                events = await get_game_events(db, game_uuid)
                 state = GameState.from_events(events)
 
                 # Find the target team
@@ -181,55 +184,59 @@ class AIPlayer:
         return True
 
 
-_ai_players: dict[str, AIPlayer] = {}
-_ai_tasks: dict[str, asyncio.Task] = {}
-_global_pause = False
+_ai_players: dict[str, dict[str, AIPlayer]] = {}
+_ai_tasks: dict[str, dict[str, asyncio.Task]] = {}
+_game_pauses: dict[str, bool] = {}
 
 
-def get_ai_player(color: str) -> Optional[AIPlayer]:
-    return _ai_players.get(color)
+def get_ai_player(game_id: str, color: str) -> Optional[AIPlayer]:
+    return _ai_players.get(game_id, {}).get(color)
 
 
-def get_all_ai_players() -> dict[str, AIPlayer]:
-    return _ai_players.copy()
+def get_all_ai_players(game_id: str) -> dict[str, AIPlayer]:
+    return _ai_players.get(game_id, {}).copy()
 
 
-def add_ai_player(color: str, name: str) -> AIPlayer:
+def add_ai_player(game_id: str, color: str, name: str) -> AIPlayer:
     ai = AIPlayer(color, name)
-    _ai_players[color] = ai
+    if game_id not in _ai_players:
+        _ai_players[game_id] = {}
+    _ai_players[game_id][color] = ai
     return ai
 
 
-def remove_ai_player(color: str) -> bool:
-    if color in _ai_players:
-        del _ai_players[color]
+def remove_ai_player(game_id: str, color: str) -> bool:
+    if game_id in _ai_players and color in _ai_players[game_id]:
+        del _ai_players[game_id][color]
+        if not _ai_players[game_id]:
+            del _ai_players[game_id]
         return True
     return False
 
 
-def pause_ai_player(color: str) -> bool:
-    if color in _ai_players:
-        _ai_players[color].is_paused = True
+def pause_ai_player(game_id: str, color: str) -> bool:
+    ai = get_ai_player(game_id, color)
+    if ai:
+        ai.is_paused = True
         return True
     return False
 
 
-def resume_ai_player(color: str) -> bool:
-    if color in _ai_players:
-        _ai_players[color].is_paused = False
+def resume_ai_player(game_id: str, color: str) -> bool:
+    ai = get_ai_player(game_id, color)
+    if ai:
+        ai.is_paused = False
         return True
     return False
 
 
-def pause_all_ai():
-    global _global_pause
-    _global_pause = True
+def pause_all_ai(game_id: str):
+    _game_pauses[game_id] = True
 
 
-def resume_all_ai():
-    global _global_pause
-    _global_pause = False
+def resume_all_ai(game_id: str):
+    _game_pauses[game_id] = False
 
 
-def is_all_ai_paused() -> bool:
-    return _global_pause
+def is_all_ai_paused(game_id: str) -> bool:
+    return _game_pauses.get(game_id, False)

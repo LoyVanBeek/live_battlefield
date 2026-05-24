@@ -301,8 +301,10 @@
         }
 
         function getAdminToken() {
-            const m = window.location.pathname.match(/^\/admin\/([^/]+)/);
-            return m ? m[1] : '';
+            const m = window.location.pathname.match(/^\/admin\/game\/([^/]+)/);
+            if (m) return m[1];
+            const m2 = window.location.pathname.match(/^\/admin\/([^/]+)/);
+            return m2 ? m2[1] : '';
         }
 
         async function apiCall(url, method = 'GET', body = null) {

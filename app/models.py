@@ -5,7 +5,6 @@ from app.database import (
     Location,
     EventType,
     Role,
-    GameSettings,
     GameStatus,
     SuperAdmin,
     Game,
@@ -36,9 +35,9 @@ async def get_player_by_color(db: AsyncSession, color: str) -> Optional[Player]:
 
 
 async def create_player(
-    db: AsyncSession, name: str, color: str, chat_id: int | None, role: Role = Role.TEAM
+    db: AsyncSession, game_id: uuid.UUID, name: str, color: str, chat_id: int | None, role: Role = Role.TEAM
 ) -> Player:
-    player = Player(name=name, color=color, chat_id=chat_id, role=role)
+    player = Player(game_id=game_id, name=name, color=color, chat_id=chat_id, role=role)
     db.add(player)
     await db.commit()
     await db.refresh(player)
@@ -78,14 +77,19 @@ async def get_all_events(db: AsyncSession) -> list[GameEvent]:
     return list(result.scalars().all())
 
 
-async def get_location_by_number(db: AsyncSession, number: int) -> Optional[Location]:
-    result = await db.execute(select(Location).where(Location.number == number))
+async def get_location_by_number(db: AsyncSession, game_id: uuid.UUID, number: int) -> Optional[Location]:
+    result = await db.execute(
+        select(Location).where(Location.game_id == game_id, Location.number == number)
+    )
     return result.scalar_one_or_none()
 
 
-async def get_next_location_number(db: AsyncSession) -> int:
+async def get_next_location_number(db: AsyncSession, game_id: uuid.UUID) -> int:
     result = await db.execute(
-        select(Location).order_by(Location.number.desc()).limit(1)
+        select(Location)
+        .where(Location.game_id == game_id)
+        .order_by(Location.number.desc())
+        .limit(1)
     )
     last_location = result.scalar_one_or_none()
     if last_location:
@@ -94,10 +98,10 @@ async def get_next_location_number(db: AsyncSession) -> int:
 
 
 async def create_location(
-    db: AsyncSession, number: int, latitude: float, longitude: float, code: str
+    db: AsyncSession, game_id: uuid.UUID, number: int, latitude: float, longitude: float, code: str
 ) -> Location:
     location = Location(
-        number=number, latitude=latitude, longitude=longitude, code=code
+        game_id=game_id, number=number, latitude=latitude, longitude=longitude, code=code
     )
     db.add(location)
     await db.commit()
@@ -110,33 +114,10 @@ async def get_all_locations(db: AsyncSession) -> list[Location]:
     return list(result.scalars().all())
 
 
-async def get_game_settings(db: AsyncSession) -> Optional[GameSettings]:
-    result = await db.execute(select(GameSettings).limit(1))
-    return result.scalar_one_or_none()
-
-
-async def get_or_create_game_settings(db: AsyncSession) -> GameSettings:
-    settings = await get_game_settings(db)
-    if not settings:
-        settings = GameSettings(status=GameStatus.WAITING, total_locations_needed=33)
-        db.add(settings)
-        await db.commit()
-        await db.refresh(settings)
-    return settings
-
-
-async def update_game_settings(db: AsyncSession, **kwargs) -> GameSettings:
-    settings = await get_or_create_game_settings(db)
-    for key, value in kwargs.items():
-        if hasattr(settings, key):
-            setattr(settings, key, value)
-    await db.commit()
-    await db.refresh(settings)
-    return settings
-
-
-async def delete_all_events(db: AsyncSession) -> int:
-    result = await db.execute(select(GameEvent))
+async def delete_all_events(db: AsyncSession, game_id: uuid.UUID) -> int:
+    result = await db.execute(
+        select(GameEvent).where(GameEvent.game_id == game_id)
+    )
     events = result.scalars().all()
     count = len(events)
     for event in events:
@@ -145,8 +126,10 @@ async def delete_all_events(db: AsyncSession) -> int:
     return count
 
 
-async def delete_all_locations(db: AsyncSession) -> int:
-    result = await db.execute(select(Location))
+async def delete_all_locations(db: AsyncSession, game_id: uuid.UUID) -> int:
+    result = await db.execute(
+        select(Location).where(Location.game_id == game_id)
+    )
     locations = result.scalars().all()
     count = len(locations)
     for loc in locations:
@@ -155,33 +138,16 @@ async def delete_all_locations(db: AsyncSession) -> int:
     return count
 
 
-async def delete_all_players(db: AsyncSession) -> int:
-    result = await db.execute(select(Player).where(Player.role == Role.TEAM))
+async def delete_all_players(db: AsyncSession, game_id: uuid.UUID) -> int:
+    result = await db.execute(
+        select(Player).where(Player.game_id == game_id, Player.role == Role.TEAM)
+    )
     players = result.scalars().all()
     count = len(players)
     for player in players:
         await db.delete(player)
     await db.commit()
     return count
-
-
-async def reset_game_settings(db: AsyncSession) -> GameSettings:
-    settings = await get_or_create_game_settings(db)
-    settings.status = GameStatus.WAITING
-    settings.total_locations_needed = 33
-    settings.started_at = None
-    settings.admin_token = ""
-    await db.commit()
-    await db.refresh(settings)
-    return settings
-
-
-async def set_admin_token(db: AsyncSession, token: str) -> GameSettings:
-    settings = await get_or_create_game_settings(db)
-    settings.admin_token = token
-    await db.commit()
-    await db.refresh(settings)
-    return settings
 
 
 # --- Multi-game models ---

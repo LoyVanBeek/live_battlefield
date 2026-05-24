@@ -106,16 +106,6 @@ class GameStatus(str, enum.Enum):
     ENDED = "ended"
 
 
-class GameSettings(Base):
-    __tablename__ = "game_settings"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    status: Mapped[GameStatus] = mapped_column(Enum(GameStatus), nullable=False, default=GameStatus.WAITING)
-    total_locations_needed: Mapped[int] = mapped_column(Integer, nullable=False, default=33)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    admin_token: Mapped[str] = mapped_column(String(20), default="")
-
-
 class SuperAdmin(Base):
     __tablename__ = "super_admins"
 

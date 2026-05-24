@@ -234,8 +234,10 @@
 
     <script>
         function getAdminToken() {
-            const m = window.location.pathname.match(/^\/admin\/([^/]+)/);
-            return m ? m[1] : '';
+            const m = window.location.pathname.match(/^\/admin\/game\/([^/]+)/);
+            if (m) return m[1];
+            const m2 = window.location.pathname.match(/^\/admin\/([^/]+)/);
+            return m2 ? m2[1] : '';
         }
 
         let map;
@@ -264,7 +266,7 @@
             
             map.on('click', async function(e) {
                 try {
-                    const resp = await fetch('/api/quick/create_locations?admin_token=' + encodeURIComponent(getAdminToken()), {
+                    const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getAdminToken()), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -363,7 +365,7 @@
             }
             
             try {
-                const resp = await fetch('/api/quick/remove_location?admin_token=' + encodeURIComponent(getAdminToken()), {
+                const resp = await fetch('/api/quick/remove_location?gm_token=' + encodeURIComponent(getAdminToken()), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ location_number: locationNumber })
@@ -398,7 +400,7 @@
             }
             
             try {
-                const resp = await fetch('/api/quick/create_locations?admin_token=' + encodeURIComponent(getAdminToken()), {
+                const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getAdminToken()), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
