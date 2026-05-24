@@ -1,5 +1,6 @@
-from typing import Union
+from typing import Union, Optional
 import logging
+import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import GameEvent
 from app.sse_manager import manager
@@ -20,6 +21,14 @@ from app.events.models import (
 logger = logging.getLogger(__name__)
 
 
+async def _get_legacy_game_id(db: AsyncSession) -> uuid.UUID:
+    from app.models import get_all_games
+    games = await get_all_games(db)
+    if games:
+        return games[-1].id  # oldest game (legacy)
+    return uuid.uuid4()
+
+
 async def save_event(
     db: AsyncSession,
     event: Union[
@@ -35,8 +44,11 @@ async def save_event(
         GameStartedEvent,
         GameEndedEvent,
     ],
+    game_id: Optional[uuid.UUID] = None,
 ) -> GameEvent:
-    game_event = event.to_game_event()
+    if game_id is None:
+        game_id = await _get_legacy_game_id(db)
+    game_event = event.to_game_event(game_id=game_id)
     db.add(game_event)
     await db.commit()
     await db.refresh(game_event)

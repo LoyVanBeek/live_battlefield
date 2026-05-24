@@ -8,10 +8,14 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+asyncpg://postgres:postgres@localhost:5432/battleship"
     )
-    database_url_sync: str = "postgresql://postgres:postgres@localhost:5432/battleship"
     host: str = "0.0.0.0"
     port: int = 8000
     dev_mode: bool = False
+    super_admin_token: str = ""
+
+    @property
+    def database_url_sync(self) -> str:
+        return self.database_url.replace("+asyncpg", "")
 
 
 settings = Settings()

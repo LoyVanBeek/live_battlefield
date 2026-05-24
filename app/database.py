@@ -5,10 +5,11 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import Integer, String, Float, DateTime, Enum, JSON
+from sqlalchemy import Integer, String, Float, DateTime, Enum, JSON, UUID, ForeignKey, UniqueConstraint
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 import enum
+import uuid
 
 from app.config import settings
 
@@ -49,10 +50,12 @@ class Role(str, enum.Enum):
 
 class Player(Base):
     __tablename__ = "players"
+    __table_args__ = (UniqueConstraint("game_id", "color", name="uq_player_game_color"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    game_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("games.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    color: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+    color: Mapped[str] = mapped_column(String(20), nullable=False)
     chat_id: Mapped[int | None] = mapped_column(nullable=True)  # Nullable for AI players
     role: Mapped[Role] = mapped_column(Enum(Role), nullable=False, default=Role.TEAM)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -76,6 +79,7 @@ class GameEvent(Base):
     __tablename__ = "game_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    game_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("games.id"), nullable=False)
     event_type: Mapped[EventType] = mapped_column(Enum(EventType), nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     player_id: Mapped[int | None] = mapped_column(nullable=True)
@@ -84,9 +88,11 @@ class GameEvent(Base):
 
 class Location(Base):
     __tablename__ = "locations"
+    __table_args__ = (UniqueConstraint("game_id", "number", name="uq_location_game_number"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    number: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    game_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("games.id"), nullable=False)
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
     latitude: Mapped[float] = mapped_column(Float, nullable=False)
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
     code: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -110,11 +116,40 @@ class GameSettings(Base):
     admin_token: Mapped[str] = mapped_column(String(20), default="")
 
 
+class SuperAdmin(Base):
+    __tablename__ = "super_admins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    token: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+
+
+class Game(Base):
+    __tablename__ = "games"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[GameStatus] = mapped_column(Enum(GameStatus), nullable=False, default=GameStatus.WAITING)
+    gm_token: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+    total_locations_needed: Mapped[int] = mapped_column(Integer, nullable=False, default=33)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class TeamToken(Base):
+    __tablename__ = "team_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    game_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("games.id"), nullable=False)
+    token: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+    color: Mapped[str] = mapped_column(String(20), nullable=False)
+
+
 async def get_db() -> AsyncIterator[AsyncSession]:
     async with async_session_maker() as session:
         yield session
 
 
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Initialize database (tables already created by migrations)."""
+    pass

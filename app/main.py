@@ -482,6 +482,10 @@ async def location_message_handler(update: Update, context: ContextTypes.DEFAULT
 
 async def post_init(application: Application):
     await init_db()
+    from app.models import get_or_create_super_admin
+    async with async_session_maker() as db:
+        sa = await get_or_create_super_admin(db)
+        logger.info("Super admin token: %s", sa.token)
 
 
 def run_bot():
@@ -530,6 +534,24 @@ if __name__ == "__main__":
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+
+    # Run migrations before anything else
+    def run_migrations():
+        import subprocess
+        import os
+        result = subprocess.run(
+            ["alembic", "-c", "migrations.ini", "upgrade", "head"],
+            cwd=os.path.dirname(os.path.dirname(__file__)),
+            env={**os.environ, "PYTHONPATH": os.path.dirname(os.path.dirname(__file__))},
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            print(f"Migration stdout: {result.stdout}")
+            print(f"Migration stderr: {result.stderr}")
+            raise RuntimeError(f"Migration failed: {result.stderr}")
+        print(f"Migrations applied: {result.stdout}")
+
+    run_migrations()
 
     if len(sys.argv) > 1 and sys.argv[1] == "bot":
         run_bot()

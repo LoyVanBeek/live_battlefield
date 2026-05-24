@@ -7,11 +7,15 @@ from app.database import (
     Role,
     GameSettings,
     GameStatus,
+    SuperAdmin,
+    Game,
+    TeamToken,
 )
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
+import uuid
 
 
 async def get_player_by_chat(db: AsyncSession, chat_id: int) -> Optional[Player]:
@@ -178,3 +182,116 @@ async def set_admin_token(db: AsyncSession, token: str) -> GameSettings:
     await db.commit()
     await db.refresh(settings)
     return settings
+
+
+# --- Multi-game models ---
+
+async def get_super_admin(db: AsyncSession) -> Optional[SuperAdmin]:
+    result = await db.execute(select(SuperAdmin).limit(1))
+    return result.scalar_one_or_none()
+
+
+async def get_or_create_super_admin(db: AsyncSession) -> SuperAdmin:
+    admin = await get_super_admin(db)
+    if not admin:
+        from app.config import settings as app_settings
+        token = app_settings.super_admin_token
+        if not token:
+            from app.events.models import generate_team_token
+            token = generate_team_token()
+        admin = SuperAdmin(token=token)
+        db.add(admin)
+        await db.commit()
+        await db.refresh(admin)
+    return admin
+
+
+async def create_game(db: AsyncSession, name: str | None, gm_token: str) -> Game:
+    game = Game(name=name, gm_token=gm_token)
+    db.add(game)
+    await db.commit()
+    await db.refresh(game)
+    return game
+
+
+async def get_game(db: AsyncSession, game_id: uuid.UUID) -> Optional[Game]:
+    result = await db.execute(select(Game).where(Game.id == game_id))
+    return result.scalar_one_or_none()
+
+
+async def get_game_by_gm_token(db: AsyncSession, gm_token: str) -> Optional[Game]:
+    result = await db.execute(select(Game).where(Game.gm_token == gm_token))
+    return result.scalar_one_or_none()
+
+
+async def get_all_games(db: AsyncSession) -> list[Game]:
+    result = await db.execute(select(Game).order_by(Game.created_at.desc()))
+    return list(result.scalars().all())
+
+
+async def lookup_team_token(db: AsyncSession, token: str) -> Optional[tuple]:
+    """Returns (game_id, color) or None."""
+    result = await db.execute(select(TeamToken).where(TeamToken.token == token))
+    tt = result.scalar_one_or_none()
+    if tt:
+        return (str(tt.game_id), tt.color)
+    return None
+
+
+async def create_team_token(db: AsyncSession, game_id: uuid.UUID, token: str, color: str) -> TeamToken:
+    tt = TeamToken(game_id=game_id, token=token, color=color)
+    db.add(tt)
+    await db.commit()
+    await db.refresh(tt)
+    return tt
+
+
+async def get_game_events(db: AsyncSession, game_id: uuid.UUID) -> list[GameEvent]:
+    result = await db.execute(
+        select(GameEvent)
+        .where(GameEvent.game_id == game_id)
+        .order_by(GameEvent.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def get_game_locations(db: AsyncSession, game_id: uuid.UUID) -> list[Location]:
+    result = await db.execute(
+        select(Location)
+        .where(Location.game_id == game_id)
+        .order_by(Location.number)
+    )
+    return list(result.scalars().all())
+
+
+async def get_player_by_color_in_game(db: AsyncSession, game_id: uuid.UUID, color: str) -> Optional[Player]:
+    result = await db.execute(
+        select(Player).where(
+            Player.game_id == game_id,
+            Player.color == color,
+            Player.role == Role.TEAM,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_all_teams_in_game(db: AsyncSession, game_id: uuid.UUID) -> list[Player]:
+    result = await db.execute(
+        select(Player)
+        .where(Player.game_id == game_id, Player.role == Role.TEAM)
+    )
+    return list(result.scalars().all())
+
+
+async def update_game_status(
+    db: AsyncSession, game_id: uuid.UUID, status: GameStatus, started_at: Optional[datetime] = None
+) -> Optional[Game]:
+    game = await get_game(db, game_id)
+    if not game:
+        return None
+    game.status = status
+    if started_at:
+        game.started_at = started_at
+    await db.commit()
+    await db.refresh(game)
+    return game
