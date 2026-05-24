@@ -106,8 +106,8 @@ class GameStatus(str, enum.Enum):
     ENDED = "ended"
 
 
-class SuperAdmin(Base):
-    __tablename__ = "super_admins"
+class Admin(Base):
+    __tablename__ = "admins"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     token: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)

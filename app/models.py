@@ -6,7 +6,7 @@ from app.database import (
     EventType,
     Role,
     GameStatus,
-    SuperAdmin,
+    Admin,
     Game,
     TeamToken,
 )
@@ -152,20 +152,20 @@ async def delete_all_players(db: AsyncSession, game_id: uuid.UUID) -> int:
 
 # --- Multi-game models ---
 
-async def get_super_admin(db: AsyncSession) -> Optional[SuperAdmin]:
-    result = await db.execute(select(SuperAdmin).limit(1))
+async def get_admin(db: AsyncSession) -> Optional[Admin]:
+    result = await db.execute(select(Admin).limit(1))
     return result.scalar_one_or_none()
 
 
-async def get_or_create_super_admin(db: AsyncSession) -> SuperAdmin:
-    admin = await get_super_admin(db)
+async def get_or_create_admin(db: AsyncSession) -> Admin:
+    admin = await get_admin(db)
     if not admin:
         from app.config import settings as app_settings
-        token = app_settings.super_admin_token
+        token = app_settings.admin_token
         if not token:
             from app.events.models import generate_team_token
             token = generate_team_token()
-        admin = SuperAdmin(token=token)
+        admin = Admin(token=token)
         db.add(admin)
         await db.commit()
         await db.refresh(admin)

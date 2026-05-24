@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -11,7 +12,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     dev_mode: bool = False
-    super_admin_token: str = ""
+    admin_token: str = Field(default="", validation_alias="ADMIN_TOKEN")
 
     @property
     def database_url_sync(self) -> str:

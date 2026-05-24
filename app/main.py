@@ -482,10 +482,10 @@ async def location_message_handler(update: Update, context: ContextTypes.DEFAULT
 
 async def post_init(application: Application):
     await init_db()
-    from app.models import get_or_create_super_admin
+    from app.models import get_or_create_admin
     async with async_session_maker() as db:
-        sa = await get_or_create_super_admin(db)
-        logger.info("Super admin token: %s", sa.token)
+        sa = await get_or_create_admin(db)
+        logger.info("Admin token: %s", sa.token)
 
 
 def run_bot():
