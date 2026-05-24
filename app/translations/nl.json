@@ -1,80 +1,83 @@
 {
-  "page": {
-    "title": "Live Battlefield - Team Spel",
-    "heading": "🎮 Team Spel"
-  },
-  "team": {
-    "not_joined": "{color} (niet deelgenomen)",
-    "bombs": "💣",
-    "ships": "🚢",
-    "sunk": "💥 gezonken"
-  },
-  "status": {
-    "started": "🎮 Spel gestart - Gooi bommen!",
-    "ended": "🏁 Spel afgelopen",
-    "waiting": "⏳ Wachten op start",
-    "loading": "Laden..."
-  },
-  "board": {
-    "private": {
-      "heading": "🚢 Jouw Geheime Bord"
+    "page": {
+        "title": "Live Battlefield - Team Spel",
+        "heading": "\ud83c\udfae Team Spel"
     },
-    "public": {
-      "heading": "💥 Openbare Borden (Andere Teams)",
-      "team_label": "{name} ({color})",
-      "replay_alt": "Herhaling van {name}'s bord"
+    "team": {
+        "not_joined": "{color} (niet deelgenomen)",
+        "bombs": "\ud83d\udca3",
+        "ships": "\ud83d\udea2",
+        "sunk": "\ud83d\udca5 gezonken",
+        "renamed": "Hernoemd naar {name}!"
+    },
+    "status": {
+        "started": "\ud83c\udfae Spel gestart - Gooi bommen!",
+        "ended": "\ud83c\udfc1 Spel afgelopen",
+        "waiting": "\u23f3 Wachten op start",
+        "loading": "Laden..."
+    },
+    "board": {
+        "private": {
+            "heading": "\ud83d\udea2 Jouw Geheime Bord"
+        },
+        "public": {
+            "heading": "\ud83d\udca5 Openbare Borden (Andere Teams)",
+            "team_label": "{name} ({color})",
+            "replay_alt": "Herhaling van {name}'s bord"
+        }
+    },
+    "action": {
+        "loading": "Acties laden...",
+        "game_ended": "Het spel is afgelopen. Geen acties beschikbaar.",
+        "ship": {
+            "heading": "\ud83d\udea2 Schepen Plaatsen",
+            "auto": "Plaats Alle Schepen (Auto)",
+            "coord_placeholder": "A1",
+            "type_airplane": "vliegdekschip (6)",
+            "type_battleship": "slagschip (4)",
+            "type_torpedo": "torpedojager (3)",
+            "type_patrol": "patrouilleboot (2)",
+            "dir_horizontal": "horizontaal",
+            "dir_vertical": "verticaal",
+            "place": "Plaats Schip",
+            "remove_placeholder": "A1 (verwijder)",
+            "remove": "Verwijder Schip"
+        },
+        "bomb": {
+            "heading": "\ud83d\udca5 Bombardeer Vijand",
+            "select_target": "Selecteer doelwit",
+            "coord_placeholder": "A1",
+            "throw": "Gooi Bom",
+            "team_option": "{name} ({color})"
+        },
+        "code": {
+            "heading": "\ud83d\udd11 Code Inwisselen",
+            "location_placeholder": "Locatie #",
+            "value_placeholder": "ABCD",
+            "redeem": "Inwisselen"
+        },
+        "save": "Opslaan",
+        "cancel": "Annuleren"
+    },
+    "bomb_confirm": {
+        "title": "\ud83d\udca5 {target} bombarderen?",
+        "button": "\ud83d\udca5 Gooi Bom!",
+        "cancel": "Annuleren"
+    },
+    "error": {
+        "select_target": "Selecteer een doelwit!",
+        "enter_coord": "Voer een co\u00f6rdinaat in!",
+        "invalid_coord": "Ongeldig co\u00f6rdinaat! Gebruik A1-J10",
+        "enter_location": "Voer locatienummer in!",
+        "enter_code": "Voer code in!",
+        "game_not_started": "Spel is niet gestart!",
+        "cannot_bomb_self": "Je kunt jezelf niet bombarderen!",
+        "no_bombs": "Geen bommen over! Wis codes in om meer te krijgen!",
+        "fetch_prefix": "Fout: "
+    },
+    "lang": {
+        "label": "Taal",
+        "en": "\ud83c\uddec\ud83c\udde7 English",
+        "nl": "\ud83c\uddf3\ud83c\uddf1 Nederlands"
     }
-  },
-  "action": {
-    "loading": "Acties laden...",
-    "game_ended": "Het spel is afgelopen. Geen acties beschikbaar.",
-    "ship": {
-      "heading": "🚢 Schepen Plaatsen",
-      "auto": "Plaats Alle Schepen (Auto)",
-      "coord_placeholder": "A1",
-      "type_airplane": "vliegdekschip (6)",
-      "type_battleship": "slagschip (4)",
-      "type_torpedo": "torpedojager (3)",
-      "type_patrol": "patrouilleboot (2)",
-      "dir_horizontal": "horizontaal",
-      "dir_vertical": "verticaal",
-      "place": "Plaats Schip",
-      "remove_placeholder": "A1 (verwijder)",
-      "remove": "Verwijder Schip"
-    },
-    "bomb": {
-      "heading": "💥 Bombardeer Vijand",
-      "select_target": "Selecteer doelwit",
-      "coord_placeholder": "A1",
-      "throw": "Gooi Bom",
-      "team_option": "{name} ({color})"
-    },
-    "code": {
-      "heading": "🔑 Code Inwisselen",
-      "location_placeholder": "Locatie #",
-      "value_placeholder": "ABCD",
-      "redeem": "Inwisselen"
-    }
-  },
-  "bomb_confirm": {
-    "title": "💥 {target} bombarderen?",
-    "button": "💥 Gooi Bom!",
-    "cancel": "Annuleren"
-  },
-  "error": {
-    "select_target": "Selecteer een doelwit!",
-    "enter_coord": "Voer een coördinaat in!",
-    "invalid_coord": "Ongeldig coördinaat! Gebruik A1-J10",
-    "enter_location": "Voer locatienummer in!",
-    "enter_code": "Voer code in!",
-    "game_not_started": "Spel is niet gestart!",
-    "cannot_bomb_self": "Je kunt jezelf niet bombarderen!",
-    "no_bombs": "Geen bommen over! Wis codes in om meer te krijgen!",
-    "fetch_prefix": "Fout: "
-  },
-  "lang": {
-    "label": "Taal",
-    "en": "🇬🇧 English",
-    "nl": "🇳🇱 Nederlands"
-  }
 }

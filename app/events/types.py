@@ -3,6 +3,7 @@ from enum import Enum
 
 class EventType(str, Enum):
     TEAM_JOINED = "team_joined"
+    TEAM_RENAMED = "team_renamed"
     SHIP_PLACED = "ship_placed"
     SHIP_REMOVED = "ship_removed"
     BOMB_THROWN = "bomb_thrown"

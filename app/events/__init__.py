@@ -1,6 +1,7 @@
 from app.events.types import EventType
 from app.events.models import (
     TeamJoinedEvent,
+    TeamRenamedEvent,
     ShipPlacedEvent,
     ShipRemovedEvent,
     BombThrownEvent,

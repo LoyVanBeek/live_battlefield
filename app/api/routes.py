@@ -1063,6 +1063,28 @@ async def execute_command(
         result["success"] = True
         result["message"] = f"Joined {team_name} as {cmd.team_color} team!"
 
+    elif cmd.command == "rename":
+        if state.status != GameStatusField.PREPARING:
+            result["message"] = "Cannot rename - game already started!"
+            return result
+
+        if cmd.team_color not in state.teams:
+            result["message"] = f"Team {cmd.team_color} doesn't exist!"
+            return result
+
+        new_name = cmd.args.get("name", "")
+        if not new_name:
+            result["message"] = "Name is required!"
+            return result
+
+        from app.events.models import TeamRenamedEvent
+
+        event = TeamRenamedEvent(color=cmd.team_color, name=new_name)
+        state, _ = event.apply(state)
+        await save_event(db, event, game_uuid)
+        result["success"] = True
+        result["message"] = f"Renamed to {new_name}!"
+
     elif cmd.command == "place":
         if state.status != GameStatusField.PREPARING:
             result["message"] = "Cannot place ships - game already started!"

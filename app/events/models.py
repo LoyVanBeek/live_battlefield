@@ -65,6 +65,31 @@ class TeamJoinedEvent:
 
 
 @dataclass
+class TeamRenamedEvent:
+    event_type: EventType = EventType.TEAM_RENAMED
+    color: str = ""
+    name: str = ""
+
+    def apply(self, state: "GameState") -> tuple["GameState", "TeamRenamedEvent"]:
+        if self.color not in state.teams:
+            return state, self
+        from app.game.state import _copy_team
+        team = state.teams[self.color]
+        new_team = _copy_team(team)
+        new_team.name = self.name
+        new_teams = {**state.teams, self.color: new_team}
+        return replace(state, teams=new_teams), self
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.TEAM_RENAMED,
+            payload={"color": self.color, "name": self.name},
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
+@dataclass
 class ShipPlacedEvent:
     event_type: EventType = EventType.SHIP_PLACED
     color: str = ""
@@ -492,6 +517,7 @@ class GameEndedEvent:
 
 AnyEvent = Union[
     "TeamJoinedEvent",
+    "TeamRenamedEvent",
     "ShipPlacedEvent",
     "ShipRemovedEvent",
     "BombThrownEvent",

@@ -6,6 +6,7 @@ from app.database import GameEvent
 from app.sse_manager import manager
 from app.events.models import (
     TeamJoinedEvent,
+    TeamRenamedEvent,
     ShipPlacedEvent,
     ShipRemovedEvent,
     BombThrownEvent,
@@ -25,6 +26,7 @@ async def save_event(
     db: AsyncSession,
     event: Union[
         TeamJoinedEvent,
+        TeamRenamedEvent,
         ShipPlacedEvent,
         ShipRemovedEvent,
         BombThrownEvent,
