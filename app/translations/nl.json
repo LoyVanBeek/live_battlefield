@@ -20,8 +20,9 @@
       "heading": "🚢 Jouw Geheime Bord"
     },
     "public": {
-      "heading": "💥 Openbare Bord (Alle Teams)",
-      "team_label": "{name} ({color})"
+      "heading": "💥 Openbare Borden (Andere Teams)",
+      "team_label": "{name} ({color})",
+      "replay_alt": "Herhaling van {name}'s bord"
     }
   },
   "action": {

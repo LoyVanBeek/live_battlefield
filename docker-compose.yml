@@ -37,6 +37,13 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/battleship
     env_file:
       - .env
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /app/app
+          ignore:
+            - __pycache__/
 
   ngrok:
     image: ngrok/ngrok:latest

@@ -167,44 +167,10 @@
             color: #333;
         }
         .team-board-cell.ship {
-            background: #222;
+            /* background set inline by JS with team color */
         }
         .team-board-cell.ship.sunk {
-            background: #8B0000;
-        }
-        .team-board-cell .marker {
-            width: 14px;
-            height: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .team-board-cell .hit {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-        }
-        .team-board-cell .miss {
-            width: 12px;
-            height: 12px;
-            position: relative;
-        }
-        .team-board-cell .miss::before,
-        .team-board-cell .miss::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 10px;
-            height: 2px;
-            background-color: inherit;
-            border-radius: 1px;
-        }
-        .team-board-cell .miss::before {
-            transform: translate(-50%, -50%) rotate(45deg);
-        }
-        .team-board-cell .miss::after {
-            transform: translate(-50%, -50%) rotate(-45deg);
+            /* background set inline by JS with team color */
         }
         .team-play-link {
             display: block;
@@ -342,6 +308,27 @@
             'yellow': 'rgb(220, 200, 60)'
         };
         const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+        function getRgba(color, alpha) {
+            var rgb = TEAM_COLORS_RGB[color];
+            if (!rgb) return 'rgba(128,128,128,' + alpha + ')';
+            return 'rgba(' + rgb.slice(4, -1) + ',' + alpha + ')';
+        }
+        function createCross(color) {
+            var container = document.createElement('div');
+            container.style.cssText = 'position:relative;width:14px;height:14px;';
+            var line1 = document.createElement('div');
+            line1.style.cssText = 'position:absolute;top:50%;left:50%;width:12px;height:2px;background:' + (TEAM_COLORS_RGB[color] || 'gray') + ';transform:translate(-50%,-50%) rotate(45deg);border-radius:1px;';
+            container.appendChild(line1);
+            var line2 = document.createElement('div');
+            line2.style.cssText = 'position:absolute;top:50%;left:50%;width:12px;height:2px;background:' + (TEAM_COLORS_RGB[color] || 'gray') + ';transform:translate(-50%,-50%) rotate(-45deg);border-radius:1px;';
+            container.appendChild(line2);
+            return container;
+        }
+        function createDot(color) {
+            var dot = document.createElement('div');
+            dot.style.cssText = 'width:6px;height:6px;border-radius:50%;background:' + (TEAM_COLORS_RGB[color] || 'gray') + ';';
+            return dot;
+        }
         
         // Cache for board grids to avoid rebuilding
         const boardGridCache = new Map();
@@ -362,6 +349,7 @@
 
         function updateBoardFromData(containerId, data, includeShips) {
             const container = document.getElementById(containerId);
+            const boardColor = data.team ? data.team.color : 'gray';
             
             // Check if we already have a grid for this container
             let grid = boardGridCache.get(containerId);
@@ -419,35 +407,31 @@
                     
                     if (!cell) continue;
                     
-                    // Reset cell classes
+                    // Reset cell
                     cell.className = 'team-board-cell';
-                    
-                    // Private board: show ships
-                    if (includeShips && cellData.has_ship) {
-                        cell.classList.add('ship');
-                        if (cellData.ship_sunk) {
-                            cell.classList.add('sunk');
-                        }
-                    }
-                    
-                    // Clear any existing markers
+                    cell.style.backgroundColor = '';
                     while (cell.firstChild) {
                         cell.removeChild(cell.firstChild);
                     }
                     
-                    // Show hit/miss markers (both public and private)
+                    // Ship background (private boards)
+                    if (includeShips && cellData.has_ship) {
+                        cell.classList.add('ship');
+                        if (cellData.ship_sunk) {
+                            cell.classList.add('sunk');
+                            cell.style.backgroundColor = getRgba(boardColor, 0.90);
+                        } else {
+                            cell.style.backgroundColor = getRgba(boardColor, 0.70);
+                        }
+                    } else if (cellData.status === 'hit') {
+                        cell.style.backgroundColor = getRgba(boardColor, 0.40);
+                    }
+                    
+                    // Hit/miss markers
                     if (cellData.status === 'hit') {
-                        const marker = document.createElement('div');
-                        marker.className = 'hit';
-                        const color = cellData.attacker_color || 'gray';
-                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
-                        cell.appendChild(marker);
+                        cell.appendChild(createCross(cellData.attacker_color || 'gray'));
                     } else if (cellData.status === 'miss') {
-                        const marker = document.createElement('div');
-                        marker.className = 'miss';
-                        const color = cellData.attacker_color || 'gray';
-                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
-                        cell.appendChild(marker);
+                        cell.appendChild(createDot(cellData.attacker_color || 'gray'));
                     }
                 }
             }
@@ -512,14 +496,17 @@
                 // Check preconditions
                 const hasLocations = status.locations_placed > 0;
                 const hasEnoughTeams = status.total_teams >= 2;
-                const canStart = hasLocations && hasEnoughTeams;
+                const allShipsPlaced = status.teams_with_all_ships === status.total_teams;
+                const canStart = hasLocations && hasEnoughTeams && allShipsPlaced;
                 
                 btnStart.disabled = !canStart;
                 if (!canStart) {
-                    if (!hasLocations) {
-                        btnStart.title = `Need at least 1 location (currently ${status.locations_placed})`;
-                    } else {
+                    if (!hasEnoughTeams) {
                         btnStart.title = `Need at least 2 teams (currently ${status.total_teams})`;
+                    } else if (!allShipsPlaced) {
+                        btnStart.title = `Not all teams have placed ships (${status.teams_with_all_ships}/${status.total_teams})`;
+                    } else if (!hasLocations) {
+                        btnStart.title = `Need at least 1 location (currently ${status.locations_placed})`;
                     }
                 } else {
                     btnStart.title = 'Start the game';
@@ -570,6 +557,7 @@
                     boardItem = document.createElement('div');
                     boardItem.className = 'public-board-item';
                     boardItem.id = `public-board-item-${team.color}`;
+                    boardItem.style.backgroundColor = getRgba(team.color, 0.20);
                     boardItem.innerHTML = `
                         <h4>${team.name} (${team.color})</h4>
                         <div id="${boardId}"></div>
@@ -581,6 +569,7 @@
                     if (nameElement && nameElement.textContent !== `${team.name} (${team.color})`) {
                         nameElement.textContent = `${team.name} (${team.color})`;
                     }
+                    boardItem.style.backgroundColor = getRgba(team.color, 0.20);
                 }
                 
                 // Render the board
@@ -673,19 +662,20 @@
                                 <span class="team-name">
                                     <span class="team-color-dot" style="background: ${team.color}"></span>
                                     <span class="team-name-text">${team.name}</span>
+                                    <span class="trophy-icon" id="trophy-${team.color}" style="display:none">🏆</span>
                                     ${aiIndicator}
                                 </span>
                             </div>
                             <div class="team-stats">
                                 <span class="team-bombs">💣 <span class="bombs-count">${team.bombs}</span></span>
-                                <span class="team-ships">🚢 <span class="ships-count">${team.ships_placed}</span>/${team.total_ships}</span>
+                                <span class="team-ships">🚢 <span class="ships-count">${gameStatus === 'waiting' ? team.ships_placed : team.ships_remaining}</span>/${team.total_ships}</span>
                                 <span class="team-sunk">💥 <span class="sunk-count">${team.ships_sunk}</span> sunk</span>
                             </div>
                             <div class="team-board" id="team-board-${team.color}">
                             </div>
                             <a href="/team/${team.token}" class="team-play-link">🎮 Play as ${team.color}</a>
                             <button class="btn btn-primary" style="margin-top: 10px;" onclick="copyTeamUrl('${team.token}', '${team.color}')">📋 Copy URL</button>
-                            <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')">💣 +5 Bombs</button>
+                            <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')" id="add-bombs-${team.color}">💣 +5 Bombs</button>
                             <div class="ai-buttons" id="ai-buttons-${team.color}"></div>
                         `;
                         grid.appendChild(card);
@@ -716,8 +706,9 @@
                         }
                         
                         const shipsElement = card.querySelector('.ships-count');
-                        if (shipsElement && shipsElement.textContent !== String(team.ships_placed)) {
-                            shipsElement.textContent = team.ships_placed;
+                        const shipsDisplay = gameStatus === 'waiting' ? team.ships_placed : team.ships_remaining;
+                        if (shipsElement && shipsElement.textContent !== String(shipsDisplay)) {
+                            shipsElement.textContent = shipsDisplay;
                         }
                         
                         const sunkElement = card.querySelector('.sunk-count');
@@ -736,6 +727,19 @@
                             } else {
                                 aiButtonsContainer.innerHTML = '';
                             }
+                        }
+
+                        // Trophy icon on winning team
+                        const trophyEl = document.getElementById('trophy-' + team.color);
+                        if (trophyEl) {
+                            const isWinner = state.winner && state.winner.color === team.color;
+                            trophyEl.style.display = isWinner ? 'inline' : 'none';
+                        }
+
+                        // Disable bombs button when game ended
+                        const bombsBtn = document.getElementById('add-bombs-' + team.color);
+                        if (bombsBtn) {
+                            bombsBtn.disabled = gameStatus === 'ended';
                         }
                     }
                     
@@ -963,6 +967,7 @@
 
         // Refresh boards every 2 seconds (reduced from 1 second to reduce flickering)
         setInterval(() => {
+            loadGameStatus();
             loadPublicBoards();
             loadTeams();
         }, 2000);

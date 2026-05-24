@@ -20,8 +20,9 @@
       "heading": "🚢 Your Private Board"
     },
     "public": {
-      "heading": "💥 Public Boards (All Teams)",
-      "team_label": "{name} ({color})"
+      "heading": "💥 Public Boards (Opposing Teams)",
+      "team_label": "{name} ({color})",
+      "replay_alt": "Replay of {name}'s board"
     }
   },
   "action": {

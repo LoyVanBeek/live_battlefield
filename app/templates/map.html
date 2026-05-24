@@ -144,8 +144,6 @@
 <body>
     <h1>🗺️ Quest Locations Map</h1>
     
-    <a href="/admin" class="nav-link">🕵️ Admin Panel</a>
-    
     <div id="map"></div>
     
     <div class="game-state">
@@ -181,13 +179,19 @@
         
         async function loadLocations() {
             try {
-                const resp = await fetch('/api/locations');
-                const data = await resp.json();
-                
-                if (data.locations && data.locations.length > 0) {
+                const [locResp, stateResp] = await Promise.all([
+                    fetch('/api/locations'),
+                    fetch('/api/public-state')
+                ]);
+                const locData = await locResp.json();
+                const stateData = await stateResp.json();
+
+                if (stateData.status === 'waiting') return;
+
+                if (locData.locations && locData.locations.length > 0) {
                     const bounds = [];
                     
-                    data.locations.forEach(loc => {
+                    locData.locations.forEach(loc => {
                         bounds.push([loc.latitude, loc.longitude]);
                         
                         const marker = L.marker([loc.latitude, loc.longitude], {
@@ -246,7 +250,7 @@
                             <div class="team-name">${team.name} (${team.color})</div>
                             <div class="team-stats">
                                 <span>💣 Bombs: ${team.bombs}</span>
-                                <span>🚢 Ships: ${team.ships_placed}/10</span>
+                                <span>🚢 Ships: ${team.ships_remaining}/10</span>
                                 <span>💥 Sunk: ${team.ships_sunk}</span>
                             </div>
                         </div>

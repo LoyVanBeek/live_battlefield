@@ -67,12 +67,31 @@
             border-radius: 50%;
         }
         .team-name { font-size: 24px; font-weight: bold; }
+        .team-status-badge {
+            font-size: 13px;
+            font-weight: bold;
+            padding: 4px 10px;
+            border-radius: 12px;
+            white-space: nowrap;
+        }
+        .team-status-badge.started { background: #4caf50; color: white; }
+        .team-status-badge.waiting { background: #ff9800; color: white; }
+        .team-status-badge.ended { background: #f44336; color: white; }
         .team-stats {
             display: flex;
             gap: 20px;
             font-size: 18px;
         }
         .team-stats span { display: flex; align-items: center; gap: 5px; }
+        .team-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
         .lang-select {
             padding: 6px 10px;
             font-size: 14px;
@@ -86,19 +105,6 @@
         .bomb-count-ok { color: #4caf50; }
         .bomb-count-low { color: #ff9800; }
         .bomb-count-empty { color: #f44336; font-weight: bold; }
-
-        /* Game Status */
-        .game-status {
-            background: #16213e;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-            font-size: 18px;
-        }
-        .game-status.started { border-left: 4px solid #4caf50; }
-        .game-status.waiting { border-left: 4px solid #ff9800; }
-        .game-status.ended { border-left: 4px solid #f44336; }
 
         /* Board */
         .board-section {
@@ -184,6 +190,7 @@
             flex: 0 0 auto;
             text-align: center;
             min-height: 380px; /* Prevent layout shift during refresh */
+            padding: 10px;
         }
         .public-board-item p {
             margin-bottom: 8px;
@@ -262,44 +269,16 @@
             color: #333;
         }
         .board-cell.ship {
-            background: #222;
+            /* background set inline by JS with team color */
         }
         .board-cell.ship.sunk {
-            background: #8B0000;
+            /* background set inline by JS with team color */
         }
-        .board-cell .marker {
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .board-cell .hit {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-        }
-        .board-cell .miss {
-            width: 18px;
-            height: 18px;
-            position: relative;
-        }
-        .board-cell .miss::before,
-        .board-cell .miss::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 14px;
-            height: 3px;
-            background-color: inherit;
-            border-radius: 1px;
-        }
-        .board-cell .miss::before {
-            transform: translate(-50%, -50%) rotate(45deg);
-        }
-        .board-cell .miss::after {
-            transform: translate(-50%, -50%) rotate(-45deg);
+
+        .board-replay-gif {
+            width: 334px;
+            height: 334px;
+            border-radius: 4px;
         }
 
         /* Clickable cells on public boards */
@@ -337,28 +316,38 @@
 <body>
     <div class="container">
         
-        <h1>{{ tr.page.heading }}</h1>
-
-        <!-- Team Header -->
+        <!-- Team Header (name + status + stats + actions) -->
         <div class="team-header" id="team-header">
             <div class="team-info">
                 <span class="team-color-dot" id="team-color-dot"></span>
                 <span class="team-name" id="team-name">{{ tr.status.loading }}</span>
+                <span class="team-status-badge waiting" id="game-status-badge">{{ tr.status.loading }}</span>
             </div>
             <div class="team-stats">
                 <span>💣 <span id="bomb-count">-</span></span>
                 <span>🚢 <span id="ship-count">-</span>/10</span>
                 <span>💥 <span id="sunk-count">-</span> {{ tr.team.sunk }}</span>
             </div>
-            <select class="lang-select" id="lang-select" onchange="switchLanguage(this.value)">
-                <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
-                <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>{{ tr.lang.nl }}</option>
-            </select>
+            <div class="team-actions">
+                <button class="btn btn-primary btn-small" onclick="quickRedeem()">🔑 {{ tr.action.code.redeem }}</button>
+                <select class="lang-select" id="lang-select" onchange="switchLanguage(this.value)">
+                    <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
+                    <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>{{ tr.lang.nl }}</option>
+                </select>
+            </div>
         </div>
 
-        <!-- Game Status -->
-        <div class="game-status waiting" id="game-status">
-            {{ tr.status.loading }}
+        <!-- Public Boards -->
+        <div class="public-boards-section" id="public-boards-section">
+            <h2>{{ tr.board.public.heading }}</h2>
+            <div class="public-boards-grid" id="public-boards-grid">
+                <!-- {{ tr.status.loading }} -->
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="actions" id="actions">
+            {{ tr.action.loading }}
         </div>
 
         <!-- Private Board -->
@@ -367,17 +356,8 @@
             <div id="private-board"></div>
         </div>
 
-        <!-- Public Boards -->
-        <div class="public-boards-section">
-            <h2>{{ tr.board.public.heading }}</h2>
-            <div class="public-boards-grid" id="public-boards-grid">
-                {{ tr.status.loading }}
-            </div>
-        </div>
-
-        <!-- Actions -->
-        <div class="actions" id="actions">
-            {{ tr.action.loading }}
+        <!-- Ship Actions (bottom of page during PREPARING) -->
+        <div class="actions" id="ship-actions" style="display:none">
         </div>
     </div>
 
@@ -411,6 +391,27 @@
         };
         const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
         const TR = {{ tr_json|safe }};
+        function getRgba(color, alpha) {
+            var rgb = TEAM_COLORS_RGB[color];
+            if (!rgb) return 'rgba(128,128,128,' + alpha + ')';
+            return 'rgba(' + rgb.slice(4, -1) + ',' + alpha + ')';
+        }
+        function createCross(color) {
+            var container = document.createElement('div');
+            container.style.cssText = 'position:relative;width:22px;height:22px;';
+            var line1 = document.createElement('div');
+            line1.style.cssText = 'position:absolute;top:50%;left:50%;width:20px;height:3px;background:' + (TEAM_COLORS_RGB[color] || 'gray') + ';transform:translate(-50%,-50%) rotate(45deg);border-radius:1px;';
+            container.appendChild(line1);
+            var line2 = document.createElement('div');
+            line2.style.cssText = 'position:absolute;top:50%;left:50%;width:20px;height:3px;background:' + (TEAM_COLORS_RGB[color] || 'gray') + ';transform:translate(-50%,-50%) rotate(-45deg);border-radius:1px;';
+            container.appendChild(line2);
+            return container;
+        }
+        function createDot(color) {
+            var dot = document.createElement('div');
+            dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:' + (TEAM_COLORS_RGB[color] || 'gray') + ';';
+            return dot;
+        }
         function _(key, params) {
             let val = TR;
             for (const part of key.split('.')) {
@@ -429,6 +430,7 @@
         // Pending bomb state (set by clicking a public board cell)
         let pendingBombTarget = null;
         let pendingBombCoord = null;
+        let winnerName = null;
 
         // Last rendered state for target team dropdown
         let lastTeamsData = null;
@@ -436,7 +438,7 @@
         // Cache for board grids to avoid rebuilding
         const boardGridCache = new Map();
 
-        function renderGrid(containerId, gridData, includeShips) {
+        function renderGrid(containerId, gridData, includeShips, boardColor) {
             const container = document.getElementById(containerId);
             let grid = boardGridCache.get(containerId);
             if (!grid) {
@@ -477,26 +479,28 @@
                     if (!cell) continue;
 
                     cell.className = 'board-cell';
-
-                    if (includeShips && cellData.p) {
-                        cell.classList.add('ship');
-                        if (cellData.k) cell.classList.add('sunk');
-                    }
-
+                    cell.style.backgroundColor = '';
                     while (cell.firstChild) cell.removeChild(cell.firstChild);
 
                     const status = cellData.s;
-                    const color = cellData.a || 'gray';
-                    if (status === 'h') {
-                        const marker = document.createElement('div');
-                        marker.className = 'hit';
-                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
-                        cell.appendChild(marker);
-                    } else if (status === 'm') {
-                        const marker = document.createElement('div');
-                        marker.className = 'miss';
-                        marker.style.backgroundColor = TEAM_COLORS_RGB[color] || 'gray';
-                        cell.appendChild(marker);
+                    const attackerColor = cellData.a || null;
+
+                    if (includeShips && cellData.p) {
+                        cell.classList.add('ship');
+                        if (cellData.k) {
+                            cell.classList.add('sunk');
+                            cell.style.backgroundColor = getRgba(boardColor, 0.90);
+                        } else {
+                            cell.style.backgroundColor = getRgba(boardColor, 0.70);
+                        }
+                    } else if (status === 'h') {
+                        cell.style.backgroundColor = getRgba(boardColor, 0.40);
+                    }
+
+                    if (status === 'h' && attackerColor) {
+                        cell.appendChild(createCross(attackerColor));
+                    } else if (status === 'm' && attackerColor) {
+                        cell.appendChild(createDot(attackerColor));
                     }
                 }
             }
@@ -540,17 +544,18 @@
 
             gameStatus = data.s;
 
-            // Game status bar
-            var statusEl = document.getElementById('game-status');
+            // Game status badge (inline in header)
+            var badgeEl = document.getElementById('game-status-badge');
             if (data.s === 'started') {
-                statusEl.textContent = _('status.started');
-                statusEl.className = 'game-status started';
+                badgeEl.textContent = _('status.started');
+                badgeEl.className = 'team-status-badge started';
             } else if (data.s === 'ended') {
-                statusEl.textContent = _('status.ended');
-                statusEl.className = 'game-status ended';
+                winnerName = data.w || null;
+                badgeEl.textContent = winnerName ? _('status.ended') + ' 🏆 ' + winnerName : _('status.ended');
+                badgeEl.className = 'team-status-badge ended';
             } else {
-                statusEl.textContent = _('status.waiting');
-                statusEl.className = 'game-status waiting';
+                badgeEl.textContent = _('status.waiting');
+                badgeEl.className = 'team-status-badge waiting';
             }
 
             // Team header
@@ -561,13 +566,23 @@
             document.getElementById('sunk-count').textContent = myTeam.sk;
 
             // Private board
-            renderGrid('private-board', myTeam.g, true);
+            renderGrid('private-board', myTeam.g, true, TEAM_COLOR);
 
             // Public boards
             renderPublicBoards(allTeams);
 
             // Actions
             renderActions();
+
+            // Hide sections during preparing
+            var publicSection = document.getElementById('public-boards-section');
+            if (publicSection) {
+                publicSection.style.display = gameStatus === 'preparing' ? 'none' : '';
+            }
+            var actionsSection = document.getElementById('actions');
+            if (actionsSection) {
+                actionsSection.style.display = gameStatus === 'preparing' ? 'none' : '';
+            }
         }
 
         function renderPublicBoards(allTeams) {
@@ -575,6 +590,7 @@
             var currentColors = new Set();
 
             allTeams.forEach(function (team) {
+                if (team.c === TEAM_COLOR) return;
                 currentColors.add(team.c);
                 var boardId = 'public-board-' + team.c;
                 var boardItem = document.getElementById('public-board-item-' + team.c);
@@ -582,6 +598,8 @@
                     boardItem = document.createElement('div');
                     boardItem.className = 'public-board-item';
                     boardItem.id = 'public-board-item-' + team.c;
+                    boardItem.style.backgroundColor = getRgba(team.c, 0.3);
+                    boardItem.style.borderRadius = '8px';
                     boardItem.innerHTML =
                         '<p>' + _('board.public.team_label', {name: team.n, color: team.c}) + '</p>' +
                         '<div id="' + boardId + '"></div>';
@@ -590,8 +608,24 @@
                     var nameEl = boardItem.querySelector('p');
                     var expected = _('board.public.team_label', {name: team.n, color: team.c});
                     if (nameEl && nameEl.textContent !== expected) nameEl.textContent = expected;
+                    boardItem.style.backgroundColor = getRgba(team.c, 0.3);
                 }
-                renderGrid(boardId, team.g, false);
+
+                if (gameStatus === 'ended') {
+                    var boardDiv = document.getElementById(boardId);
+                    var replayImg = document.getElementById('replay-gif-' + team.c);
+                    if (!replayImg) {
+                        boardDiv.innerHTML = '';
+                        replayImg = document.createElement('img');
+                        replayImg.id = 'replay-gif-' + team.c;
+                        replayImg.className = 'board-replay-gif';
+                        replayImg.src = '/api/board/' + team.c + '/replay.gif?team_token=' + TEAM_TOKEN;
+                        replayImg.alt = _('board.public.replay_alt', {name: team.n});
+                        boardDiv.appendChild(replayImg);
+                    }
+                } else {
+                    renderGrid(boardId, team.g, false, team.c);
+                }
             });
 
             // Remove stale boards
@@ -612,6 +646,10 @@
             var cell = e.target.closest('.board-cell');
             if (!cell) return;
             if (cell.classList.contains('header')) return;
+            if (gameStatus === 'ended') {
+                showToast(winnerName ? _('status.ended') + ' 🏆 ' + winnerName : _('status.ended'), 'error');
+                return;
+            }
             if (gameStatus !== 'started') {
                 showToast(_('error.game_not_started'), 'error');
                 return;
@@ -655,16 +693,19 @@
 
         function renderActions() {
             var actionsEl = document.getElementById('actions');
+            var shipActionsEl = document.getElementById('ship-actions');
 
             if (gameStatus === 'ended') {
                 actionsEl.innerHTML = '<p>' + _('action.game_ended') + '</p>';
+                shipActionsEl.style.display = 'none';
                 return;
             }
 
             var html = '';
+            var shipHtml = '';
 
-            if (gameStatus === 'waiting') {
-                html +=
+            if (gameStatus === 'preparing') {
+                shipHtml +=
                     '<div class="action-group">' +
                         '<h3>' + _('action.ship.heading') + '</h3>' +
                         '<button class="btn btn-primary" onclick="placeAllShips()">' + _('action.ship.auto') + '</button>' +
@@ -712,6 +753,9 @@
             }
 
             actionsEl.innerHTML = html;
+
+            shipActionsEl.innerHTML = shipHtml;
+            shipActionsEl.style.display = shipHtml ? 'block' : 'none';
 
             if (gameStatus === 'started' && lastTeamsData) {
                 renderTargetTeams(lastTeamsData);
@@ -825,6 +869,13 @@
             window.location.href = window.location.pathname + '?lang=' + lang;
         }
 
+        function quickRedeem() {
+            var actionsEl = document.getElementById('actions');
+            if (actionsEl) actionsEl.scrollIntoView({ behavior: 'smooth' });
+            var codeLoc = document.getElementById('code-loc');
+            if (codeLoc) setTimeout(function () { codeLoc.focus(); }, 400);
+        }
+
         // SSE: pushes state updates when events occur
         var currentES = null;
         function connectSSE() {
@@ -838,6 +889,7 @@
                         '<div class="team-info">' +
                             '<span class="team-color-dot" style="background:' + TEAM_COLOR + '"></span>' +
                             '<span class="team-name">' + _('team.not_joined', {color: TEAM_COLOR}) + '</span>' +
+                            '<span class="team-status-badge waiting">' + _('status.waiting') + '</span>' +
                         '</div>';
                     return;
                 }
@@ -858,6 +910,7 @@
                     '<div class="team-info">' +
                         '<span class="team-color-dot" style="background:' + TEAM_COLOR + '"></span>' +
                         '<span class="team-name">' + _('team.not_joined', {color: TEAM_COLOR}) + '</span>' +
+                        '<span class="team-status-badge waiting">' + _('status.waiting') + '</span>' +
                     '</div>';
             }
         });

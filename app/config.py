@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     database_url_sync: str = "postgresql://postgres:postgres@localhost:5432/battleship"
     host: str = "0.0.0.0"
     port: int = 8000
+    dev_mode: bool = False
 
 
 settings = Settings()

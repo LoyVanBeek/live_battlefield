@@ -1,6 +1,10 @@
 from fastapi import FastAPI, Depends, Request, HTTPException, Query
 from fastapi.responses import Response, HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from contextlib import asynccontextmanager
+import logging
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
@@ -22,6 +26,7 @@ from app.game.board import (
     render_private_board,
     render_board,
     boards_to_bytes,
+    create_public_board_gif,
 )
 from app.game.ships import (
     SHIP_SIZES,
@@ -96,7 +101,20 @@ async def verify_team_or_admin_token(
     raise HTTPException(status_code=404)
 
 
-app = FastAPI(title="Live Battlefield API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        async with api_session_maker() as db:
+            from app.models import get_or_create_game_settings
+            game_settings = await get_or_create_game_settings(db)
+            if game_settings.admin_token:
+                logger.info("Admin panel: /admin/%s", game_settings.admin_token)
+    except Exception:
+        logger.warning("Could not check admin token on startup")
+    yield
+
+
+app = FastAPI(title="Live Battlefield API", lifespan=lifespan)
 
 templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 templates = Jinja2Templates(directory=templates_dir)
@@ -175,6 +193,7 @@ async def get_public_state(db: AsyncSession = Depends(get_api_db)):
                 "color": team.color,
                 "bombs": team.bombs,
                 "ships_placed": sum(team.placed_ship_types.values()),
+                "ships_remaining": sum(SHIP_COUNTS.values()) - len(team.get_sunk_ships()),
                 "ships_sunk": len(team.get_sunk_ships()),
                 "is_ai": ai is not None,
             }
@@ -187,14 +206,7 @@ async def get_public_state(db: AsyncSession = Depends(get_api_db)):
 
 
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_bootstrap(request: Request, db: AsyncSession = Depends(get_api_db)):
-    from app.models import get_or_create_game_settings
-
-    settings = await get_or_create_game_settings(db)
-    if settings.admin_token:
-        from fastapi.responses import RedirectResponse
-
-        return RedirectResponse(url=f"/admin/{settings.admin_token}")
+async def admin_bootstrap(request: Request):
     return templates.TemplateResponse(
         request, "admin_create.html", {"request": request}
     )
@@ -250,6 +262,7 @@ async def admin_create_game(db: AsyncSession = Depends(get_api_db)):
     token = generate_team_token()
     await reset_game_settings(db)
     await set_admin_token(db, token)
+    logger.info("Admin panel created: /admin/%s", token)
     return {"token": token}
 
 
@@ -487,6 +500,7 @@ async def get_game_state(db: AsyncSession = Depends(get_api_db)):
                 "color": team.color,
                 "bombs": team.bombs,
                 "ships_placed": sum(team.placed_ship_types.values()),
+                "ships_remaining": sum(SHIP_COUNTS.values()) - len(team.get_sunk_ships()),
                 "total_ships": sum(SHIP_COUNTS.values()),
                 "ships_sunk": len(team.get_sunk_ships()),
                 "is_destroyed": team.is_destroyed(),
@@ -620,6 +634,29 @@ async def get_public_board(team_color: str, db: AsyncSession = Depends(get_api_d
     return Response(content=img_bytes, media_type="image/png")
 
 
+@app.get("/api/board/{team_color}/replay.gif")
+async def get_board_replay_gif(
+    team_color: str,
+    team_token: str = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+):
+    events = await get_all_events(db)
+    state = GameState.from_events(events)
+
+    if state.team_tokens.get(team_token) is None:
+        return Response("Unauthorized", status_code=401)
+
+    gif_bytes = create_public_board_gif(events, team_color)
+    if not gif_bytes:
+        return Response("No replay data", status_code=404)
+
+    return Response(
+        content=gif_bytes,
+        media_type="image/gif",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @app.get("/api/admin/events/{event_index}/board/public.png")
 async def get_public_boards_at_event(
     event_index: int,
@@ -705,7 +742,11 @@ async def execute_command(
 
     # Status-based checks
     if state.status == GameStatusField.ENDED:
-        return {"success": False, "message": "Game has ended! No more actions allowed."}
+        winner = state.get_winner()
+        msg = "Game has ended! No more actions allowed."
+        if winner:
+            msg = f"Game has ended! {winner.name} ({winner.color}) wins!"
+        return {"success": False, "message": msg}
 
     result = {"success": False, "message": ""}
 
@@ -804,6 +845,11 @@ async def execute_command(
             return result
 
         target = state.teams[target_color]
+        if target.is_destroyed():
+            result["message"] = f"Team {target_color} is already destroyed!"
+            team.bombs += 1
+            return result
+
         if (row, col) in target.bombed_cells:
             result["message"] = f"{coord} already bombed!"
             return result
@@ -875,6 +921,17 @@ async def execute_command(
                     )
                 except Exception as e:
                     print(f"Failed to send notification: {e}")
+
+        # Auto-end game if only one team remains
+        winner = state.get_winner()
+        if winner is not None and state.status == GameStatusField.STARTED:
+            from app.database import GameStatus
+
+            end_event = GameEndedEvent(winner=winner.name)
+            await save_event(db, end_event)
+            await update_game_settings(db, status=GameStatus.ENDED)
+            state.status = GameStatusField.ENDED
+            result["message"] += f" 🏆 {winner.name} ({winner.color}) wins!"
 
     elif cmd.command == "code":
         # Code redemption is only allowed during STARTED
@@ -1488,16 +1545,23 @@ async def start_game(
     if state.status == GameStatusField.ENDED:
         return {"success": False, "message": "Game has ended! Reset first."}
 
-    if len(locations) == 0:
-        return {
-            "success": False,
-            "message": "Cannot start game - no locations defined!",
-        }
-
     if len(state.teams) < 2:
         return {
             "success": False,
             "message": f"Cannot start game - need at least 2 teams, currently have {len(state.teams)}",
+        }
+
+    teams_without_ships = [t.name for t in state.teams.values() if not t.has_all_ships()]
+    if teams_without_ships:
+        return {
+            "success": False,
+            "message": f"Cannot start game - not all teams have placed all ships: {', '.join(teams_without_ships)}",
+        }
+
+    if len(locations) == 0:
+        return {
+            "success": False,
+            "message": "Cannot start game - no locations defined!",
         }
 
     event = GameStartedEvent()
