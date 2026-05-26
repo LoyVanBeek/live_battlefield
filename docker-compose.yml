@@ -80,8 +80,10 @@ services:
         condition: service_started
     environment:
       APP_URL: http://test-app:8000
+    volumes:
+      - ./test-results:/app/test-results
     command: >
-      sh -c "sleep 3 && pytest tests_e2e/ -v --video=retain-on-failure --output=test-results"
+      sh -c "sleep 3 && pytest tests_e2e/ -v --video=on --output=test-results"
 
   ngrok:
     image: ngrok/ngrok:latest

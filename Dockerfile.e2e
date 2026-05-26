@@ -8,4 +8,4 @@ COPY tests_e2e/ tests_e2e/
 
 ENV PYTHONPATH=/app
 
-CMD ["pytest", "tests_e2e/", "-v", "--video=retain-on-failure"]
+CMD ["pytest", "tests_e2e/", "-v", "--video=on"]
