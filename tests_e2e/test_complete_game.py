@@ -13,6 +13,14 @@ def _find_unhit_ship_cell(grid):
     return None
 
 
+def _find_unbombed_empty_cell(grid):
+    for ri, row in enumerate(grid):
+        for ci, cell in enumerate(row):
+            if not cell.get("has_ship") and cell.get("status") == "clear":
+                return ri, ci
+    return None
+
+
 def test_play_full_game(page, app_url, admin_token):
     with httpx.Client(base_url=app_url, timeout=30) as client:
         resp = client.post(
@@ -50,12 +58,6 @@ def test_play_full_game(page, app_url, admin_token):
         state = resp.json()
         red_token = next(t["token"] for t in state["teams"] if t["color"] == "red")
 
-        resp = client.get(
-            "/api/board/blue/private.json",
-            params={"gm_token": gm_token},
-        )
-        blue_grid = resp.json()["grid"]
-
     gm = GameMasterPage(page, gm_token, app_url)
     gm.goto()
     page.wait_for_timeout(2000)
@@ -83,14 +85,21 @@ def test_play_full_game(page, app_url, admin_token):
             if winner:
                 break
 
+            # API opponent (blue) bombs a random cell — produces hits AND misses
             resp = client.get(
                 "/api/board/red/private.json",
                 params={"gm_token": gm_token},
             )
             red_grid = resp.json()["grid"]
-            target = _find_unhit_ship_cell(red_grid)
-            if target:
-                coord = f"{chr(target[1] + 65)}{target[0] + 1}"
+            candidates = [
+                (ri, ci)
+                for ri in range(10)
+                for ci in range(10)
+                if red_grid[ri][ci].get("status") == "clear"
+            ]
+            if candidates:
+                r, c = random.choice(candidates)
+                coord = f"{chr(c + 65)}{r + 1}"
                 client.post(
                     "/api/execute",
                     params={"gm_token": gm_token},
@@ -120,7 +129,13 @@ def test_play_full_game(page, app_url, admin_token):
                 params={"gm_token": gm_token},
             )
             blue_grid = resp.json()["grid"]
-            next_target = _find_unhit_ship_cell(blue_grid)
+
+            # UI player (red): mostly hits, every 3rd turn = deliberate miss
+            next_target = None
+            if turn % 3 == 0 and turn > 0:
+                next_target = _find_unbombed_empty_cell(blue_grid)
+            if next_target is None:
+                next_target = _find_unhit_ship_cell(blue_grid)
 
         if next_target is None:
             break
