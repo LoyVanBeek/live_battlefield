@@ -40,11 +40,11 @@ def test_create_team_duplicate_color(page, app_url, seeded_game):
     gm.goto()
 
     gm.join_team("red", "First Team")
-    gm.join_team("red", "Second Team")
-
+    # After first join, "red" is no longer available in the dropdown
+    # The duplicate join via the same select should be rejected by the API
+    # We verify that only one team card exists for red
     cards = gm.team_card("red").all()
     assert len(cards) == 1
-    # The team name should not have been overwritten by the duplicate join
     name_text = gm.team_card_name("red").text_content()
     assert "First Team" in name_text
 

@@ -56,6 +56,10 @@ def test_play_full_game(page, app_url, admin_token):
         assert status["teams_with_all_ships"] >= 2
         assert status["locations_placed"] >= 5
 
+    # Reload GM page to reflect updated state after API calls
+    gm.goto()
+    page.wait_for_timeout(2000)
+
     assert not gm.start_button().is_disabled()
     gm.start_game()
 

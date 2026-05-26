@@ -26,7 +26,7 @@ class TeamPage:
         return self.page.locator(".team-color-dot")
 
     def ships_placed_text(self):
-        return self.page.locator(".ships-count")
+        return self.page.locator("#ship-count")
 
     def location_bomb_buttons(self):
         return self.page.locator("button", has_text="Bomb")

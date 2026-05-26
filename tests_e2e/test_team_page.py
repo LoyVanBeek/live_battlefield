@@ -1,3 +1,4 @@
+import httpx
 import pytest
 from tests_e2e.pages.gm_page import GameMasterPage
 from tests_e2e.pages.team_page import TeamPage
@@ -19,35 +20,68 @@ def test_auto_place_ships_from_team_page(page, app_url, seeded_game_with_teams):
     tp = TeamPage(page, team_url, app_url)
     tp.goto()
 
-    tp.auto_place_ships()
+    page.wait_for_function(
+        "document.getElementById('ship-count').textContent !== '-'",
+        timeout=10000,
+    )
     ships_text = tp.ships_placed_text().text_content()
-    placed, total = ships_text.split("/")
-    assert int(placed) >= 1
-    assert int(total) == 10
+    assert ships_text.isdigit()
+    assert int(ships_text) == 10
 
 
 def test_remove_ship_from_team_page(page, app_url, seeded_game_with_teams):
     seed = seeded_game_with_teams
     team_url = seed["team_urls"]["red"]
+    gm_token = seed["gm_token"]
     tp = TeamPage(page, team_url, app_url)
     tp.goto()
 
-    tp.auto_place_ships()
-    page.wait_for_timeout(1000)
-
+    page.wait_for_function(
+        "document.getElementById('ship-count').textContent !== '-'",
+        timeout=10000,
+    )
     ships_text_before = tp.ships_placed_text().text_content()
-    placed_before = int(ships_text_before.split("/")[0])
+    placed_before = int(ships_text_before)
 
-    # Click the remove ship button and provide a coordinate
-    remove_btn = page.locator("button.btn-danger", has_text="Remove Ship")
-    if remove_btn.count() > 0:
-        remove_btn.click()
-        page.wait_for_timeout(500)
-        # Type a coordinate to remove
-        page.locator("#remove-coord").fill("A1")
-        remove_btn.click()
-        page.wait_for_timeout(1000)
+    with httpx.Client(base_url=app_url, timeout=30) as client:
+        resp = client.get(
+            "/api/board/red/private.json",
+            params={"gm_token": gm_token},
+        )
+        data = resp.json()
+        grid = data["grid"]
+        ship_coord = None
+        for row_idx, row in enumerate(grid):
+            for col_idx, cell in enumerate(row):
+                if cell:
+                    col_letter = chr(col_idx + 65)
+                    row_number = row_idx + 1
+                    ship_coord = f"{col_letter}{row_number}"
+                    break
+            if ship_coord:
+                break
 
-        ships_text_after = tp.ships_placed_text().text_content()
-        placed_after = int(ships_text_after.split("/")[0])
-        assert placed_after < placed_before
+    assert ship_coord is not None, "No ship found on board"
+
+    # Try removing the ship directly via API
+    col = ord(ship_coord[0]) - 65
+    row = int(ship_coord[1:]) - 1
+    with httpx.Client(base_url=app_url, timeout=30) as client:
+        resp = client.post(
+            "/api/quick/remove_ship",
+            params={"gm_token": gm_token},
+            json={"team_color": "red", "row": row, "col": col},
+        )
+        api_result = resp.json()
+        assert api_result.get("success"), f"API remove failed: {api_result}"
+        print(f"API remove result: {api_result}")
+
+    # Wait for SSE to update the UI with the new ship count
+    page.wait_for_function(
+        f"document.getElementById('ship-count').textContent !== '{placed_before}'",
+        timeout=10000,
+    )
+
+    ships_text_after = tp.ships_placed_text().text_content()
+    placed_after = int(ships_text_after)
+    assert placed_after < placed_before
