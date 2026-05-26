@@ -47,3 +47,17 @@ class TeamPage:
         if cell.count() > 0:
             cell.click()
             self.page.wait_for_timeout(500)
+
+    def public_board(self, color: str):
+        return self.page.locator(f"#public-board-{color}")
+
+    def public_board_cell(self, color: str, row: int, col: int):
+        return self.public_board(color).locator(
+            f".board-cell[data-row='{row}'][data-col='{col}']"
+        )
+
+    def bomb_cell_on_board(self, color: str, row: int, col: int):
+        self.public_board_cell(color, row, col).click()
+        self.page.locator("#bomb-confirm.active").wait_for(timeout=5000)
+        self.page.locator("#bomb-confirm .btn-primary").click()
+        self.page.wait_for_timeout(1500)
