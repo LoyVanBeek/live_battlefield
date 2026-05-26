@@ -14,7 +14,7 @@ def test_navigate_to_locations_from_gm(page, app_url, seeded_game):
 
     lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
     count = lp.get_location_count()
-    assert count >= 0
+    assert count > 0
 
     current_url = page.url
     assert "locations-secret" in current_url
@@ -30,7 +30,7 @@ def test_navigate_to_events_from_gm(page, app_url, seeded_game):
 
     ep = EventsPage(page, seed["gm_token"], app_url=app_url)
     count = ep.get_event_count()
-    assert count >= 0
+    assert count > 0
 
     current_url = page.url
     assert "/events" in current_url

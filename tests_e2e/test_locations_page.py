@@ -16,7 +16,7 @@ def test_locations_page_loads(page, app_url, seeded_game_with_locations):
 
     back_link = lp.back_link()
     href = back_link.get_attribute("href")
-    assert "game-master" in href or href != "#"
+    assert "game-master" in href
 
 
 def test_add_location_via_form(page, app_url, seeded_game):

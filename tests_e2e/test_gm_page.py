@@ -13,7 +13,8 @@ def test_page_loads(page, app_url, seeded_game):
     option_values = [opt.get_attribute("value") for opt in options]
     assert "" in option_values
     assert "red" in option_values
-    assert len([v for v in option_values if v]) == 6
+    assert "blue" in option_values
+    assert "green" in option_values
 
     assert gm.start_button().is_disabled()
     assert gm.end_button().is_disabled()

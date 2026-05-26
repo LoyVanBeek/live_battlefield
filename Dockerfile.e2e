@@ -8,4 +8,4 @@ COPY tests_e2e/ tests_e2e/
 
 ENV PYTHONPATH=/app
 
-CMD ["pytest", "tests_e2e/", "-v", "--video=on"]
+CMD ["pytest", "tests_e2e/", "-v", "--video=on", "--output=test-results"]

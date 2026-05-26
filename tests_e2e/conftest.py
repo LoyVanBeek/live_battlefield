@@ -112,8 +112,7 @@ def seeded_game_with_teams(app_url: str, admin_token: str) -> dict:
                     "args": {"name": f"{color.capitalize()} Team"},
                 },
             )
-            join_data = resp.json()
-
+            
         # Place all ships with retry until both teams have all 10
         for _ in range(20):
             for color in colors:
