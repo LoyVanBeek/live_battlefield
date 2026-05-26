@@ -51,9 +51,12 @@ def test_remove_ship_from_team_page(page, app_url, seeded_game_with_teams):
         data = resp.json()
         grid = data["grid"]
         ship_coord = None
+        ship_row = None
+        ship_col = None
         for row_idx, row in enumerate(grid):
             for col_idx, cell in enumerate(row):
-                if cell:
+                if cell and cell.get("has_ship"):
+                    ship_row, ship_col = row_idx, col_idx
                     col_letter = chr(col_idx + 65)
                     row_number = row_idx + 1
                     ship_coord = f"{col_letter}{row_number}"
@@ -64,13 +67,11 @@ def test_remove_ship_from_team_page(page, app_url, seeded_game_with_teams):
     assert ship_coord is not None, "No ship found on board"
 
     # Try removing the ship directly via API
-    col = ord(ship_coord[0]) - 65
-    row = int(ship_coord[1:]) - 1
     with httpx.Client(base_url=app_url, timeout=30) as client:
         resp = client.post(
             "/api/quick/remove_ship",
             params={"gm_token": gm_token},
-            json={"team_color": "red", "row": row, "col": col},
+            json={"team_color": "red", "row": ship_row, "col": ship_col},
         )
         api_result = resp.json()
         assert api_result.get("success"), f"API remove failed: {api_result}"
