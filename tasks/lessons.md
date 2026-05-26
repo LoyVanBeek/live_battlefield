@@ -34,3 +34,9 @@
 - Since `(game_id, color)` unique constraint replaced global unique `color`, all "is this color taken?" checks must filter by `game_id`
 - `get_all_players()` returns ALL players across ALL games — always filter with `p.game_id == current_game_id`
 - `get_all_teams_in_game()` only checks `Role.TEAM` players, missing AI players — use `get_all_players_in_game()` for full collision detection
+
+## Stray `...` in JS template breaks entire script
+- A bare `...` (ellipsis placeholder) anywhere in a `<script>` block causes `SyntaxError: Unexpected token` and prevents ALL code in that block from executing
+- Even though `loadTeams` and `apiCall` appear before the error in the source, the entire block fails to parse — nothing runs
+- After template changes, verify with `node --check` that the extracted JS is valid
+- Docker images must be rebuilt (`docker compose build`) for template changes to reach the container — `docker compose restart` alone only restarts the process with the image-baked code

@@ -918,8 +918,6 @@
             showToast(result.message, result.success ? 'success' : 'error');
             if (result.success && result.new_token) {
                 setTimeout(() => { window.location.href = '/game-master/' + result.new_token; }, 1000);
-...
-                setTimeout(() => { window.location.href = '/game-master/' + result.new_token; }, 1000);
             }
         }
 
