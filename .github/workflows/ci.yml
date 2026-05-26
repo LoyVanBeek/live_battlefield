@@ -38,6 +38,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build base image
+        run: docker compose build app
+
       - name: Start test infrastructure
         run: touch .env && docker compose up -d test-postgres test-app
 
