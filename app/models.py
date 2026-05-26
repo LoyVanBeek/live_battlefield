@@ -121,7 +121,7 @@ async def delete_all_locations(db: AsyncSession, game_id: uuid.UUID) -> int:
 
 async def delete_all_players(db: AsyncSession, game_id: uuid.UUID) -> int:
     result = await db.execute(
-        select(Player).where(Player.game_id == game_id, Player.role == Role.TEAM)
+        select(Player).where(Player.game_id == game_id)
     )
     players = result.scalars().all()
     count = len(players)
@@ -205,6 +205,18 @@ async def delete_team_token(db: AsyncSession, game_id: uuid.UUID, color: str) ->
     return False
 
 
+async def delete_all_team_tokens(db: AsyncSession, game_id: uuid.UUID) -> int:
+    result = await db.execute(
+        select(TeamToken).where(TeamToken.game_id == game_id)
+    )
+    tokens = result.scalars().all()
+    count = len(tokens)
+    for token in tokens:
+        await db.delete(token)
+    await db.commit()
+    return count
+
+
 async def get_game_events(db: AsyncSession, game_id: uuid.UUID) -> list[GameEvent]:
     result = await db.execute(
         select(GameEvent)
@@ -228,7 +240,6 @@ async def get_player_by_color_in_game(db: AsyncSession, game_id: uuid.UUID, colo
         select(Player).where(
             Player.game_id == game_id,
             Player.color == color,
-            Player.role == Role.TEAM,
         )
     )
     return result.scalar_one_or_none()

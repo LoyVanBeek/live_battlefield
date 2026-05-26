@@ -1227,6 +1227,24 @@ async def execute_command(
             state.status = GameStatusField.ENDED
             result["message"] += f" 🏆 {winner.name} ({winner.color}) wins!"
 
+    elif cmd.command == "removeai":
+        if auth_info.get("role") != "gm":
+            result["message"] = "Only game masters can remove AI players!"
+            return result
+
+        if cmd.team_color not in state.teams:
+            result["message"] = f"Team {cmd.team_color} doesn't exist!"
+            return result
+
+        from app.services.ai_player import remove_ai_player
+        from app.models import delete_team_token
+
+        remove_ai_player(game_id, cmd.team_color)
+        await delete_team_token(db, game_uuid, cmd.team_color)
+        state.teams.pop(cmd.team_color, None)
+        result["success"] = True
+        result["message"] = f"AI player {cmd.team_color} removed!"
+
     elif cmd.command == "code":
         if state.status != GameStatusField.STARTED:
             result["message"] = "Cannot redeem codes - game hasn't started yet!"
@@ -1718,11 +1736,12 @@ async def reset_game(
     db: AsyncSession = Depends(get_api_db),
     game_id: str = Depends(verify_gm_token),
 ):
-    from app.models import delete_all_events, update_game_status
+    from app.models import delete_all_events, delete_all_team_tokens, update_game_status
     from app.database import GameStatus
 
     game_uuid = uuid.UUID(game_id)
     count = await delete_all_events(db, game_uuid)
+    await delete_all_team_tokens(db, game_uuid)
     await update_game_status(db, game_uuid, GameStatus.WAITING, started_at=None)
 
     return {
@@ -1771,10 +1790,11 @@ async def clear_players(
     db: AsyncSession = Depends(get_api_db),
     game_id: str = Depends(verify_gm_token),
 ):
-    from app.models import delete_all_players
+    from app.models import delete_all_players, delete_all_team_tokens
 
     game_uuid = uuid.UUID(game_id)
     count = await delete_all_players(db, game_uuid)
+    await delete_all_team_tokens(db, game_uuid)
 
     return {
         "success": True,
@@ -1792,6 +1812,7 @@ async def clear_database(
         delete_all_players,
         delete_all_events,
         delete_all_locations,
+        delete_all_team_tokens,
     )
     from app.database import GameStatus
 
@@ -1800,6 +1821,7 @@ async def clear_database(
     players_count = await delete_all_players(db, game_uuid)
     events_count = await delete_all_events(db, game_uuid)
     locations_count = await delete_all_locations(db, game_uuid)
+    await delete_all_team_tokens(db, game_uuid)
 
     from app.models import update_game_status
 
