@@ -1337,11 +1337,11 @@ async def quick_add_bombs(
 async def quick_place_all_ships(
     action: QuickAction,
     db: AsyncSession = Depends(get_api_db),
-    game_id: str = Depends(verify_gm_token),
+    auth_info: dict = Depends(verify_team_or_gm),
 ):
     from app.services.ship_placement import place_all_ships_game_scoped
 
-    success, message = await place_all_ships_game_scoped(db, game_id, action.team_color)
+    success, message = await place_all_ships_game_scoped(db, auth_info["game_id"], action.team_color)
     return {
         "success": success,
         "message": message,
@@ -1509,11 +1509,11 @@ async def quick_reset_team(
 async def quick_remove_ship(
     action: RemoveShipAction,
     db: AsyncSession = Depends(get_api_db),
-    game_id: str = Depends(verify_gm_token),
+    auth_info: dict = Depends(verify_team_or_gm),
 ):
     from app.models import get_game_events
 
-    game_uuid = uuid.UUID(game_id)
+    game_uuid = uuid.UUID(auth_info["game_id"])
     events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
