@@ -1,0 +1,11 @@
+FROM live_battlefield-app AS base
+
+RUN pip install pytest-playwright pytest-asyncio httpx
+
+RUN playwright install --with-deps chromium
+
+COPY tests_e2e/ tests_e2e/
+
+ENV PYTHONPATH=/app
+
+CMD ["pytest", "tests_e2e/", "-v", "--video=retain-on-failure"]

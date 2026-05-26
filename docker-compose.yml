@@ -45,6 +45,44 @@ services:
           ignore:
             - __pycache__/
 
+  test-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: battleship_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  test-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      test-postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@test-postgres:5432/battleship_test
+      TELEGRAM_BOT_TOKEN: test_token_fake_for_e2e
+      ADMIN_TOKEN: e2e-test-admin
+    command: >
+      sh -c "python app/scripts/init_test_db.py && python -m app.main"
+
+  test-e2e:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    depends_on:
+      test-app:
+        condition: service_started
+    environment:
+      APP_URL: http://test-app:8000
+    command: >
+      sh -c "sleep 3 && pytest tests_e2e/ -v --video=retain-on-failure --output=test-results"
+
   ngrok:
     image: ngrok/ngrok:latest
     depends_on:

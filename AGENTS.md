@@ -52,3 +52,35 @@ Here is the full md file content:
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimat Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
+
+## Running E2E Tests
+
+E2E tests use Playwright to drive a headless Chromium against a dedicated test stack.
+
+### Quick start
+```bash
+# Build and start the test infrastructure (fresh DB each time)
+docker compose up -d test-postgres test-app
+
+# Wait for app to be ready, then run tests
+docker compose run --rm test-e2e
+
+# Or run a specific test file
+docker compose run --rm test-e2e pytest tests_e2e/test_gm_page.py -v --video=on-fail
+
+# Clean up everything (deletes test DB volume)
+docker compose down -v
+```
+
+### What it tests
+- `test_gm_page.py` — GM panel page load, team creation, AI players, auto-place, remove, start/end game
+- `test_team_page.py` — Team board page load, auto-place ships, remove ship
+- `test_locations_page.py` — Locations table/map rendering, add location
+- `test_navigation.py` — Cross-page navigation (GM → locations, GM → events)
+- `test_complete_game.py` — Full playthrough: create teams → place ships → create locations → start game → play moves → end game
+
+### Architecture
+- `tests_e2e/conftest.py` — Fixtures: `seeded_game` (fresh game via API), `seeded_game_with_teams` (game + 2 teams + ships + locations)
+- `tests_e2e/pages/` — Page Object Model classes for each page
+- Tests run against a separate `test-app` container with its own `test-postgres` database (`battleship_test`)
+- `--video=on-fail` saves Playwright video of failed tests to `test-results/`
