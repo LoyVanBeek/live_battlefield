@@ -89,6 +89,26 @@ async def verify_admin(
     return token
 
 
+async def verify_admin_or_gm(
+    token: Optional[str] = Query(None),
+    gm_token: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_api_db),
+):
+    if token:
+        from app.models import get_admin
+        sa = await get_admin(db)
+        if sa and sa.token == token:
+            return {"role": "admin"}
+
+    if gm_token:
+        from app.models import get_game_by_gm_token
+        game = await get_game_by_gm_token(db, gm_token)
+        if game:
+            return {"role": "gm", "game_id": str(game.id)}
+
+    raise HTTPException(status_code=404)
+
+
 async def verify_gm_token(
     gm_token: str = Query(...),
     db: AsyncSession = Depends(get_api_db),
@@ -543,13 +563,16 @@ async def team_page(
 async def get_admin_locations(
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin),
+    auth=Depends(verify_admin_or_gm),
 ):
     from app.models import get_game_locations, get_game_events
     from app.database import EventType
 
     if game_id is None:
-        game_uuid = await _get_legacy_game_id(db)
+        if auth["role"] == "admin":
+            game_uuid = await _get_legacy_game_id(db)
+        else:
+            game_uuid = uuid.UUID(auth["game_id"])
     else:
         game_uuid = uuid.UUID(game_id)
 
@@ -588,12 +611,15 @@ async def get_admin_locations(
 async def get_all_events_for_timeline(
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin),
+    auth=Depends(verify_admin_or_gm),
 ):
     from app.models import get_game_events
 
     if game_id is None:
-        game_uuid = await _get_legacy_game_id(db)
+        if auth["role"] == "admin":
+            game_uuid = await _get_legacy_game_id(db)
+        else:
+            game_uuid = uuid.UUID(auth["game_id"])
     else:
         game_uuid = uuid.UUID(game_id)
 
@@ -624,12 +650,15 @@ async def get_state_at_event(
     event_index: int,
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin),
+    auth=Depends(verify_admin_or_gm),
 ):
     from app.models import get_game_events
 
     if game_id is None:
-        game_uuid = await _get_legacy_game_id(db)
+        if auth["role"] == "admin":
+            game_uuid = await _get_legacy_game_id(db)
+        else:
+            game_uuid = uuid.UUID(auth["game_id"])
     else:
         game_uuid = uuid.UUID(game_id)
 
@@ -886,12 +915,15 @@ async def get_public_boards_at_event(
     event_index: int,
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin),
+    auth=Depends(verify_admin_or_gm),
 ):
     from app.models import get_game_events
 
     if game_id is None:
-        game_uuid = await _get_legacy_game_id(db)
+        if auth["role"] == "admin":
+            game_uuid = await _get_legacy_game_id(db)
+        else:
+            game_uuid = uuid.UUID(auth["game_id"])
     else:
         game_uuid = uuid.UUID(game_id)
 
@@ -912,12 +944,15 @@ async def get_single_public_board_at_event(
     team_color: str,
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin),
+    auth=Depends(verify_admin_or_gm),
 ):
     from app.models import get_game_events
 
     if game_id is None:
-        game_uuid = await _get_legacy_game_id(db)
+        if auth["role"] == "admin":
+            game_uuid = await _get_legacy_game_id(db)
+        else:
+            game_uuid = uuid.UUID(auth["game_id"])
     else:
         game_uuid = uuid.UUID(game_id)
 
@@ -943,12 +978,15 @@ async def get_private_board_at_event(
     team_color: str,
     game_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin),
+    auth=Depends(verify_admin_or_gm),
 ):
     from app.models import get_game_events
 
     if game_id is None:
-        game_uuid = await _get_legacy_game_id(db)
+        if auth["role"] == "admin":
+            game_uuid = await _get_legacy_game_id(db)
+        else:
+            game_uuid = uuid.UUID(auth["game_id"])
     else:
         game_uuid = uuid.UUID(game_id)
 
