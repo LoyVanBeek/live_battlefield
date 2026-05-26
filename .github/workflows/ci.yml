@@ -66,4 +66,4 @@ jobs:
 
       - name: Clean up
         if: always()
-        run: docker compose down -v
+        run: touch .env && docker compose down -v
