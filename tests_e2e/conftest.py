@@ -2,6 +2,19 @@ import os
 import sys
 import pytest
 
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    if report.when == "teardown":
+        output_dir = item.config.getoption("--output", "test-results")
+        for entry in os.listdir(output_dir):
+            subdir = os.path.join(output_dir, entry)
+            video_file = os.path.join(subdir, "video.webm")
+            if os.path.isfile(video_file):
+                os.rename(video_file, os.path.join(subdir, f"{entry}.webm"))
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 APP_URL = os.environ.get("APP_URL", "http://localhost:8000")
