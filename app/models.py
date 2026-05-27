@@ -139,10 +139,15 @@ async def get_admin(db: AsyncSession) -> Optional[Admin]:
 
 
 async def get_or_create_admin(db: AsyncSession) -> Admin:
+    from app.config import settings as app_settings
+    token = app_settings.admin_token or ""
     admin = await get_admin(db)
-    if not admin:
-        from app.config import settings as app_settings
-        token = app_settings.admin_token
+    if admin:
+        if token and admin.token != token:
+            admin.token = token
+            await db.commit()
+            await db.refresh(admin)
+    else:
         if not token:
             from app.events.models import generate_team_token
             token = generate_team_token()

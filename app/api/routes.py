@@ -157,10 +157,9 @@ async def verify_team_or_gm(
 async def lifespan(app: FastAPI):
     try:
         async with api_session_maker() as db:
-            from app.models import get_admin
-            sa = await get_admin(db)
-            if sa:
-                logger.info("Admin panel: /admin/%s", sa.token)
+            from app.models import get_or_create_admin
+            sa = await get_or_create_admin(db)
+            logger.info("Admin panel: /admin/%s", sa.token)
     except Exception:
         logger.warning("Could not check super admin token on startup")
     yield
