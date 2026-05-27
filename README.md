@@ -157,6 +157,26 @@ Pure unit tests only (skip DB-dependent tests):
 uv run pytest tests/ -v -k "not test_api and not test_telegram_handlers"
 ```
 
+### Running E2E Tests
+
+End-to-end tests use Playwright to drive a headless Chromium against a dedicated test stack with a fresh database.
+
+```bash
+# Build and start the test infrastructure
+docker compose up -d test-postgres test-app
+
+# Run all E2E tests
+docker compose run --rm test-e2e
+
+# Or run a specific test file
+docker compose run --rm test-e2e pytest tests_e2e/test_navigation.py -v --video=on --output=test-results
+
+# Clean up (removes test DB volume)
+docker compose down -v
+```
+
+Videos of test runs are saved to `test-results/` (each named after its test).
+
 ### Running Locally (without Docker)
 ```bash
 # Install dependencies
