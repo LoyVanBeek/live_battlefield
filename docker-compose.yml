@@ -65,7 +65,7 @@ services:
       test-postgres:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@test-postgres:5432/battleship_test
       ADMIN_TOKEN: e2e-test-admin
