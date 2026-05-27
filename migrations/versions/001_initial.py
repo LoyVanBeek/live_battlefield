@@ -23,6 +23,8 @@ def upgrade() -> None:
 
     conn.execute(sa.text("DO $$ BEGIN CREATE TYPE role AS ENUM ('TEAM', 'GAMEMASTER', 'AI'); EXCEPTION WHEN duplicate_object THEN null; END $$"))
     conn.execute(sa.text("DO $$ BEGIN CREATE TYPE eventtype AS ENUM ('TEAM_JOINED', 'SHIP_PLACED', 'SHIP_REMOVED', 'BOMB_THROWN', 'CODE_REDEEMED', 'LOCATION_ADDED', 'LOCATION_REMOVED', 'GAME_STARTED', 'GAME_ENDED', 'BOMBS_ADDED', 'TEAM_RESET'); EXCEPTION WHEN duplicate_object THEN null; END $$"))
+    # DB enum uses WAITING (Python member name); app-layer GameStatusField uses PREPARING = "preparing".
+    # These are distinct: DB stores WAITING, state reconstruction translates to PREPARING.
     conn.execute(sa.text("DO $$ BEGIN CREATE TYPE gamestatus AS ENUM ('WAITING', 'STARTED', 'ENDED'); EXCEPTION WHEN duplicate_object THEN null; END $$"))
 
     conn.execute(
