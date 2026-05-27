@@ -42,7 +42,7 @@ jobs:
         run: docker compose build app
 
       - name: Start test infrastructure
-        run: touch .env && docker compose up -d test-postgres test-app
+        run: docker compose -f docker-compose.e2e.yml up -d
 
       - name: Wait for app to be ready
         run: |
@@ -54,11 +54,11 @@ jobs:
             sleep 2
           done
           echo "App failed to start"
-          docker compose logs test-app
+          docker compose -f docker-compose.e2e.yml logs test-app
           exit 1
 
       - name: Run e2e tests
-        run: docker compose run --rm test-e2e
+        run: docker compose -f docker-compose.e2e.yml run --rm test-e2e
 
       - name: Upload Playwright artifacts
         if: always()
@@ -69,4 +69,4 @@ jobs:
 
       - name: Clean up
         if: always()
-        run: touch .env && docker compose down -v
+        run: docker compose -f docker-compose.e2e.yml down -v
