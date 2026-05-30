@@ -155,14 +155,28 @@ async def verify_team_or_gm(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    stop_event = asyncio.Event()
+    trickle_task = None
     try:
         async with api_session_maker() as db:
             from app.models import get_or_create_admin
             sa = await get_or_create_admin(db)
             logger.info("Admin panel: /admin/%s", sa.token)
+
+        from app.services.trickle import trickle_loop
+        trickle_task = asyncio.create_task(trickle_loop(stop_event))
     except Exception:
         logger.warning("Could not check super admin token on startup")
+
     yield
+
+    if trickle_task:
+        stop_event.set()
+        trickle_task.cancel()
+        try:
+            await trickle_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="Live Battlefield API", lifespan=lifespan)
@@ -191,6 +205,12 @@ class RemoveShipAction(BaseModel):
     team_color: str
     row: int
     col: int
+
+
+class TrickleSettings(BaseModel):
+    enabled: bool
+    bombs_per_interval: int = 1
+    interval_minutes: int = 10
 
 
 @app.get("/")
@@ -731,11 +751,18 @@ async def get_game_state(
     for num, code in state.location_codes.items():
         locations.append({"number": num, "code": code})
 
+    from app.models import get_game
+
+    game = await get_game(db, game_uuid)
+
     return {
         "teams": teams,
         "winner": {"name": winner.name, "color": winner.color} if winner else None,
         "locations": locations,
         "available_colors": [c for c in TEAM_COLORS if c not in state.teams],
+        "trickle_enabled": game.trickle_enabled if game else False,
+        "trickle_bombs_per_interval": game.trickle_bombs_per_interval if game else 1,
+        "trickle_interval_minutes": game.trickle_interval_minutes if game else 10,
     }
 
 
@@ -1730,6 +1757,31 @@ async def remove_location(
     }
 
 
+@app.post("/api/quick/trickle_settings")
+async def set_trickle_settings(
+    settings: TrickleSettings,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import update_trickle_settings
+
+    game_uuid = uuid.UUID(game_id)
+    game = await update_trickle_settings(
+        db,
+        game_uuid,
+        enabled=settings.enabled,
+        bombs_per_interval=settings.bombs_per_interval,
+        interval_minutes=settings.interval_minutes,
+    )
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    return {
+        "success": True,
+        "message": f"Trickle {'enabled' if settings.enabled else 'disabled'}: {settings.bombs_per_interval} bombs every {settings.interval_minutes} minutes",
+    }
+
+
 @app.post("/api/quick/reset-game")
 async def reset_game(
     db: AsyncSession = Depends(get_api_db),
@@ -1962,6 +2014,9 @@ async def get_game_status(
         "total_locations_needed": 0,
         "total_teams": len(state.teams),
         "teams_with_all_ships": teams_with_all_ships,
+        "trickle_enabled": game.trickle_enabled if game else False,
+        "trickle_bombs_per_interval": game.trickle_bombs_per_interval if game else 1,
+        "trickle_interval_minutes": game.trickle_interval_minutes if game else 10,
     }
 
 
