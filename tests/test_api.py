@@ -13,27 +13,28 @@ class TestExecuteCommand:
     """Tests for /api/execute endpoint"""
 
     def test_join_command_creates_team_joined_event(self):
-        from app.api.routes import app, verify_team_or_admin_token
+        from app.api.routes import app, verify_team_or_gm
         from app.game.state import GameState
         from unittest.mock import AsyncMock
 
-        app.dependency_overrides[verify_team_or_admin_token] = lambda: "test_token"
+        app.dependency_overrides[verify_team_or_gm] = lambda: {"role": "admin", "game_id": "00000000-0000-0000-0000-000000000000", "color": "blue"}
         try:
-            with patch("app.api.routes.get_all_events", return_value=[]):
+            with patch("app.models.get_game_events", return_value=[]):
                 with patch("app.api.routes.save_event") as mock_save:
-                    with patch("app.api.routes.GameState.from_events") as mock_from_events:
-                        mock_state = GameState()
-                        mock_from_events.return_value = mock_state
+                    with patch("app.models.create_team_token", new_callable=AsyncMock):
+                        with patch("app.api.routes.GameState.from_events") as mock_from_events:
+                            mock_state = GameState()
+                            mock_from_events.return_value = mock_state
 
-                        client = TestClient(app)
-                        response = client.post(
-                            "/api/execute",
-                            json={
-                                "team_color": "blue",
-                                "command": "join",
-                                "args": {"name": "Blue Team"},
-                            },
-                        )
+                            client = TestClient(app)
+                            response = client.post(
+                                "/api/execute",
+                                json={
+                                    "team_color": "blue",
+                                    "command": "join",
+                                    "args": {"name": "Blue Team"},
+                                },
+                            )
         finally:
             app.dependency_overrides.clear()
 
@@ -128,17 +129,17 @@ class TestGameControl:
         assert updated_event.timestamp != ""
 
     def test_start_game_already_started_fails(self):
-        from app.api.routes import app, verify_admin_token
+        from app.api.routes import app, verify_gm_token
         from app.game.state import GameState, GameStatusField
 
-        app.dependency_overrides[verify_admin_token] = lambda: "test_token"
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
         try:
             state = GameState()
             state.status = GameStatusField.STARTED
 
             with patch("app.api.routes.GameState.from_events", return_value=state):
-                with patch("app.api.routes.get_all_events", return_value=[]):
-                    with patch("app.models.get_all_locations", return_value=[]):
+                with patch("app.models.get_game_events", return_value=[]):
+                    with patch("app.models.get_game_locations", return_value=[]):
                         with patch("app.api.routes.save_event"):
                             client = TestClient(app)
                             response = client.post("/api/quick/start-game", json={})
@@ -164,16 +165,16 @@ class TestGameControl:
         assert updated_event.timestamp != ""
 
     def test_end_game_from_preparing_fails(self):
-        from app.api.routes import app, verify_admin_token
+        from app.api.routes import app, verify_gm_token
         from app.game.state import GameState, GameStatusField
 
-        app.dependency_overrides[verify_admin_token] = lambda: "test_token"
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
         try:
             state = GameState()
             state.status = GameStatusField.PREPARING
 
             with patch("app.api.routes.GameState.from_events", return_value=state):
-                with patch("app.api.routes.get_all_events", return_value=[]):
+                with patch("app.models.get_game_events", return_value=[]):
                     client = TestClient(app)
                     response = client.post("/api/quick/end-game", json={})
 
@@ -196,13 +197,13 @@ class TestAdminEvents:
     """Tests for /api/admin/events* endpoints"""
 
     def test_get_all_events_returns_list(self):
-        from app.api.routes import app, verify_admin_token
+        from app.api.routes import app, verify_admin_or_gm
         from app.database import EventType
         from app import models
 
-        app.dependency_overrides[verify_admin_token] = lambda: "test_token"
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
         try:
-            with patch.object(models, "get_all_events") as mock_get:
+            with patch.object(models, "get_game_events") as mock_get:
                 mock_event = MagicMock()
                 mock_event.event_type = EventType.TEAM_JOINED
                 mock_event.payload = {"color": "blue"}
@@ -212,7 +213,7 @@ class TestAdminEvents:
                 mock_get.return_value = [mock_event]
 
                 client = TestClient(app)
-                response = client.get("/api/admin/events")
+                response = client.get("/api/admin/events?game_id=00000000-0000-0000-0000-000000000000")
 
             assert response.status_code == 200
             data = response.json()
@@ -222,16 +223,16 @@ class TestAdminEvents:
             app.dependency_overrides.clear()
 
     def test_get_event_state_invalid_index_fails(self):
-        from app.api.routes import app, verify_admin_token
+        from app.api.routes import app, verify_admin_or_gm
         from app import models
 
-        app.dependency_overrides[verify_admin_token] = lambda: "test_token"
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
         try:
-            with patch.object(models, "get_all_events") as mock_get:
+            with patch.object(models, "get_game_events") as mock_get:
                 mock_get.return_value = [MagicMock(), MagicMock()]  # 2 events
 
                 client = TestClient(app)
-                response = client.get("/api/admin/events/999/state")
+                response = client.get("/api/admin/events/999/state?game_id=00000000-0000-0000-0000-000000000000")
 
             assert response.status_code == 200
             data = response.json()
@@ -247,7 +248,7 @@ class TestLocations:
         from app.api.routes import app
         from app import models
 
-        with patch.object(models, "get_all_locations") as mock_get:
+        with patch.object(models, "get_game_locations") as mock_get:
             mock_location = MagicMock()
             mock_location.number = 1
             mock_location.code = "ABCD"
@@ -258,7 +259,7 @@ class TestLocations:
             mock_get.return_value = [mock_location]
 
             client = TestClient(app)
-            response = client.get("/api/locations")
+            response = client.get("/api/locations?game_id=00000000-0000-0000-0000-000000000000")
 
         assert response.status_code == 200
         data = response.json()
@@ -386,7 +387,7 @@ class TestBoardJson:
         assert sunk_cell["ship_sunk"] == True
 
     def test_api_public_board_json_endpoint(self):
-        from app.api.routes import app, get_api_db
+        from app.api.routes import app, get_api_db, verify_gm_token
         from app.game.state import GameState
         from app.events.models import TeamJoinedEvent
 
@@ -414,10 +415,11 @@ class TestBoardJson:
             yield MockSession()
 
         app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
 
         try:
             with patch("app.api.routes.GameState.from_events", return_value=state):
-                with patch("app.api.routes.get_all_events", return_value=[]):
+                with patch("app.models.get_game_events", return_value=[]):
                     client = TestClient(app)
                     response = client.get("/api/board/red/public.json")
 
@@ -429,7 +431,7 @@ class TestBoardJson:
             app.dependency_overrides.clear()
 
     def test_api_private_board_json_endpoint(self):
-        from app.api.routes import app, get_api_db
+        from app.api.routes import app, get_api_db, verify_gm_token
         from app.game.state import GameState
         from app.events.models import TeamJoinedEvent
 
@@ -457,10 +459,11 @@ class TestBoardJson:
             yield MockSession()
 
         app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
 
         try:
             with patch("app.api.routes.GameState.from_events", return_value=state):
-                with patch("app.api.routes.get_all_events", return_value=[]):
+                with patch("app.models.get_game_events", return_value=[]):
                     client = TestClient(app)
                     response = client.get("/api/board/blue/private.json")
 
@@ -473,7 +476,7 @@ class TestBoardJson:
             app.dependency_overrides.clear()
 
     def test_api_board_json_team_not_found(self):
-        from app.api.routes import app, get_api_db
+        from app.api.routes import app, get_api_db, verify_gm_token
         from app.game.state import GameState
         from app.events.models import TeamJoinedEvent
 
@@ -501,10 +504,11 @@ class TestBoardJson:
             yield MockSession()
 
         app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
 
         try:
             with patch("app.api.routes.GameState.from_events", return_value=state):
-                with patch("app.api.routes.get_all_events", return_value=[]):
+                with patch("app.models.get_game_events", return_value=[]):
                     client = TestClient(app)
                     response = client.get("/api/board/nonexistent/private.json")
 

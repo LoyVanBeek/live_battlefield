@@ -10,8 +10,8 @@ COPY pyproject.toml .
 RUN pip install uv && uv pip install --system -r pyproject.toml
 
 COPY app app/
-COPY alembic alembic/
-COPY alembic.ini .
+COPY migrations migrations/
+COPY migrations.ini .
 COPY tests tests/
 
 ENV PYTHONPATH=/app

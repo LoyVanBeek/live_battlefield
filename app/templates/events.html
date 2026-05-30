@@ -224,11 +224,11 @@
     <div class="container">
         <h1>📜 Event Timeline</h1>
         
-        <div class="nav-links">
+        <div class="nav-links" id="nav-links">
             <a href="/map">🗺️ Map</a>
-            <a href="/admin/{{ token }}">🕵️ Test Panel</a>
-            <a href="/admin/{{ token }}/locations-secret">📍 Locations</a>
-            <a href="/admin/{{ token }}/events" class="active">📜 Events</a>
+            <a id="nav-back" href="#">🕵️ Panel</a>
+            <a id="nav-locations" href="#">📍 Locations</a>
+            <a id="nav-events" href="#" class="active">📜 Events</a>
         </div>
 
         <div class="event-list" id="event-list">
@@ -300,21 +300,35 @@
             return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
         }
 
-        function getAdminToken() {
-            const m = window.location.pathname.match(/^\/admin\/([^/]+)/);
-            return m ? m[1] : '';
+        function getGmToken() {
+            const m = window.location.pathname.match(/^\/game-master\/([^/]+)/);
+            if (m) return m[1];
+            const m2 = window.location.pathname.match(/^\/admin\/([^/]+)/);
+            return m2 ? m2[1] : '';
         }
+
+        // Set nav links based on URL route
+        (function initNavLinks() {
+            const m = window.location.pathname.match(/^\/(game-master|admin)\/([^/]+)/);
+            if (m) {
+                const prefix = '/' + m[1] + '/' + m[2];
+                document.getElementById('nav-back').href = prefix;
+                document.getElementById('nav-back').textContent = m[1] === 'game-master' ? '🕵️ GM Panel' : '🕵️ Test Panel';
+                document.getElementById('nav-locations').href = prefix + '/locations-secret';
+                document.getElementById('nav-events').href = prefix + '/events';
+            }
+        })();
 
         async function apiCall(url, method = 'GET', body = null) {
             try {
-                const token = getAdminToken();
+                const token = getGmToken();
                 const sep = url.includes('?') ? '&' : '?';
                 const options = { method };
                 if (body) {
                     options.headers = { 'Content-Type': 'application/json' };
                     options.body = JSON.stringify(body);
                 }
-                const resp = await fetch(url + sep + 'admin_token=' + encodeURIComponent(token), options);
+                const resp = await fetch(url + sep + 'gm_token=' + encodeURIComponent(token), options);
                 if (!resp.ok) {
                     return { success: false, message: `HTTP error: ${resp.status}` };
                 }
@@ -412,7 +426,7 @@
             html += '<td class="row-label">Public</td>';
             for (const color of teamColors) {
                 html += `<td class="board-cell">
-                    <img src="/api/admin/events/${index}/board/${color}/public.png?admin_token=${getAdminToken()}&_=${Date.now()}" alt="${color} public">
+                    <img src="/api/admin/events/${index}/board/${color}/public.png?gm_token=${getGmToken()}&_=${Date.now()}" alt="${color} public">
                 </td>`;
             }
             html += '</tr>';
@@ -422,7 +436,7 @@
             html += '<td class="row-label">Private</td>';
             for (const color of teamColors) {
                 html += `<td class="board-cell">
-                    <img src="/api/admin/events/${index}/board/${color}/private.png?admin_token=${getAdminToken()}&_=${Date.now()}" alt="${color} private">
+                    <img src="/api/admin/events/${index}/board/${color}/private.png?gm_token=${getGmToken()}&_=${Date.now()}" alt="${color} private">
                 </td>`;
             }
             html += '</tr>';

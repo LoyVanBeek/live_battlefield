@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Battlefield - Admin Panel</title>
+    <title>Live Battlefield - Game Master Panel</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -213,13 +213,13 @@
 </head>
 <body>
     <div class="container">
-        <h1>🕵️ Admin Panel</h1>
+        <h1>🕵️ Game Master Panel</h1>
         
         <!-- Navigation -->
         <div class="nav-links">
             <a href="/map">🗺️ Map</a>
-            <a href="/admin/{{ token }}/events">📊 Events Timeline</a>
-            <a href="/admin/{{ token }}/locations-secret">📍 Locations</a>
+            <a href="/game-master/{{ gm_token }}/events">📊 Events Timeline</a>
+            <a href="/game-master/{{ gm_token }}/locations-secret">📍 Locations</a>
         </div>
 
         <!-- Game Status Bar -->
@@ -335,10 +335,9 @@
 
         async function renderBoard(containerId, jsonUrl) {
             try {
-                const resp = await fetch(jsonUrl);
-                const data = await resp.json();
-                if (data.error) {
-                    document.getElementById(containerId).innerHTML = '<p>' + data.error + '</p>';
+                const data = await apiCall(jsonUrl);
+                if (!data || data.error) {
+                    document.getElementById(containerId).innerHTML = '<p>' + (data?.error || 'Failed to load board') + '</p>';
                     return;
                 }
                 updateBoardFromData(containerId, data, true);
@@ -437,21 +436,23 @@
             }
         }
 
-        function getAdminToken() {
-            const m = window.location.pathname.match(/^\/admin\/([^/]+)/);
-            return m ? m[1] : '';
+        function getGmToken() {
+            const m = window.location.pathname.match(/^\/game-master\/([^/]+)/);
+            if (m) return m[1];
+            const m2 = window.location.pathname.match(/^\/admin\/([^/]+)/);
+            return m2 ? m2[1] : '';
         }
 
         async function apiCall(url, method = 'GET', body = null) {
             try {
-                const token = getAdminToken();
+                const token = getGmToken();
                 const sep = url.includes('?') ? '&' : '?';
                 const options = { method };
                 if (body) {
                     options.headers = { 'Content-Type': 'application/json' };
                     options.body = JSON.stringify(body);
                 }
-                const resp = await fetch(url + sep + 'admin_token=' + encodeURIComponent(token), options);
+                const resp = await fetch(url + sep + 'gm_token=' + encodeURIComponent(token), options);
                 return await resp.json();
             } catch (error) {
                 showToast('Error: ' + error.message, 'error');
@@ -916,33 +917,7 @@
             const result = await apiCall('/api/quick/clear-database', 'POST', {});
             showToast(result.message, result.success ? 'success' : 'error');
             if (result.success && result.new_token) {
-                setTimeout(() => { window.location.href = '/admin/' + result.new_token; }, 1000);
-            }
-        }
-
-        async function resetGame() {
-            if (!confirm('Reset game? This clears all events.')) return;
-            const result = await apiCall('/api/quick/reset-game', 'POST', {});
-            showToast(result.message, result.success ? 'success' : 'error');
-            loadGameStatus();
-            loadPublicBoards();
-            loadTeams();
-        }
-
-        async function clearLocations() {
-            if (!confirm('Clear all locations?')) return;
-            const result = await apiCall('/api/quick/clear-locations', 'POST', {});
-            showToast(result.message, result.success ? 'success' : 'error');
-            loadGameStatus();
-        }
-
-        async function clearDatabase() {
-            if (!confirm('Clear ENTIRE database? This cannot be undone!')) return;
-            if (!confirm('Are you REALLY sure?')) return;
-            const result = await apiCall('/api/quick/clear-database', 'POST', {});
-            showToast(result.message, result.success ? 'success' : 'error');
-            if (result.success && result.new_token) {
-                setTimeout(() => { window.location.href = '/admin/' + result.new_token; }, 1000);
+                setTimeout(() => { window.location.href = '/game-master/' + result.new_token; }, 1000);
             }
         }
 

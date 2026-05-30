@@ -10,7 +10,7 @@ from app.game.ships import (
     parse_coordinate,
     coordinate_to_string,
 )
-from app.game.state import GameState, BombResult, TEAM_COLORS
+from app.game.state import GameState, BombResult, TEAM_COLORS, GameStatusField
 from app.game.board import (
     render_all_public_boards,
     render_private_board,
@@ -20,15 +20,18 @@ from app.database import Role
 from app.models import (
     get_player_by_chat,
     get_player_by_id,
-    get_player_by_color,
+    get_player_by_color_in_game,
     create_player,
-    get_all_teams,
-    get_all_game_masters,
-    get_all_events,
+    get_all_teams_in_game,
+    get_all_players_in_game,
+    get_game_events,
     get_location_by_number,
     create_location,
     get_next_location_number,
-    get_all_locations,
+    get_game_locations,
+    update_game_status,
+    create_team_token,
+    delete_team_token,
 )
 from app.events import (
     EventType,
@@ -39,12 +42,14 @@ from app.events import (
     LocationAddedEvent,
     BombsAddedEvent,
     TeamResetEvent,
+    GameStartedEvent,
     save_event,
 )
 from app.bot.helpers import send_message, send_photo
 from telegram import Update
 from telegram.ext import ContextTypes
 from typing import Optional
+from datetime import datetime, timezone
 import math
 import random
 import string
@@ -68,44 +73,36 @@ async def handle_join(
         existing_player = await get_player_by_chat(db, chat_id)
         logger.info(f"handle_join: existing_player={existing_player}")
         if existing_player:
-            if existing_player.role == Role.GAMEMASTER:
-                # GM can also play as a team - delete old record and create fresh
-                await db.delete(existing_player)
-                await db.commit()
-            else:
-                # Team player wants to rejoin - delete old record
-                await db.delete(existing_player)
-                await db.commit()
+            await db.delete(existing_player)
+            await db.commit()
 
-        events = await get_all_events(db)
-        state = GameState.from_events(events)
+        from app.models import get_all_games
+        games = await get_all_games(db)
+        if not games:
+            return "No active game found"
+        game_id = games[0].id
+        game = games[0]
 
-        from app.models import get_or_create_game_settings
-
-        settings = await get_or_create_game_settings(db)
-
-        if settings.status.value == "started":
+        if game.status.value == "started":
             return "The game has already started! No new teams can join."
-
-        if settings.status.value == "ended":
+        if game.status.value == "ended":
             return "The game has ended! Use /resetgame to start a new game."
+
+        events = await get_game_events(db, game_id)
+        state = GameState.from_events(events)
 
         if state.is_team_name_taken(team_name):
             return f"Team name '{team_name}' is already taken!"
 
-        # Get colors already in game (from events)
         colors_in_game = set(state.teams.keys())
 
-        # Also check database for existing players (including AI)
-        from app.models import get_all_players
+        from app.models import get_all_players_in_game
 
-        all_players = await get_all_players(db)
+        all_players = await get_all_players_in_game(db, game_id)
         colors_in_db = {p.color for p in all_players}
 
-        # Combine both sources
         taken_colors = colors_in_game | colors_in_db
 
-        # Find next available color
         color = None
         for c in TEAM_COLORS:
             if c not in taken_colors:
@@ -116,14 +113,16 @@ async def handle_join(
             return "No more colors available! The game is full."
 
         logger.info(f"handle_join: creating player team={team_name} color={color}")
-        player = await create_player(db, team_name, color, chat_id)
+        player = await create_player(db, game_id=game_id, name=team_name, color=color, chat_id=chat_id)
         logger.info(f"handle_join: player created id={player.id}")
 
         from app.events.models import generate_team_token
+        from app.models import create_team_token
 
         token = generate_team_token()
         event = TeamJoinedEvent(name=team_name, color=color, chat_id=chat_id, bombs=3, token=token)
-        await save_event(db, event)
+        await save_event(db, event, game_id=game_id)
+        await create_team_token(db, game_id, token, color)
         logger.info(f"handle_join: event saved")
 
         return f"Welcome {team_name}! You are the {color} team.\nYou have 0 bombs to start. Visit locations to earn bombs!"
@@ -140,12 +139,6 @@ async def handle_leave(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
     try:
-        from app.models import get_or_create_game_settings
-
-        settings = await get_or_create_game_settings(db)
-        if settings.status.value == "started":
-            return "Cannot leave - the game has already started!"
-
         existing_player = await get_player_by_chat(db, chat_id)
         if not existing_player:
             return "You are not in the game yet!"
@@ -153,8 +146,15 @@ async def handle_leave(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if existing_player.role == Role.GAMEMASTER:
             return "Game Masters cannot leave the game. Contact another GM to reset."
 
+        game_id = existing_player.game_id
+        from app.models import get_game
+        game = await get_game(db, game_id)
+        if game and game.status.value == "started":
+            return "Cannot leave - the game has already started!"
+
         await db.delete(existing_player)
         await db.commit()
+        await delete_team_token(db, game_id, existing_player.color)
 
         return "You have left the game. Use /join <team_name> to rejoin."
     except Exception as e:
@@ -189,7 +189,8 @@ async def handle_place(
     except ValueError as e:
         return str(e)
 
-    events = await get_all_events(db)
+    game_id = player.game_id
+    events = await get_game_events(db, game_id)
     state = GameState.from_events(events)
 
     if player.color not in state.teams:
@@ -211,7 +212,7 @@ async def handle_place(
         col=col,
         direction=direction,
     )
-    await save_event(db, event)
+    await save_event(db, event, game_id=game_id)
 
     img = render_private_board(team)
     img_bytes = boards_to_bytes(img)
@@ -234,8 +235,7 @@ async def handle_place_all(
     if update.effective_chat is None:
         return
 
-    from app.services.ship_placement import place_all_ships
-    from app.models import get_or_create_game_settings
+    from app.services.ship_placement import place_all_ships_game_scoped
 
     chat_id = update.effective_chat.id
 
@@ -243,12 +243,13 @@ async def handle_place_all(
     if not player:
         return "You need to join the game first! Use /join <team name>"
 
-    settings = await get_or_create_game_settings(db)
-
-    if settings.status.value == "started":
+    game_id = player.game_id
+    from app.models import get_game
+    game = await get_game(db, game_id)
+    if game and game.status.value == "started":
         return "Cannot place ships - the game has already started!"
 
-    success, message = await place_all_ships(db, player.color)
+    success, message = await place_all_ships_game_scoped(db, str(game_id), player.color)
 
     if not success:
         return message
@@ -276,14 +277,11 @@ async def handle_bomb(
     except ValueError as e:
         return str(e)
 
-    events = await get_all_events(db)
+    game_id = player.game_id
+    events = await get_game_events(db, game_id)
     state = GameState.from_events(events)
 
-    from app.models import get_or_create_game_settings
-
-    settings = await get_or_create_game_settings(db)
-
-    if settings.status.value != "started":
+    if state.status.value != "started":
         return "The game hasn't started yet! Waiting for all ships and locations to be ready."
 
     if player.color not in state.teams:
@@ -316,9 +314,9 @@ async def handle_bomb(
         col=col,
         result=result.value,
     )
-    await save_event(db, event)
+    await save_event(db, event, game_id=game_id)
 
-    target_player = await get_player_by_color(db, target_color)
+    target_player = await get_player_by_color_in_game(db, game_id, target_color)
     if target_player and target_player.chat_id:
         coord_str = coordinate_to_string(row, col)
         if result == BombResult.HIT:
@@ -368,18 +366,15 @@ async def handle_code(
     if not player:
         return "You need to join the game first! Use /join <team name>"
 
-    location = await get_location_by_number(db, location_number)
+    game_id = player.game_id
+    location = await get_location_by_number(db, game_id, location_number)
     if not location:
         return f"Location {location_number} does not exist!"
 
-    events = await get_all_events(db)
+    events = await get_game_events(db, game_id)
     state = GameState.from_events(events)
 
-    from app.models import get_or_create_game_settings
-
-    settings = await get_or_create_game_settings(db)
-
-    if settings.status.value != "started":
+    if state.status.value != "started":
         return (
             "The game hasn't started yet! Wait for all ships and locations to be ready."
         )
@@ -392,7 +387,7 @@ async def handle_code(
     if location.code.upper() != code.upper():
         return "Invalid code! Please check the code at the location."
 
-    events = await get_all_events(db)
+    events = await get_game_events(db, game_id)
     for event in events:
         if event.event_type == EventType.CODE_REDEEMED:
             payload = event.payload
@@ -412,7 +407,7 @@ async def handle_code(
         success=True,
         bombs_earned=bomb_value,
     )
-    await save_event(db, event)
+    await save_event(db, event, game_id=game_id)
 
     return f"Correct! +{bomb_value} bomb(s) added. You now have {team.bombs} bombs."
 
@@ -426,7 +421,8 @@ async def handle_overview(db, update: Update, context: ContextTypes.DEFAULT_TYPE
     if not player:
         return "You need to join the game first! Use /join <team name>"
 
-    events = await get_all_events(db)
+    game_id = player.game_id
+    events = await get_game_events(db, game_id)
     state = GameState.from_events(events)
 
     if player.color not in state.teams:
@@ -474,10 +470,11 @@ async def handle_location(
     if player.role.value != "gamemaster":
         return "Only game masters can add locations!"
 
-    number = await get_next_location_number(db)
+    game_id = player.game_id
+    number = await get_next_location_number(db, game_id)
     location_code = code.upper() if code else generate_code()
 
-    await create_location(db, number, latitude, longitude, location_code)
+    await create_location(db, game_id, number, latitude, longitude, location_code)
 
     event = LocationAddedEvent(
         number=number,
@@ -485,7 +482,7 @@ async def handle_location(
         longitude=longitude,
         code=location_code,
     )
-    await save_event(db, event)
+    await save_event(db, event, game_id=game_id)
 
     return f"Location {number} added!\nCode: {location_code}\nhttps://maps.google.com/?q={latitude},{longitude}"
 
@@ -495,16 +492,19 @@ async def handle_locations_list(db, update: Update, context: ContextTypes.DEFAUL
         return
     chat_id = update.effective_chat.id
 
-    locations = await get_all_locations(db)
+    player = await get_player_by_chat(db, chat_id)
+    if not player:
+        return "You need to join the game first! Use /join <team name>"
+
+    game_id = player.game_id
+    locations = await get_game_locations(db, game_id)
 
     if not locations:
         return "No locations have been added yet."
 
-    # Calculate default bomb value
     num_locations = len(locations)
     default_bomb_value = max(1, 100 // num_locations)
 
-    # Send each location as an interactive Telegram location message
     for loc in locations:
         try:
             await context.bot.send_location(
@@ -515,7 +515,6 @@ async def handle_locations_list(db, update: Update, context: ContextTypes.DEFAUL
         except Exception as e:
             print(f"Error sending location: {e}")
 
-    # Also send text with bomb values
     msg = f"📍 {len(locations)} Locations (Worth {default_bomb_value} bombs each by default):\n"
     for loc in locations:
         bomb_val = loc.bomb_value if loc.bomb_value else default_bomb_value
@@ -542,14 +541,19 @@ async def handle_register_gm(db, update: Update, context: ContextTypes.DEFAULT_T
     if existing_player:
         if existing_player.role.value == "gamemaster":
             return "You are already registered as a game master!"
-        # Allow team players to also be GMs
         existing_player.role = Role.GAMEMASTER
         await db.commit()
         return (
             "You are now also registered as a game master! You can now use GM commands."
         )
 
-    player = await create_player(db, "GameMaster", "gm", chat_id, Role.GAMEMASTER)
+    from app.models import get_all_games
+    games = await get_all_games(db)
+    if not games:
+        return "No active game found"
+    game_id = games[0].id
+
+    player = await create_player(db, game_id=game_id, name="GameMaster", color="gm", chat_id=chat_id, role=Role.GAMEMASTER)
 
     return "You are now registered as a game master!"
 
@@ -579,27 +583,32 @@ async def handle_add_ai(
     if color not in TEAM_COLORS:
         return f"Invalid color! Choose from: {', '.join(TEAM_COLORS)}"
 
-    from app.models import get_all_players
+    game_id = player.game_id
 
-    all_players = await get_all_players(db)
-    existing_colors = [p.color for p in all_players]
+    all_players_in_game = await get_all_players_in_game(db, game_id)
+    existing_colors = [p.color for p in all_players_in_game]
 
     if color in existing_colors:
         return f"Team {color} already exists! Use /removeai {color} first, or choose a different color."
 
+    from app.events.models import generate_team_token
+
+    token = generate_team_token()
+    event = TeamJoinedEvent(name=name, color=color, chat_id=0, bombs=3, token=token)
+    await save_event(db, event, game_id=game_id)
+    await create_team_token(db, game_id, token, color)
+
+    new_player = await create_player(db, game_id=game_id, name=name, color=color, chat_id=None, role=Role.AI)
+
     from app.services.ai_player import add_ai_player, get_ai_player
 
-    existing_ai = get_ai_player(color)
-    if existing_ai:
-        return f"AI player for {color} already exists!"
+    existing_ai = get_ai_player(str(game_id), color)
+    if not existing_ai:
+        add_ai_player(str(game_id), color, name)
 
-    new_player = await create_player(db, name, color, None, Role.AI)
+    from app.services.ship_placement import place_all_ships_game_scoped
 
-    ai = add_ai_player(color, name)
-
-    from app.services.ship_placement import place_all_ships
-
-    await place_all_ships(db, color)
+    await place_all_ships_game_scoped(db, str(game_id), color)
 
     return f"🤖 Added AI player '{name}' ({color})! Ships auto-placed. Use /aistatus to see all AI players."
 
@@ -621,32 +630,43 @@ async def handle_remove_ai(
     if player.role != Role.GAMEMASTER:
         return "Only game masters can remove AI players!"
 
+    game_id = player.game_id
+
     from app.services.ai_player import remove_ai_player, get_ai_player
 
-    ai = get_ai_player(color)
+    game_id_str = str(player.game_id)
+
+    ai = get_ai_player(game_id_str, color)
     if not ai:
         return f"No AI player with color {color}!"
-
-    player_to_remove = await get_player_by_color(db, color)
+    player_to_remove = await get_player_by_color_in_game(db, player.game_id, color)
     if player_to_remove:
         await db.delete(player_to_remove)
         await db.commit()
 
-    remove_ai_player(color)
+    await delete_team_token(db, player.game_id, color)
+    remove_ai_player(game_id_str, color)
 
     return f"🤖 Removed AI player {color}!"
 
 
 async def handle_ai_status(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
+    chat_id = update.effective_chat.id
+    player = await get_player_by_chat(db, chat_id)
+    if not player or player.role != Role.GAMEMASTER:
+        return "Only game masters can check AI status!"
     from app.services.ai_player import get_all_ai_players, is_all_ai_paused
 
-    all_ais = get_all_ai_players()
+    game_id_str = str(player.game_id)
+    all_ais = get_all_ai_players(game_id_str)
 
     if not all_ais:
         return "No AI players currently active. Use /addai <color> to add one."
 
     status = "🤖 AI Players:\n\n"
-    global_paused = is_all_ai_paused()
+    global_paused = is_all_ai_paused(game_id_str)
     if global_paused:
         status += "⏸️ All AI players are PAUSED\n\n"
 
@@ -677,10 +697,8 @@ async def handle_create_locations(
     if player.role != Role.GAMEMASTER:
         return "Only game masters can create locations!"
 
-    # Check total locations won't exceed 100
-    from app.models import get_all_locations
-
-    existing_locations = await get_all_locations(db)
+    game_id = player.game_id
+    existing_locations = await get_game_locations(db, game_id)
     if len(existing_locations) + count > 100:
         return f"Cannot create {count} locations! Would exceed 100 maximum. Current: {len(existing_locations)}"
 
@@ -688,13 +706,10 @@ async def handle_create_locations(
     import string
 
     created = []
-    from app.models import get_next_location_number
 
-    # Calculate default bomb value - total should equal 100
     total_after = len(existing_locations) + count
     default_bomb_value = max(1, 100 // total_after)
 
-    # Update ALL existing locations to have equal bomb values
     for loc in existing_locations:
         loc.bomb_value = default_bomb_value
 
@@ -710,12 +725,12 @@ async def handle_create_locations(
 
         code = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
 
-        number = await get_next_location_number(db)
+        number = await get_next_location_number(db, game_id)
 
-        # Create location with default bomb value
         from app.database import Location
 
         new_location = Location(
+            game_id=game_id,
             number=number,
             latitude=lat,
             longitude=lon,
@@ -731,7 +746,7 @@ async def handle_create_locations(
             code=code,
             bomb_value=default_bomb_value,
         )
-        await save_event(db, event)
+        await save_event(db, event, game_id=game_id)
 
         created.append(f"{number}. {code} - Worth {default_bomb_value} bombs")
 
@@ -764,14 +779,14 @@ async def handle_set_location_bombs(
     if player.role != Role.GAMEMASTER:
         return "Only game masters can set location bomb values!"
 
-    location = await get_location_by_number(db, location_number)
+    game_id = player.game_id
+    location = await get_location_by_number(db, game_id, location_number)
     if not location:
         return f"Location {location_number} does not exist!"
 
     if bomb_count < 1:
         return "Bomb count must be at least 1!"
 
-    # Update bomb value
     location.bomb_value = bomb_count
     await db.commit()
 
@@ -790,18 +805,26 @@ async def handle_start_game(db, update: Update, context: ContextTypes.DEFAULT_TY
     if player.role != Role.GAMEMASTER:
         return "Only game masters can start the game!"
 
-    from app.models import get_or_create_game_settings, update_game_settings
+    game_id = player.game_id
+
     from app.database import GameStatus
+    from app.models import get_game
 
-    settings = await get_or_create_game_settings(db)
+    game = await get_game(db, game_id)
+    if not game:
+        return "Game not found!"
 
-    if settings.status == GameStatus.STARTED:
+    events = await get_game_events(db, game_id)
+    state = GameState.from_events(events)
+    if state.status == GameStatusField.STARTED:
         return "The game has already started!"
-
-    if settings.status == GameStatus.ENDED:
+    if state.status == GameStatusField.ENDED:
         return "The game has ended! Use /resetgame to start a new game."
 
-    await update_game_settings(db, status=GameStatus.STARTED)
+    await update_game_status(db, game_id, GameStatus.STARTED, started_at=datetime.now(timezone.utc))
+
+    event = GameStartedEvent()
+    await save_event(db, event, game_id=game_id)
 
     return "🎮 The game has started! Teams can now use bombs and redeem codes!"
 
@@ -818,12 +841,15 @@ async def handle_reset_game(db, update: Update, context: ContextTypes.DEFAULT_TY
     if player.role != Role.GAMEMASTER:
         return "Only game masters can reset the game!"
 
-    from app.models import update_game_settings
+    game_id = player.game_id
+
     from app.database import GameStatus
 
-    await update_game_settings(db, status=GameStatus.WAITING, started_at=None)
+    await update_game_status(db, game_id, GameStatus.WAITING, started_at=None)
 
-    all_gms = await get_all_game_masters(db)
+    from app.models import get_all_players_in_game
+
+    all_gms = [p for p in await get_all_players_in_game(db, game_id) if p.role == Role.GAMEMASTER]
     for gm in all_gms:
         await db.delete(gm)
     await db.commit()

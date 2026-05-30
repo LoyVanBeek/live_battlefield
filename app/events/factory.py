@@ -4,6 +4,7 @@ from app.database import GameEvent
 from app.events.models import AnyEvent
 from app.events.models import (
     TeamJoinedEvent,
+    TeamRenamedEvent,
     ShipPlacedEvent,
     ShipRemovedEvent,
     BombThrownEvent,
@@ -32,6 +33,9 @@ def create_event(db_event: GameEvent) -> Optional[AnyEvent]:
 
     if event_type_value == "team_joined":
         return TeamJoinedEvent(**payload_dict)
+
+    elif event_type_value == "team_renamed":
+        return TeamRenamedEvent(**payload_dict)
 
     elif event_type_value == "ship_placed":
         return ShipPlacedEvent(**payload_dict)

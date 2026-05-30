@@ -1,19 +1,21 @@
 import random
+import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import get_all_events
+from app.models import get_game_events
 from app.game.state import GameState, GameStatusField, _copy_team
 from app.game.ships import SHIP_COUNTS
 from app.events import ShipPlacedEvent, save_event
 
 
-async def place_all_ships(db: AsyncSession, team_color: str) -> tuple[bool, str]:
+async def place_all_ships_game_scoped(db: AsyncSession, game_id: str, team_color: str) -> tuple[bool, str]:
     """
-    Place all ships for a team.
+    Place all ships for a team (game-scoped).
 
     Returns:
         tuple: (success: bool, message: str)
     """
-    events = await get_all_events(db)
+    game_uuid = uuid.UUID(game_id)
+    events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
     if state.status == GameStatusField.ENDED:
@@ -61,6 +63,6 @@ async def place_all_ships(db: AsyncSession, team_color: str) -> tuple[bool, str]
             col=col,
             direction=direction,
         )
-        await save_event(db, event)
+        await save_event(db, event, game_uuid)
 
     return True, f"Placed all {len(placements)} ships successfully!"

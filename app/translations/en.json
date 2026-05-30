@@ -1,79 +1,83 @@
 {
-  "page": {
-    "title": "Live Battlefield - Team Play",
-    "heading": "🎮 Team Play"
-  },
-  "team": {
-    "not_joined": "{color} (not joined)",
-    "bombs": "💣",
-    "ships": "🚢",
-    "sunk": "💥 sunk"
-  },
-  "status": {
-    "started": "🎮 Game Started - Bombs away!",
-    "ended": "🏁 Game Ended",
-    "waiting": "⏳ Waiting to Start",
-    "loading": "Loading..."
-  },
-  "board": {
-    "private": {
-      "heading": "🚢 Your Private Board"
+    "page": {
+        "title": "Live Battlefield - Team Play",
+        "heading": "\ud83c\udfae Team Play"
     },
-    "public": {
-      "heading": "💥 Public Boards (Opposing Teams)",
-      "team_label": "{name} ({color})",
-      "replay_alt": "Replay of {name}'s board"
+    "team": {
+        "not_joined": "{color} (not joined)",
+        "bombs": "\ud83d\udca3",
+        "ships": "\ud83d\udea2",
+        "sunk": "\ud83d\udca5 sunk",
+        "renamed": "Renamed to {name}!"
+    },
+    "status": {
+        "started": "\ud83c\udfae Game Started - Bombs away!",
+        "ended": "\ud83c\udfc1 Game Ended",
+        "waiting": "\u23f3 Waiting to Start",
+        "loading": "Loading..."
+    },
+    "board": {
+        "private": {
+            "heading": "\ud83d\udea2 Your Private Board"
+        },
+        "public": {
+            "heading": "\ud83d\udca5 Public Boards (Opposing Teams)",
+            "team_label": "{name} ({color})",
+            "replay_alt": "Replay of {name}'s board"
+        }
+    },
+    "action": {
+        "loading": "Loading actions...",
+        "game_ended": "Game has ended. No actions available.",
+        "ship": {
+            "heading": "\ud83d\udea2 Ship Placement",
+            "auto": "Place All Ships (Auto)",
+            "coord_placeholder": "A1",
+            "type_airplane": "airplane_carrier (6)",
+            "type_battleship": "battleship (4)",
+            "type_torpedo": "torpedo_hunter (3)",
+            "type_patrol": "patrol_boat (2)",
+            "dir_horizontal": "horizontal",
+            "dir_vertical": "vertical",
+            "place": "Place Ship",
+            "remove_placeholder": "A1 (remove)",
+            "remove": "Remove Ship"
+        },
+        "bomb": {
+            "heading": "\ud83d\udca5 Bomb Enemy",
+            "select_target": "Select target",
+            "coord_placeholder": "A1",
+            "throw": "Throw Bomb",
+            "team_option": "{name} ({color})"
+        },
+        "code": {
+            "heading": "\ud83d\udd11 Redeem Code",
+            "location_placeholder": "Location #",
+            "value_placeholder": "ABCD",
+            "redeem": "Redeem"
+        },
+        "save": "Save",
+        "cancel": "Cancel"
+    },
+    "bomb_confirm": {
+        "title": "\ud83d\udca5 Bomb {target}?",
+        "button": "\ud83d\udca5 Throw Bomb!",
+        "cancel": "Cancel"
+    },
+    "error": {
+        "select_target": "Select a target!",
+        "enter_coord": "Enter a coordinate!",
+        "invalid_coord": "Invalid coordinate! Use A1-J10",
+        "enter_location": "Enter location number!",
+        "enter_code": "Enter code!",
+        "game_not_started": "Game is not started!",
+        "cannot_bomb_self": "Cannot bomb yourself!",
+        "no_bombs": "No bombs left! Redeem codes to get more!",
+        "fetch_prefix": "Error: "
+    },
+    "lang": {
+        "label": "Language",
+        "en": "\ud83c\uddec\ud83c\udde7 English",
+        "nl": "\ud83c\uddf3\ud83c\uddf1 Nederlands"
     }
-  },
-  "action": {
-    "loading": "Loading actions...",
-    "game_ended": "Game has ended. No actions available.",
-    "ship": {
-      "heading": "🚢 Ship Placement",
-      "auto": "Place All Ships (Auto)",
-      "coord_placeholder": "A1",
-      "type_airplane": "airplane_carrier (6)",
-      "type_battleship": "battleship (4)",
-      "type_torpedo": "torpedo_hunter (3)",
-      "type_patrol": "patrol_boat (2)",
-      "dir_horizontal": "horizontal",
-      "dir_vertical": "vertical",
-      "place": "Place Ship",
-      "remove_placeholder": "A1 (remove)",
-      "remove": "Remove Ship"
-    },
-    "bomb": {
-      "heading": "💥 Bomb Enemy",
-      "select_target": "Select target",
-      "coord_placeholder": "A1",
-      "throw": "Throw Bomb",
-      "team_option": "{name} ({color})"
-    },
-    "code": {
-      "heading": "🔑 Redeem Code",
-      "location_placeholder": "Location #",
-      "value_placeholder": "ABCD",
-      "redeem": "Redeem"
-    }
-  },
-  "bomb_confirm": {
-    "title": "💥 Bomb {target}?",
-    "button": "💥 Throw Bomb!",
-    "cancel": "Cancel"
-  },
-  "error": {
-    "select_target": "Select a target!",
-    "enter_coord": "Enter a coordinate!",
-    "invalid_coord": "Invalid coordinate! Use A1-J10",
-    "enter_location": "Enter location number!",
-    "enter_code": "Enter code!",
-    "game_not_started": "Game is not started!",
-    "cannot_bomb_self": "Cannot bomb yourself!",
-    "fetch_prefix": "Error: "
-  },
-  "lang": {
-    "label": "Language",
-    "en": "🇬🇧 English",
-    "nl": "🇳🇱 Nederlands"
-  }
 }

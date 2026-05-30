@@ -1,5 +1,6 @@
 import secrets
 import string
+import uuid
 from dataclasses import dataclass, replace
 from typing import Optional, Union, TYPE_CHECKING, Any
 from app.events.types import EventType
@@ -48,7 +49,7 @@ class TeamJoinedEvent:
             new_token_map[self.token] = color
         return replace(state, teams=new_teams, team_tokens=new_token_map), self
 
-    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.TEAM_JOINED,
             payload={
@@ -59,6 +60,32 @@ class TeamJoinedEvent:
                 "token": self.token,
             },
             player_id=player_id,
+            game_id=game_id,
+        )
+
+
+@dataclass
+class TeamRenamedEvent:
+    event_type: EventType = EventType.TEAM_RENAMED
+    color: str = ""
+    name: str = ""
+
+    def apply(self, state: "GameState") -> tuple["GameState", "TeamRenamedEvent"]:
+        if self.color not in state.teams:
+            return state, self
+        from app.game.state import _copy_team
+        team = state.teams[self.color]
+        new_team = _copy_team(team)
+        new_team.name = self.name
+        new_teams = {**state.teams, self.color: new_team}
+        return replace(state, teams=new_teams), self
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.TEAM_RENAMED,
+            payload={"color": self.color, "name": self.name},
+            player_id=player_id,
+            game_id=game_id,
         )
 
 
@@ -90,7 +117,7 @@ class ShipPlacedEvent:
         new_teams = {**state.teams, color: new_team}
         return replace(state, teams=new_teams), replace(self, success=True)
 
-    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.SHIP_PLACED,
             payload={
@@ -102,6 +129,7 @@ class ShipPlacedEvent:
                 "success": self.success,
             },
             player_id=player_id,
+            game_id=game_id,
         )
 
 
@@ -162,7 +190,7 @@ class ShipRemovedEvent:
             self, success=True, ship_type=ship_type
         )
 
-    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.SHIP_REMOVED,
             payload={
@@ -174,6 +202,7 @@ class ShipRemovedEvent:
                 "reason": self.reason,
             },
             player_id=player_id,
+            game_id=game_id,
         )
 
 
@@ -226,7 +255,7 @@ class BombThrownEvent:
 
         return replace(state, teams=new_teams), updated_event
 
-    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.BOMB_THROWN,
             payload={
@@ -239,6 +268,7 @@ class BombThrownEvent:
                 "ship_sunk": self.ship_sunk,
             },
             player_id=player_id,
+            game_id=game_id,
         )
 
 
@@ -273,7 +303,7 @@ class CodeRedeemedEvent:
         new_teams = {**state.teams, color: new_team}
         return replace(state, teams=new_teams), replace(self, success=True)
 
-    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.CODE_REDEEMED,
             payload={
@@ -284,6 +314,7 @@ class CodeRedeemedEvent:
                 "bombs_earned": self.bombs_earned,
             },
             player_id=player_id,
+            game_id=game_id,
         )
 
 
@@ -314,7 +345,7 @@ class LocationAddedEvent:
             self,
         )
 
-    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.LOCATION_ADDED,
             payload={
@@ -325,6 +356,7 @@ class LocationAddedEvent:
                 "bomb_value": self.bomb_value,
             },
             player_id=player_id,
+            game_id=game_id,
         )
 
 
@@ -349,7 +381,7 @@ class LocationRemovedEvent:
             self,
         )
 
-    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.LOCATION_REMOVED,
             payload={
@@ -357,6 +389,7 @@ class LocationRemovedEvent:
                 "bomb_value": self.bomb_value,
             },
             player_id=player_id,
+            game_id=game_id,
         )
 
 
@@ -380,7 +413,7 @@ class BombsAddedEvent:
         new_teams = {**state.teams, color: new_team}
         return replace(state, teams=new_teams), replace(self, success=True)
 
-    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.BOMBS_ADDED,
             payload={
@@ -389,6 +422,7 @@ class BombsAddedEvent:
                 "success": self.success,
             },
             player_id=player_id,
+            game_id=game_id,
         )
 
 
@@ -411,7 +445,7 @@ class TeamResetEvent:
         new_teams = {**state.teams, color: new_team}
         return replace(state, teams=new_teams), replace(self, success=True)
 
-    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.TEAM_RESET,
             payload={
@@ -419,6 +453,7 @@ class TeamResetEvent:
                 "success": self.success,
             },
             player_id=player_id,
+            game_id=game_id,
         )
 
 
@@ -439,13 +474,14 @@ class GameStartedEvent:
         new_state = replace(state, status=GameStatusField.STARTED)
         return new_state, replace(self, timestamp=ts)
 
-    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.GAME_STARTED,
             payload={
                 "timestamp": self.timestamp,
             },
             player_id=player_id,
+            game_id=game_id,
         )
 
 
@@ -467,7 +503,7 @@ class GameEndedEvent:
         new_state = replace(state, status=GameStatusField.ENDED)
         return new_state, replace(self, timestamp=ts)
 
-    def to_game_event(self, player_id: Optional[int] = None) -> GameEvent:
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
         return GameEvent(
             event_type=EventType.GAME_ENDED,
             payload={
@@ -475,11 +511,13 @@ class GameEndedEvent:
                 "timestamp": self.timestamp,
             },
             player_id=player_id,
+            game_id=game_id,
         )
 
 
 AnyEvent = Union[
     "TeamJoinedEvent",
+    "TeamRenamedEvent",
     "ShipPlacedEvent",
     "ShipRemovedEvent",
     "BombThrownEvent",

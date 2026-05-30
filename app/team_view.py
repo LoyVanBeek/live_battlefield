@@ -1,16 +1,18 @@
+import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import get_all_events
+from app.models import lookup_team_token, get_game_events
 from app.game.state import GameState
 from app.game.ships import BOARD_SIZE, SHIP_COUNTS
 
 
 async def get_team_view(team_token: str, db: AsyncSession) -> dict:
-    events = await get_all_events(db)
-    state = GameState.from_events(events)
-
-    color = state.team_tokens.get(team_token)
-    if color is None:
+    result = await lookup_team_token(db, team_token)
+    if result is None:
         return {"error": True}
+
+    game_id_str, color = result
+    events = await get_game_events(db, uuid.UUID(game_id_str))
+    state = GameState.from_events(events)
 
     result = {
         "s": state.status.value,

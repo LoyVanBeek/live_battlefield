@@ -173,7 +173,7 @@
 </head>
 <body>
     <div class="container">
-        <a href="/admin/{{ token }}" class="nav-link">← Back to Admin Panel</a>
+        <a id="back-link" class="nav-link">← Back</a>
         
         <h1>📍 Locations Overview (Secret)</h1>
         
@@ -233,10 +233,22 @@
     </div>
 
     <script>
-        function getAdminToken() {
-            const m = window.location.pathname.match(/^\/admin\/([^/]+)/);
-            return m ? m[1] : '';
+        function getGmToken() {
+            const m = window.location.pathname.match(/^\/game-master\/([^/]+)/);
+            if (m) return m[1];
+            const m2 = window.location.pathname.match(/^\/admin\/([^/]+)/);
+            return m2 ? m2[1] : '';
         }
+
+        // Set back link based on URL route
+        (function setBackLink() {
+            const m = window.location.pathname.match(/^\/(game-master|admin)\/([^/]+)/);
+            if (m) {
+                const link = document.getElementById('back-link');
+                link.href = '/' + m[1] + '/' + m[2];
+                link.textContent = m[1] === 'game-master' ? '← Back to Game Master' : '← Back to Admin Panel';
+            }
+        })();
 
         let map;
         let markers = [];
@@ -264,7 +276,7 @@
             
             map.on('click', async function(e) {
                 try {
-                    const resp = await fetch('/api/quick/create_locations?admin_token=' + encodeURIComponent(getAdminToken()), {
+                    const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getGmToken()), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -312,7 +324,7 @@
             }
             
             try {
-                const resp = await fetch('/api/admin/locations?admin_token=' + encodeURIComponent(getAdminToken()));
+                const resp = await fetch('/api/admin/locations?gm_token=' + encodeURIComponent(getGmToken()));
                 const data = await resp.json();
                 
                 const tbody = document.getElementById('locations-body');
@@ -363,7 +375,7 @@
             }
             
             try {
-                const resp = await fetch('/api/quick/remove_location?admin_token=' + encodeURIComponent(getAdminToken()), {
+                const resp = await fetch('/api/quick/remove_location?gm_token=' + encodeURIComponent(getGmToken()), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ location_number: locationNumber })
@@ -398,7 +410,7 @@
             }
             
             try {
-                const resp = await fetch('/api/quick/create_locations?admin_token=' + encodeURIComponent(getAdminToken()), {
+                const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getGmToken()), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

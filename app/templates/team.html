@@ -320,7 +320,17 @@
         <div class="team-header" id="team-header">
             <div class="team-info">
                 <span class="team-color-dot" id="team-color-dot"></span>
-                <span class="team-name" id="team-name">{{ tr.status.loading }}</span>
+                <div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span class="team-name" id="team-name">{{ tr.status.loading }}</span>
+                        <button class="btn btn-small" id="rename-btn" onclick="toggleRename()" style="font-size:12px;padding:3px 8px;">✏️</button>
+                    </div>
+                    <div id="rename-input-group" style="display:none;margin-top:8px;">
+                        <input type="text" id="rename-input" maxlength="30" style="padding:6px;font-size:14px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;width:200px;">
+                        <button class="btn btn-primary btn-small" onclick="doRename()" style="padding:6px 12px;">{{ tr.action.save }}</button>
+                        <button class="btn btn-small" onclick="cancelRename()" style="padding:6px 12px;">{{ tr.action.cancel }}</button>
+                    </div>
+                </div>
                 <span class="team-status-badge waiting" id="game-status-badge">{{ tr.status.loading }}</span>
             </div>
             <div class="team-stats">
@@ -431,6 +441,7 @@
         let pendingBombTarget = null;
         let pendingBombCoord = null;
         let winnerName = null;
+        let currentBombCount = 0;
 
         // Last rendered state for target team dropdown
         let lastTeamsData = null;
@@ -561,6 +572,7 @@
             // Team header
             document.getElementById('team-color-dot').style.background = myTeam.c;
             document.getElementById('team-name').textContent = myTeam.n;
+            currentBombCount = myTeam.b;
             updateBombCountDisplay(myTeam.b);
             document.getElementById('ship-count').textContent = myTeam.sp;
             document.getElementById('sunk-count').textContent = myTeam.sk;
@@ -662,6 +674,16 @@
             if (!match) return;
             if (match[1] === TEAM_COLOR) {
                 showToast(_('error.cannot_bomb_self'), 'error');
+                return;
+            }
+
+            if (currentBombCount <= 0) {
+                document.getElementById('bomb-confirm-content').innerHTML =
+                    '<p>' + _('error.no_bombs') + '</p>' +
+                    '<div class="bomb-confirm-actions">' +
+                        '<button onclick="closeBombConfirm()" class="btn btn-primary">OK</button>' +
+                    '</div>';
+                document.getElementById('bomb-confirm').classList.add('active');
                 return;
             }
 
@@ -874,6 +896,37 @@
             if (actionsEl) actionsEl.scrollIntoView({ behavior: 'smooth' });
             var codeLoc = document.getElementById('code-loc');
             if (codeLoc) setTimeout(function () { codeLoc.focus(); }, 400);
+        }
+
+        // Rename team
+        function toggleRename() {
+            var group = document.getElementById('rename-input-group');
+            var input = document.getElementById('rename-input');
+            var nameEl = document.getElementById('team-name');
+            group.style.display = group.style.display === 'none' ? 'flex' : 'none';
+            input.value = nameEl.textContent;
+            input.focus();
+            input.select();
+        }
+
+        function cancelRename() {
+            document.getElementById('rename-input-group').style.display = 'none';
+        }
+
+        async function doRename() {
+            var newName = document.getElementById('rename-input').value.trim();
+            if (!newName) return;
+            document.getElementById('rename-input-group').style.display = 'none';
+            var data = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'rename',
+                args: { name: newName }
+            });
+            if (data && data.success) {
+                showToast(_('team.renamed', {name: newName}), 'success');
+            } else {
+                showToast(data ? data.message : 'Error', 'error');
+            }
         }
 
         // SSE: pushes state updates when events occur
