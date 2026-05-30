@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.database import async_session_maker, init_db
 from app.models import add_event, create_location, create_game
 from app.database import EventType
+from app.events.models import generate_team_token
 
 
 async def main():
@@ -23,7 +24,7 @@ async def main():
         print("Creating dummy data...")
 
         # Create a game
-        game = await create_game(db, name="Dummy Game", gm_token="dummy_token")
+        game = await create_game(db, name="Dummy Game", gm_token="dummy_token", invite_token=generate_team_token())
         game_id = game.id
         print(f"Created game {game_id}")
         # Add locations

@@ -158,12 +158,17 @@ async def get_or_create_admin(db: AsyncSession) -> Admin:
     return admin
 
 
-async def create_game(db: AsyncSession, name: str | None, gm_token: str) -> Game:
-    game = Game(name=name, gm_token=gm_token)
+async def create_game(db: AsyncSession, name: str | None, gm_token: str, invite_token: str) -> Game:
+    game = Game(name=name, gm_token=gm_token, invite_token=invite_token)
     db.add(game)
     await db.commit()
     await db.refresh(game)
     return game
+
+
+async def get_game_by_invite_token(db: AsyncSession, invite_token: str) -> Optional[Game]:
+    result = await db.execute(select(Game).where(Game.invite_token == invite_token))
+    return result.scalar_one_or_none()
 
 
 async def get_game(db: AsyncSession, game_id: uuid.UUID) -> Optional[Game]:

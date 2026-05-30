@@ -236,6 +236,16 @@
             </div>
         </div>
 
+        <!-- Invite URL -->
+        <div class="section">
+            <h2>🔗 Invite Players</h2>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                <input type="text" id="invite-url" readonly
+                    style="flex: 1; min-width: 200px; padding: 10px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #00d9ff; font-family: monospace;">
+                <button class="btn btn-primary" onclick="copyInviteUrl()">📋 Copy</button>
+            </div>
+        </div>
+
         <!-- Public Boards -->
         <div class="section">
             <h2>📺 All Public Boards</h2>
@@ -596,6 +606,12 @@
             const state = await apiCall('/api/state');
             if (!state) return;
 
+            // Update invite URL
+            const inviteUrlInput = document.getElementById('invite-url');
+            if (state.invite_token) {
+                inviteUrlInput.value = window.location.origin + '/join/' + state.invite_token;
+            }
+
             // Populate available colors dropdown (preserve selection)
             const joinColorSelect = document.getElementById('join-color');
             const joinSelectedValue = joinColorSelect.value;
@@ -812,6 +828,19 @@
             const url = window.location.origin + '/team/' + token;
             navigator.clipboard.writeText(url).then(() => {
                 showToast(`URL copied: ${url}`, 'success');
+            }).catch(() => {
+                showToast('Failed to copy URL', 'error');
+            });
+        }
+
+        function copyInviteUrl() {
+            const input = document.getElementById('invite-url');
+            if (!input.value) {
+                showToast('No invite URL available', 'error');
+                return;
+            }
+            navigator.clipboard.writeText(input.value).then(() => {
+                showToast(`Invite URL copied: ${input.value}`, 'success');
             }).catch(() => {
                 showToast('Failed to copy URL', 'error');
             });
