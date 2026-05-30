@@ -7,7 +7,7 @@ class EventsPage:
 
     def goto(self):
         self.page.goto(self.url)
-        self.page.wait_for_load_state("load")
+        self.page.wait_for_load_state("networkidle")
 
     def event_list(self):
         return self.page.locator("#event-list")

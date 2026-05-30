@@ -7,7 +7,7 @@ class GameMasterPage:
 
     def goto(self):
         self.page.goto(self.url)
-        self.page.wait_for_load_state("load")
+        self.page.wait_for_load_state("networkidle")
 
     def join_color_select(self):
         return self.page.locator("#join-color")
