@@ -70,7 +70,7 @@ def test_remove_ship_from_team_page(page, app_url, seeded_game_with_teams):
     with httpx.Client(base_url=app_url, timeout=30) as client:
         resp = client.post(
             "/api/quick/remove_ship",
-            params={"gm_token": gm_token},
+            params={"team_token": seed["teams"]["red"]["token"]},
             json={"team_color": "red", "row": ship_row, "col": ship_col},
         )
         api_result = resp.json()

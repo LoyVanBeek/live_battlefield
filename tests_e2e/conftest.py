@@ -126,22 +126,6 @@ def seeded_game_with_teams(app_url: str, admin_token: str) -> dict:
                 },
             )
             
-        # Place all ships with retry until both teams have all 10
-        for _ in range(20):
-            for color in colors:
-                client.post(
-                    "/api/quick/place_all_ships",
-                    params={"gm_token": gm_token},
-                    json={"team_color": color},
-                )
-            resp = client.get(
-                "/api/game-status",
-                params={"gm_token": gm_token},
-            )
-            status = resp.json()
-            if status.get("teams_with_all_ships") == len(colors):
-                break
-
         # Fetch team data (tokens, names) from game state
         resp = client.get(
             "/api/state",
@@ -153,6 +137,23 @@ def seeded_game_with_teams(app_url: str, admin_token: str) -> dict:
                 "name": team["name"],
                 "token": team.get("token", ""),
             }
+
+        # Place all ships with retry until both teams have all 10
+        tokens = {c: teams[c]["token"] for c in colors}
+        for _ in range(20):
+            for color in colors:
+                client.post(
+                    "/api/quick/place_all_ships",
+                    params={"team_token": tokens[color]},
+                    json={"team_color": color},
+                )
+            resp = client.get(
+                "/api/game-status",
+                params={"gm_token": gm_token},
+            )
+            status = resp.json()
+            if status.get("teams_with_all_ships") == len(colors):
+                break
 
         coords = [(51.59, 5.33), (51.58, 5.34)]
         for lat, lon in coords:
