@@ -197,11 +197,11 @@ class TestAdminEvents:
     """Tests for /api/admin/events* endpoints"""
 
     def test_get_all_events_returns_list(self):
-        from app.api.routes import app, verify_admin
+        from app.api.routes import app, verify_admin_or_gm
         from app.database import EventType
         from app import models
 
-        app.dependency_overrides[verify_admin] = lambda: "test_token"
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
         try:
             with patch.object(models, "get_game_events") as mock_get:
                 mock_event = MagicMock()
@@ -223,10 +223,10 @@ class TestAdminEvents:
             app.dependency_overrides.clear()
 
     def test_get_event_state_invalid_index_fails(self):
-        from app.api.routes import app, verify_admin
+        from app.api.routes import app, verify_admin_or_gm
         from app import models
 
-        app.dependency_overrides[verify_admin] = lambda: "test_token"
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
         try:
             with patch.object(models, "get_game_events") as mock_get:
                 mock_get.return_value = [MagicMock(), MagicMock()]  # 2 events

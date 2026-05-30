@@ -331,10 +331,13 @@ class TestHandleBomb:
                     mock_player.color = "blue"
                     mock_get_player.return_value = mock_player
 
+                    from app.game.state import GameStatusField
+
                     mock_team = TeamState(
                         name="Blue", color="blue", bombs=3, chat_id=123
                     )
                     mock_state = GameState()
+                    mock_state.status = GameStatusField.STARTED
                     mock_state.teams = {"blue": mock_team}
                     mock_from_events.return_value = mock_state
                     mock_events.return_value = []
