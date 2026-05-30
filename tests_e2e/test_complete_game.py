@@ -47,16 +47,21 @@ def test_play_full_game(page, app_url, admin_token):
                 },
             )
 
-        for color in ["red", "blue"]:
-            client.post(
-                "/api/quick/place_all_ships",
-                params={"gm_token": gm_token},
-                json={"team_color": color},
-            )
-
         resp = client.get("/api/state", params={"gm_token": gm_token})
         state = resp.json()
         red_token = next(t["token"] for t in state["teams"] if t["color"] == "red")
+        blue_token = next(t["token"] for t in state["teams"] if t["color"] == "blue")
+
+        client.post(
+            "/api/quick/place_all_ships",
+            params={"team_token": red_token},
+            json={"team_color": "red"},
+        )
+        client.post(
+            "/api/quick/place_all_ships",
+            params={"team_token": blue_token},
+            json={"team_color": "blue"},
+        )
 
     gm = GameMasterPage(page, gm_token, app_url)
     gm.goto()
@@ -102,7 +107,7 @@ def test_play_full_game(page, app_url, admin_token):
                 coord = f"{chr(c + 65)}{r + 1}"
                 client.post(
                     "/api/execute",
-                    params={"gm_token": gm_token},
+                    params={"team_token": blue_token},
                     json={
                         "team_color": "blue",
                         "command": "bomb",
