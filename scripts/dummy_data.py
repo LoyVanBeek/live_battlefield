@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.database import async_session_maker, init_db
-from app.models import add_event, create_location
+from app.models import add_event, create_location, create_game
 from app.database import EventType
 
 
@@ -21,15 +21,19 @@ async def main():
     async with async_session_maker() as db:
         print("Creating dummy data...")
         
+        # Create a game
+        game = await create_game(db, name="Dummy Game", gm_token="dummy_token")
+        game_id = game.id
+
         # Add locations
         locations = [
             (1, 52.3676, 4.9041, "ABCD"),
             (2, 52.3702, 4.8952, "EFGH"),
             (3, 52.3725, 4.8890, "IJKL"),
         ]
-        
+
         for num, lat, lon, code in locations:
-            await create_location(db, num, lat, lon, code)
+            await create_location(db, game_id, num, lat, lon, code)
             print(f"Created location {num}")
         
         # Add game events
