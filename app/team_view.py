@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import lookup_team_token, get_game_events
+from app.models import lookup_team_token, get_game_events, get_game
 from app.game.state import GameState
 from app.game.ships import BOARD_SIZE, SHIP_COUNTS
 
@@ -11,8 +11,11 @@ async def get_team_view(team_token: str, db: AsyncSession) -> dict:
         return {"error": True}
 
     game_id_str, color = result
-    events = await get_game_events(db, uuid.UUID(game_id_str))
+    game_id = uuid.UUID(game_id_str)
+    events = await get_game_events(db, game_id)
     state = GameState.from_events(events)
+
+    game = await get_game(db, game_id)
 
     result = {
         "s": state.status.value,
@@ -20,6 +23,10 @@ async def get_team_view(team_token: str, db: AsyncSession) -> dict:
         "t": _serialize_team(state.teams[color], private=True, status=state.status.value),
         "ts": [_serialize_team(t, private=False, status=state.status.value) for t in state.teams.values()],
     }
+    if game:
+        result["te"] = game.trickle_enabled
+        result["ti"] = game.trickle_interval_minutes
+        result["tl"] = game.last_trickle_at.isoformat() if game.last_trickle_at else None
     winner = state.get_winner()
     if winner and state.status.value == "ended":
         result["w"] = winner.name

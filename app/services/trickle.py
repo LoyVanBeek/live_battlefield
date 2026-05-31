@@ -27,6 +27,9 @@ async def _deliver_trickle() -> None:
                     events = await get_game_events(db, game.id)
                     state = GameState.from_events(events)
 
+                    game.last_trickle_at = now
+                    await db.commit()
+
                     for color in state.teams:
                         event = BombsAddedEvent(
                             color=color,
@@ -34,9 +37,6 @@ async def _deliver_trickle() -> None:
                         )
                         _, updated_event = event.apply(state)
                         await save_event(db, updated_event, game.id)
-
-                    game.last_trickle_at = now
-                    await db.commit()
 
                     logger.info(
                         "Trickle delivered to game=%s: %d bombs each to %d teams",
