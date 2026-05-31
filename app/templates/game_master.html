@@ -916,8 +916,8 @@
             if (!confirm('Are you REALLY sure? Everything will be deleted!')) return;
             const result = await apiCall('/api/quick/clear-database', 'POST', {});
             showToast(result.message, result.success ? 'success' : 'error');
-            if (result.success && result.new_token) {
-                setTimeout(() => { window.location.href = '/game-master/' + result.new_token; }, 1000);
+            if (result.success) {
+                setTimeout(() => { window.location.reload(); }, 1000);
             }
         }
 

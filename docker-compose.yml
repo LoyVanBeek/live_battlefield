@@ -51,7 +51,9 @@ services:
       - app
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-    command: http app:8000
+      - NGROK_DOMAIN=${NGROK_DOMAIN}
+    entrypoint: []
+    command: sh -c "exec ngrok http app:8000 $${NGROK_DOMAIN:+--url=$$NGROK_DOMAIN}"
 
 volumes:
   postgres_data:

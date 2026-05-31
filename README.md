@@ -157,6 +157,29 @@ Pure unit tests only (skip DB-dependent tests):
 uv run pytest tests/ -v -k "not test_api and not test_telegram_handlers"
 ```
 
+### Running E2E Tests
+
+End-to-end tests use a separate Docker Compose file to avoid polluting the main stack.
+
+```bash
+# Build the base app image first (needed by Dockerfile.e2e)
+docker compose build app
+
+# Build and start the test infrastructure
+docker compose -f docker-compose.e2e.yml up -d
+
+# Run all E2E tests
+docker compose -f docker-compose.e2e.yml run --rm test-e2e
+
+# Or run a specific test file
+docker compose -f docker-compose.e2e.yml run --rm test-e2e pytest tests_e2e/test_navigation.py -v --video=on --output=test-results
+
+# Clean up (removes test DB volume)
+docker compose -f docker-compose.e2e.yml down -v
+```
+
+Videos of test runs are saved to `test-results/` (each named after its test).
+
 ### Running Locally (without Docker)
 ```bash
 # Install dependencies

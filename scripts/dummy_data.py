@@ -6,6 +6,7 @@ Run with: python scripts/dummy_data.py
 
 import asyncio
 import sys
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -20,11 +21,11 @@ async def main():
     
     async with async_session_maker() as db:
         print("Creating dummy data...")
-        
+
         # Create a game
         game = await create_game(db, name="Dummy Game", gm_token="dummy_token")
         game_id = game.id
-
+        print(f"Created game {game_id}")
         # Add locations
         locations = [
             (1, 52.3676, 4.9041, "ABCD"),

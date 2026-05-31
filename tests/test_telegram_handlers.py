@@ -312,7 +312,7 @@ class TestHandleBomb:
     @pytest.mark.asyncio
     async def test_self_bomb_error(self):
         from app.bot.handlers import handle_bomb
-        from app.game.state import GameState, TeamState
+        from app.game.state import GameState, GameStatusField, TeamState
 
         mock_update = create_mock_update(123)
         mock_context = create_mock_context()

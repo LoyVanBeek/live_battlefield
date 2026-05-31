@@ -101,6 +101,9 @@ class Location(Base):
 
 
 class GameStatus(str, enum.Enum):
+    # Maps to app-layer GameStatusField.PREPARING ("preparing") during state reconstruction.
+    # Two names exist because the DB enum member name must be a valid Python identifier,
+    # while "preparing" is what the app layer exposes to the API.
     WAITING = "waiting"
     STARTED = "started"
     ENDED = "ended"
@@ -110,7 +113,7 @@ class Admin(Base):
     __tablename__ = "admins"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    token: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+    token: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
 
 
 class Game(Base):

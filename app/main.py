@@ -573,20 +573,24 @@ if __name__ == "__main__":
         server_thread.start()
 
         print("Server started, starting bot...")
-        max_retries = 5
-        base_delay = 5
-        for attempt in range(max_retries):
-            try:
-                print(f"Starting bot (attempt {attempt + 1}/{max_retries})...")
-                run_bot()
-                break
-            except Exception as e:
-                print(f"Bot failed to start: {e}")
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)
-                    print(f"Retrying in {delay}s...")
-                    time.sleep(delay)
-                else:
-                    print("Bot failed after max retries, server continuing without bot.")
-                    while True:
-                        time.sleep(3600)
+        if settings.telegram_bot_token:
+            max_retries = 5
+            base_delay = 5
+            for attempt in range(max_retries):
+                try:
+                    print(f"Starting bot (attempt {attempt + 1}/{max_retries})...")
+                    run_bot()
+                    break
+                except Exception as e:
+                    print(f"Bot failed to start: {e}")
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        print(f"Retrying in {delay}s...")
+                        time.sleep(delay)
+                    else:
+                        print("Bot failed after max retries, server continuing without bot.")
+        else:
+            print("No Telegram bot token configured — running server only")
+
+        while True:
+            time.sleep(3600)
