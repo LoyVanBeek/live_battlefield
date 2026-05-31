@@ -2,7 +2,9 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from app.database import async_session_maker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
+from app.config import settings
 from app.models import get_active_trickle_games, get_game_events
 from app.game.state import GameState
 from app.events.models import BombsAddedEvent
@@ -14,8 +16,12 @@ CHECK_INTERVAL = 30
 
 
 async def _deliver_trickle() -> None:
+    engine = None
     try:
-        async with async_session_maker() as db:
+        engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
+        sm = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+        async with sm() as db:
             games = await get_active_trickle_games(db)
             for game in games:
                 now = datetime.now(timezone.utc)
@@ -50,6 +56,9 @@ async def _deliver_trickle() -> None:
                     )
     except Exception:
         logger.exception("Trickle scheduler error")
+    finally:
+        if engine is not None:
+            await engine.dispose()
 
 
 async def trickle_loop(stop_event: asyncio.Event) -> None:
