@@ -281,7 +281,7 @@ async def update_trickle_settings(
     game.trickle_enabled = enabled
     game.trickle_bombs_per_interval = bombs_per_interval
     game.trickle_interval_minutes = interval_minutes
-    game.last_trickle_at = None
+    game.last_trickle_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(game)
     return game
