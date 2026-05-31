@@ -210,7 +210,7 @@ class RemoveShipAction(BaseModel):
 class TrickleSettings(BaseModel):
     enabled: bool
     bombs_per_interval: int = 1
-    interval_minutes: int = 10
+    interval_minutes: int = 1
 
 
 @app.get("/")

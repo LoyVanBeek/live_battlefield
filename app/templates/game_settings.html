@@ -129,7 +129,7 @@
                         bombs every
                     </label>
                     <label>
-                        <input type="number" id="drip-minutes" value="10" min="1">
+                        <input type="number" id="drip-minutes" value="1" min="1">
                         minutes
                     </label>
                     <button class="btn btn-primary" onclick="saveBombDrip()">Save</button>
@@ -192,7 +192,7 @@
 
             document.getElementById('drip-enabled').checked = state.trickle_enabled || false;
             document.getElementById('drip-bombs').value = state.trickle_bombs_per_interval || 1;
-            document.getElementById('drip-minutes').value = state.trickle_interval_minutes || 10;
+            document.getElementById('drip-minutes').value = state.trickle_interval_minutes || 1;
         }
 
         async function saveBombDrip() {
