@@ -81,6 +81,27 @@ docker compose down -v
 
 ### Architecture
 - `tests_e2e/conftest.py` — Fixtures: `seeded_game` (fresh game via API), `seeded_game_with_teams` (game + 2 teams + ships + locations)
+
+## Running Lint & Type Checks
+
+Dev dependencies are under `[project.optional-dependencies] dev` in pyproject.toml (PEP 621 extras).
+
+```bash
+# Install dev dependencies into uv venv
+uv sync --extra dev
+
+# Run type checker
+uv run ty check app
+
+# Run unit tests
+uv run pytest tests/
+
+# Run E2E tests (requires docker compose test stack)
+docker compose run --rm test-e2e
+```
+
+_Note: use `--extra dev` not `--dev` — the latter is for uv's own `[dependency-groups]` format, not PEP 621 extras.
+
 - `tests_e2e/pages/` — Page Object Model classes for each page
 - Tests run against a separate `test-app` container with its own `test-postgres` database (`battleship_test`)
 - `--video=on-fail` saves Playwright video of failed tests to `test-results/`
