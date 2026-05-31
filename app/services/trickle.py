@@ -32,7 +32,8 @@ async def _deliver_trickle() -> None:
                             color=color,
                             count=game.trickle_bombs_per_interval,
                         )
-                        await save_event(db, event, game.id)
+                        _, updated_event = event.apply(state)
+                        await save_event(db, updated_event, game.id)
 
                     game.last_trickle_at = now
                     await db.commit()
