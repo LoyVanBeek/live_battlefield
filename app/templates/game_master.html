@@ -216,11 +216,12 @@
         <h1>🕵️ Game Master Panel</h1>
         
         <!-- Navigation -->
-        <div class="nav-links">
-            <a href="/map">🗺️ Map</a>
-            <a href="/game-master/{{ gm_token }}/events">📊 Events Timeline</a>
-            <a href="/game-master/{{ gm_token }}/locations-secret">📍 Locations</a>
-        </div>
+    <div class="nav-links">
+        <a href="/map">🗺️ Map</a>
+        <a href="/game-master/{{ gm_token }}/events">📊 Events Timeline</a>
+        <a href="/game-master/{{ gm_token }}/locations-secret">📍 Locations</a>
+        <a href="/game-master/{{ gm_token }}/game-settings">⚙️ Game Settings</a>
+    </div>
 
         <!-- Game Status Bar -->
         <div class="status-bar">
@@ -940,7 +941,7 @@
         loadPublicBoards();
         loadTeams();
 
-        // Refresh boards every 2 seconds (reduced from 1 second to reduce flickering)
+        // Refresh every 2 seconds
         setInterval(() => {
             loadGameStatus();
             loadPublicBoards();

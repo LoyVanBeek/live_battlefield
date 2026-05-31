@@ -105,6 +105,7 @@
         .bomb-count-ok { color: #4caf50; }
         .bomb-count-low { color: #ff9800; }
         .bomb-count-empty { color: #f44336; font-weight: bold; }
+        .drip-countdown { font-size: 12px; color: #888; margin-left: 6px; }
 
         /* Board */
         .board-section {
@@ -334,7 +335,7 @@
                 <span class="team-status-badge waiting" id="game-status-badge">{{ tr.status.loading }}</span>
             </div>
             <div class="team-stats">
-                <span>💣 <span id="bomb-count">-</span></span>
+                <span>💣 <span id="bomb-count">-</span>/<span id="bomb-max">-</span> <span id="drip-countdown" class="drip-countdown"></span></span>
                 <span>🚢 <span id="ship-count">-</span>/10</span>
                 <span>💥 <span id="sunk-count">-</span> {{ tr.team.sunk }}</span>
             </div>
@@ -442,6 +443,10 @@
         let pendingBombCoord = null;
         let winnerName = null;
         let currentBombCount = 0;
+        let trickleEnabled = false;
+        let trickleIntervalSeconds = 60;
+        let lastTrickleAt = null;
+        let dripCountdownTimer = null;
 
         // Last rendered state for target team dropdown
         let lastTeamsData = null;
@@ -542,10 +547,31 @@
             setTimeout(() => toast.style.display = 'none', duration);
         }
 
+        let maxBombs = 100;
+
         function updateBombCountDisplay(count) {
             const el = document.getElementById('bomb-count');
             el.textContent = count;
             el.className = count <= 0 ? 'bomb-count-empty' : count <= 2 ? 'bomb-count-low' : 'bomb-count-ok';
+            document.getElementById('bomb-max').textContent = maxBombs;
+        }
+
+        function updateDripCountdown() {
+            const el = document.getElementById('drip-countdown');
+            if (!trickleEnabled || !lastTrickleAt || gameStatus !== 'started') {
+                el.textContent = '';
+                return;
+            }
+            const now = new Date();
+            const elapsed = (now - lastTrickleAt) / 1000;
+            const remaining = Math.max(0, trickleIntervalSeconds - elapsed);
+            if (remaining <= 0) {
+                el.textContent = '⏳ 0:00';
+                return;
+            }
+            const minutes = Math.floor(remaining / 60);
+            const seconds = Math.floor(remaining % 60);
+            el.textContent = '⏳ ' + minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
         }
 
         // Render everything from a single compact state object pushed via SSE
@@ -554,6 +580,12 @@
             var allTeams = data.ts;
 
             gameStatus = data.s;
+
+            // Trickle/drip state for countdown
+            trickleEnabled = data.te || false;
+            trickleIntervalSeconds = (data.ti || 1) * 60;
+            lastTrickleAt = data.tl ? new Date(data.tl) : null;
+            if (data.mb) maxBombs = data.mb;
 
             // Game status badge (inline in header)
             var badgeEl = document.getElementById('game-status-badge');
@@ -953,6 +985,9 @@
                 setTimeout(connectSSE, 5000);
             };
         }
+
+        // Drip countdown: tick every second
+        dripCountdownTimer = setInterval(updateDripCountdown, 1000);
 
         // Fetch initial state directly (so page renders even without SSE)
         apiCall('/api/team-state').then(function (data) {

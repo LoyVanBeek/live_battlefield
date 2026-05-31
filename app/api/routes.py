@@ -155,14 +155,28 @@ async def verify_team_or_gm(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    stop_event = asyncio.Event()
+    trickle_task = None
     try:
         async with api_session_maker() as db:
             from app.models import get_or_create_admin
             sa = await get_or_create_admin(db)
             logger.info("Admin panel: /admin/%s", sa.token)
+
+        from app.services.trickle import trickle_loop
+        trickle_task = asyncio.create_task(trickle_loop(stop_event))
     except Exception:
         logger.warning("Could not check super admin token on startup")
+
     yield
+
+    if trickle_task:
+        stop_event.set()
+        trickle_task.cancel()
+        try:
+            await trickle_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="Live Battlefield API", lifespan=lifespan)
@@ -191,6 +205,13 @@ class RemoveShipAction(BaseModel):
     team_color: str
     row: int
     col: int
+
+
+class TrickleSettings(BaseModel):
+    enabled: bool
+    bombs_per_interval: int = 1
+    interval_minutes: int = 1
+    max_bombs: int = 100
 
 
 @app.get("/")
@@ -325,6 +346,20 @@ async def game_master_events_page(
     )
 
 
+@app.get("/game-master/{gm_token}/game-settings", response_class=HTMLResponse)
+async def game_master_settings_page(
+    request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_game_by_gm_token
+
+    game = await get_game_by_gm_token(db, gm_token)
+    if not game:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "game_settings.html", {"request": request, "gm_token": gm_token}
+    )
+
+
 # Keep old /admin/{token} sub-routes for backward compat (now check gm_token)
 @app.get("/admin/{token}/locations-secret", response_class=HTMLResponse)
 async def admin_locations_page_legacy(
@@ -351,6 +386,20 @@ async def admin_events_page_legacy(
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
         request, "events.html", {"request": request, "token": token}
+    )
+
+
+@app.get("/admin/{token}/game-settings", response_class=HTMLResponse)
+async def admin_settings_page_legacy(
+    request: Request, token: str, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_game_by_gm_token
+
+    game = await get_game_by_gm_token(db, token)
+    if not game:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "game_settings.html", {"request": request, "token": token}
     )
 
 
@@ -731,11 +780,19 @@ async def get_game_state(
     for num, code in state.location_codes.items():
         locations.append({"number": num, "code": code})
 
+    from app.models import get_game
+
+    game = await get_game(db, game_uuid)
+
     return {
         "teams": teams,
         "winner": {"name": winner.name, "color": winner.color} if winner else None,
         "locations": locations,
         "available_colors": [c for c in TEAM_COLORS if c not in state.teams],
+        "trickle_enabled": game.trickle_enabled if game else False,
+        "trickle_bombs_per_interval": game.trickle_bombs_per_interval if game else 1,
+        "trickle_interval_minutes": game.trickle_interval_minutes if game else 10,
+        "max_bombs": game.max_bombs if game else 100,
     }
 
 
@@ -1275,14 +1332,18 @@ async def execute_command(
                     result["message"] = "You've already visited this location!"
                     return result
 
-        from app.models import get_location_by_number
+        from app.models import get_location_by_number, get_game
 
         location = await get_location_by_number(db, game_uuid, location_num)
         bomb_value = location.bomb_value if location else 1
 
-        team.bombs += bomb_value
+        game = await get_game(db, game_uuid)
+        max_bombs = game.max_bombs if game else 100
+        capped = min(bomb_value, max_bombs - team.bombs)
+        capped = max(capped, 0)
+        team.bombs += capped
         result["success"] = True
-        result["message"] = f"Code redeemed! +{bomb_value} bombs. Total: {team.bombs}"
+        result["message"] = f"Code redeemed! +{capped} bombs. Total: {team.bombs}/{max_bombs}"
 
     else:
         result["message"] = f"Unknown command: {cmd.command}"
@@ -1335,18 +1396,27 @@ async def quick_add_bombs(
     if action.team_color not in state.teams:
         return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
 
+    from app.models import get_game
+    game = await get_game(db, game_uuid)
+    max_bombs = game.max_bombs if game else 100
+
+    team = state.teams[action.team_color]
+    capped = min(action.count or 1, max_bombs - team.bombs)
+    if capped <= 0:
+        return {"success": True, "message": f"Team already at max bombs ({max_bombs})"}
+
     event = BombsAddedEvent(
         color=action.team_color,
-        count=action.count or 1,
+        count=capped,
     )
     new_state, updated_event = event.apply(state)
 
-    await save_event(db, event, game_uuid)
+    await save_event(db, updated_event, game_uuid)
 
-    team = new_state.teams[action.team_color]
+    new_bombs = new_state.teams[action.team_color].bombs
     return {
         "success": True,
-        "message": f"Added {action.count} bombs. Total: {team.bombs}",
+        "message": f"Added {capped} bombs. Total: {new_bombs}/{max_bombs}",
     }
 
 
@@ -1730,6 +1800,37 @@ async def remove_location(
     }
 
 
+@app.post("/api/quick/trickle_settings")
+async def set_trickle_settings(
+    settings: TrickleSettings,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import update_trickle_settings
+
+    game_uuid = uuid.UUID(game_id)
+    game = await update_trickle_settings(
+        db,
+        game_uuid,
+        enabled=settings.enabled,
+        bombs_per_interval=settings.bombs_per_interval,
+        interval_minutes=settings.interval_minutes,
+        max_bombs=settings.max_bombs,
+    )
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    logger.info(
+        "Game settings changed: game_id=%s bomb_drip_enabled=%s bombs_per_interval=%d interval_minutes=%d",
+        game_id, settings.enabled, settings.bombs_per_interval, settings.interval_minutes,
+    )
+
+    return {
+        "success": True,
+        "message": f"Trickle {'enabled' if settings.enabled else 'disabled'}: {settings.bombs_per_interval} bombs every {settings.interval_minutes} minutes",
+    }
+
+
 @app.post("/api/quick/reset-game")
 async def reset_game(
     db: AsyncSession = Depends(get_api_db),
@@ -1962,6 +2063,10 @@ async def get_game_status(
         "total_locations_needed": 0,
         "total_teams": len(state.teams),
         "teams_with_all_ships": teams_with_all_ships,
+        "trickle_enabled": game.trickle_enabled if game else False,
+        "trickle_bombs_per_interval": game.trickle_bombs_per_interval if game else 1,
+        "trickle_interval_minutes": game.trickle_interval_minutes if game else 10,
+        "max_bombs": game.max_bombs if game else 100,
     }
 
 

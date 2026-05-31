@@ -270,3 +270,29 @@ async def update_game_status(
     await db.commit()
     await db.refresh(game)
     return game
+
+
+async def update_trickle_settings(
+    db: AsyncSession, game_id: uuid.UUID, enabled: bool, bombs_per_interval: int, interval_minutes: int, max_bombs: int = 100
+) -> Optional[Game]:
+    game = await get_game(db, game_id)
+    if not game:
+        return None
+    game.trickle_enabled = enabled
+    game.trickle_bombs_per_interval = bombs_per_interval
+    game.trickle_interval_minutes = interval_minutes
+    game.max_bombs = max_bombs
+    game.last_trickle_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(game)
+    return game
+
+
+async def get_active_trickle_games(db: AsyncSession) -> list[Game]:
+    result = await db.execute(
+        select(Game).where(
+            Game.trickle_enabled == True,
+            Game.status == GameStatus.STARTED,
+        )
+    )
+    return list(result.scalars().all())
