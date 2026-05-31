@@ -115,24 +115,27 @@ def test_join_via_url_duplicate_color_api(page, app_url, seeded_game):
 
 
 def test_invite_url_shown_on_gm_page(page, app_url, seeded_game):
-    """The invite URL is displayed on the GM page."""
+    """The invite URL button is shown on the GM page."""
     gm = GameMasterPage(page, seeded_game["gm_token"], app_url)
     gm.goto()
 
-    invite_url_input = page.locator("#invite-url")
-    invite_url_input.wait_for(state="visible")
+    invite_btn = page.locator("#btn-copy-invite")
+    invite_btn.wait_for(state="visible")
 
     # Wait for the invite URL to be populated by JS (polls /api/state every 2s)
     page.wait_for_function(
-        "document.getElementById('invite-url').value !== ''",
+        "document.getElementById('btn-copy-invite').dataset.inviteUrl !== undefined && document.getElementById('btn-copy-invite').dataset.inviteUrl !== ''",
         timeout=10000,
     )
-    value = invite_url_input.input_value()
-    assert value is not None
-    assert "/join/" in value
+    url = invite_btn.get_attribute("data-invite-url")
+    assert url is not None
+    assert "/join/" in url
 
     # The invite URL should point to this server
-    assert app_url in value or value.startswith("http")
+    assert app_url in url or url.startswith("http")
+
+    # Button should be enabled while game is in PREPARING
+    assert not invite_btn.is_disabled()
 
 
 def test_full_color_block(app_url, admin_token, page):

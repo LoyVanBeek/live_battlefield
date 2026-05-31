@@ -54,8 +54,48 @@
         .status-bar .status.started { color: #4caf50; }
         .status-bar .status.ended { color: #f44336; }
         .status-bar .status.waiting { color: #ff9800; }
-        .status-bar .buttons { display: flex; gap: 10px; }
+        .status-bar .buttons { display: flex; gap: 10px; align-items: center; }
         .status-bar .locations { color: #888; }
+
+        /* Invite Button Tooltip */
+        .invite-btn-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        .invite-btn-wrapper .invite-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            width: 280px;
+            background: #444;
+            color: #fff;
+            text-align: center;
+            padding: 6px 10px;
+            border-radius: 5px;
+            position: absolute;
+            bottom: 130%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: normal;
+            z-index: 100;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        .invite-btn-wrapper .invite-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #444 transparent transparent transparent;
+        }
+        .invite-btn-wrapper.disabled:hover .invite-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
 
         /* Navigation */
         .nav-links {
@@ -233,16 +273,10 @@
                 <button class="btn btn-success" id="btn-start" onclick="startGame()">Start Game</button>
                 <button class="btn btn-danger" id="btn-end" onclick="endGame()">End Game</button>
                 <button class="btn btn-primary" id="btn-new" onclick="startNewGame()">Start New Game</button>
-            </div>
-        </div>
-
-        <!-- Invite URL -->
-        <div class="section">
-            <h2>🔗 Invite Players</h2>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                <input type="text" id="invite-url" readonly
-                    style="flex: 1; min-width: 200px; padding: 10px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #00d9ff; font-family: monospace;">
-                <button class="btn btn-primary" onclick="copyInviteUrl()">📋 Copy</button>
+                <div class="invite-btn-wrapper" id="invite-btn-wrapper">
+                    <button class="btn btn-primary" id="btn-copy-invite" onclick="copyInviteUrl()">🔗 Invite</button>
+                    <span class="invite-tooltip" id="invite-tooltip">Game has already started — no more players can join</span>
+                </div>
             </div>
         </div>
 
@@ -489,12 +523,16 @@
             const btnStart = document.getElementById('btn-start');
             const btnEnd = document.getElementById('btn-end');
             const btnNew = document.getElementById('btn-new');
+            const inviteBtn = document.getElementById('btn-copy-invite');
+            const inviteWrapper = document.getElementById('invite-btn-wrapper');
 
             if (status.status === 'started') {
                 statusEl.textContent = '🎮 STARTED';
                 statusEl.className = 'status started';
                 btnStart.disabled = true;
                 btnEnd.disabled = false;
+                inviteBtn.disabled = true;
+                inviteWrapper.classList.add('disabled');
             } else if (status.status === 'ended') {
                 statusEl.textContent = '🏁 ENDED';
                 statusEl.className = 'status ended';
@@ -504,6 +542,8 @@
             } else {
                 statusEl.textContent = '⏳ WAITING';
                 statusEl.className = 'status waiting';
+                inviteBtn.disabled = false;
+                inviteWrapper.classList.remove('disabled');
                 
                 // Check preconditions
                 const hasLocations = status.locations_placed > 0;
@@ -606,10 +646,10 @@
             const state = await apiCall('/api/state');
             if (!state) return;
 
-            // Update invite URL
-            const inviteUrlInput = document.getElementById('invite-url');
+            // Store invite URL on the button data attribute
+            const inviteBtn = document.getElementById('btn-copy-invite');
             if (state.invite_token) {
-                inviteUrlInput.value = window.location.origin + '/join/' + state.invite_token;
+                inviteBtn.dataset.inviteUrl = window.location.origin + '/join/' + state.invite_token;
             }
 
             // Populate available colors dropdown (preserve selection)
@@ -834,13 +874,14 @@
         }
 
         function copyInviteUrl() {
-            const input = document.getElementById('invite-url');
-            if (!input.value) {
+            const btn = document.getElementById('btn-copy-invite');
+            const url = btn.dataset.inviteUrl;
+            if (!url) {
                 showToast('No invite URL available', 'error');
                 return;
             }
-            navigator.clipboard.writeText(input.value).then(() => {
-                showToast(`Invite URL copied: ${input.value}`, 'success');
+            navigator.clipboard.writeText(url).then(() => {
+                showToast(`Invite URL copied: ${url}`, 'success');
             }).catch(() => {
                 showToast('Failed to copy URL', 'error');
             });

@@ -20,15 +20,16 @@ def test_full_flow(page, app_url, admin_token):
     page.goto(f"{app_url}/game-master/{gm_token}")
     page.wait_for_load_state("load")
 
-    invite_input = page.locator("#invite-url")
-    invite_input.wait_for(state="visible")
+    invite_btn = page.locator("#btn-copy-invite")
+    invite_btn.wait_for(state="visible")
 
     # Wait for the JS to populate it from /api/state
     page.wait_for_function(
-        "document.getElementById('invite-url').value !== ''",
+        "document.getElementById('btn-copy-invite').dataset.inviteUrl !== undefined && document.getElementById('btn-copy-invite').dataset.inviteUrl !== ''",
         timeout=10000,
     )
-    invite_url = invite_input.input_value()
+    invite_url = invite_btn.get_attribute("data-invite-url")
+    assert invite_url is not None
     assert invite_url != ""
     assert "/join/" in invite_url
 
