@@ -1368,7 +1368,7 @@ async def quick_add_bombs(
     )
     new_state, updated_event = event.apply(state)
 
-    await save_event(db, event, game_uuid)
+    await save_event(db, updated_event, game_uuid)
 
     team = new_state.teams[action.team_color]
     return {
