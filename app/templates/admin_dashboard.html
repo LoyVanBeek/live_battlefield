@@ -33,6 +33,9 @@
         .btn-primary:hover { background: #00b8d4; }
         .btn-success { background: #4caf50; color: white; }
         .btn-success:hover { background: #45a049; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-danger:hover { background: #d32f2f; }
+        .btn-danger:disabled { background: #7a4a4a; cursor: not-allowed; opacity: 0.5; }
         input, select {
             padding: 10px;
             font-size: 14px;
@@ -46,12 +49,16 @@
         .game-row {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            gap: 12px;
             padding: 15px;
             background: #0f3460;
             border-radius: 8px;
             margin-bottom: 10px;
         }
+        .game-row .game-info { flex: 1; }
+        .game-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: #00d9ff; }
+        .games-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
+        .games-header-left { display: flex; align-items: center; gap: 10px; }
         .game-row .name { font-size: 16px; font-weight: bold; }
         .game-row .status { font-size: 13px; }
         .game-row .status.waiting { color: #ff9800; }
@@ -79,7 +86,15 @@
         </div>
 
         <div class="section" id="games-section">
-            <h2>Games</h2>
+            <div class="games-header">
+                <div class="games-header-left">
+                    <h2 style="margin:0;">Games</h2>
+                    <input type="checkbox" id="select-all" class="game-checkbox" onchange="toggleSelectAll()" title="Select all">
+                </div>
+                <button class="btn btn-danger" id="delete-selected-btn" onclick="deleteSelectedGames()" disabled>
+                    🗑️ Delete Selected (<span id="selected-count">0</span>)
+                </button>
+            </div>
             <div id="games-list">
                 <p style="color: #888;">Loading...</p>
             </div>
@@ -141,15 +156,19 @@
             list.innerHTML = data.games.map(g => {
                 const statusClass = g.status === 'started' ? 'started' : g.status === 'ended' ? 'ended' : 'waiting';
                 const statusLabel = g.status === 'started' ? '🎮 Started' : g.status === 'ended' ? '🏁 Ended' : '⏳ Waiting';
+                const displayName = g.name || 'Game ' + g.id.slice(0, 8);
                 const gmUrl = window.location.origin + '/game-master/' + g.gm_token;
                 return '<div class="game-row">' +
-                    '<div><div class="name">' + (g.name || 'Game ' + g.id.slice(0, 8)) + '</div>' +
+                    '<input type="checkbox" class="game-checkbox" value="' + g.id + '" data-name="' + displayName + '" onchange="updateDeleteButton()">' +
+                    '<div class="game-info"><div class="name">' + displayName + '</div>' +
                     '<div class="status ' + statusClass + '">' + statusLabel + ' — ' + g.team_count + ' teams, ' + g.location_count + ' locations</div></div>' +
                     '<div style="display:flex;flex-direction:column;gap:5px;align-items:end;">' +
                     '<button class="btn btn-primary" onclick="copyText(\'' + gmUrl + '\')">📋 Copy GM URL</button>' +
                     '<a href="' + gmUrl + '" target="_blank" style="color:#00d9ff;font-size:12px;">Open GM page →</a>' +
                     '</div></div>';
             }).join('');
+            document.getElementById('select-all').checked = false;
+            updateDeleteButton();
         }
 
         async function createGame() {
@@ -170,6 +189,41 @@
             }).catch(() => {
                 showToast('Failed to copy', 'error');
             });
+        }
+
+        function updateDeleteButton() {
+            const checked = document.querySelectorAll('.game-checkbox:checked:not(#select-all)');
+            const btn = document.getElementById('delete-selected-btn');
+            const count = document.getElementById('selected-count');
+            count.textContent = checked.length;
+            btn.disabled = checked.length === 0;
+        }
+
+        function toggleSelectAll() {
+            const checked = document.getElementById('select-all').checked;
+            document.querySelectorAll('.game-checkbox:not(#select-all)').forEach(cb => cb.checked = checked);
+            updateDeleteButton();
+        }
+
+        async function deleteSelectedGames() {
+            const checkboxes = document.querySelectorAll('.game-checkbox:checked:not(#select-all)');
+            if (checkboxes.length === 0) return;
+
+            const gameNames = Array.from(checkboxes).map(cb => cb.dataset.name || 'Game ' + cb.value.slice(0, 8));
+
+            const msg = 'Are you sure you want to delete the following ' + checkboxes.length + ' game(s)?\n\n' +
+                '⚠️ This will permanently delete ALL data for these games, including players, events, and locations!\n\n' +
+                gameNames.map(n => '• ' + n).join('\n');
+
+            if (!confirm(msg)) return;
+
+            const gameIds = Array.from(checkboxes).map(cb => cb.value);
+            const result = await apiCall('/api/admin/games', 'DELETE', { game_ids: gameIds });
+            if (result) {
+                const successCount = Object.values(result.results).filter(Boolean).length;
+                showToast('Deleted ' + successCount + ' of ' + gameIds.length + ' game(s)', 'success');
+                loadGames();
+            }
         }
 
         loadSuperToken();

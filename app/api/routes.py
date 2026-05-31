@@ -375,6 +375,10 @@ class CreateGameRequest(BaseModel):
     name: Optional[str] = None
 
 
+class DeleteGamesRequest(BaseModel):
+    game_ids: list[str]
+
+
 @app.get("/api/admin/games")
 async def admin_list_games(
     db: AsyncSession = Depends(get_api_db),
@@ -419,6 +423,26 @@ async def admin_create_games(
         "name": game.name,
         "gm_token": game.gm_token,
     }
+
+
+@app.delete("/api/admin/games")
+async def admin_delete_games(
+    body: DeleteGamesRequest,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin),
+):
+    from app.models import delete_game
+
+    results: dict[str, bool] = {}
+    for gid in body.game_ids:
+        try:
+            game_uuid = uuid.UUID(gid)
+            success = await delete_game(db, game_uuid)
+            results[gid] = success
+        except Exception as e:
+            results[gid] = False
+            logger.error("Failed to delete game %s: %s", gid, e)
+    return {"results": results}
 
 
 @app.get("/api/team-state")
