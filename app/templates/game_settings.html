@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Battlefield - Game Settings</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 { text-align: center; margin-bottom: 20px; color: #00d9ff; }
+        h2 { color: #00d9ff; margin-bottom: 15px; }
+        h3 { color: #00d9ff; margin-bottom: 10px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #00d9ff;
+            text-decoration: none;
+            padding: 8px 15px;
+            background: #16213e;
+            border-radius: 5px;
+        }
+        .nav-link:hover { background: #0f3460; }
+        .btn {
+            padding: 10px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-primary { background: #00d9ff; color: #1a1a2e; }
+        .btn-primary:hover { background: #00b8d4; }
+        .modes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 20px;
+        }
+        .mode-card {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #00d9ff;
+        }
+        .mode-card.disabled {
+            border-left-color: #555;
+            opacity: 0.6;
+        }
+        .mode-card h3 { margin-bottom: 5px; }
+        .mode-card p.description {
+            color: #aaa;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        .mode-controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .mode-controls label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #eee;
+            font-size: 14px;
+        }
+        .mode-controls input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .mode-controls input[type="number"] {
+            width: 60px;
+            padding: 6px;
+            border-radius: 5px;
+            border: 2px solid #0f3460;
+            background: #1a1a2e;
+            color: #eee;
+            font-size: 14px;
+        }
+        textarea:focus, input:focus { outline: none; border-color: #00d9ff; }
+        .coming-soon {
+            color: #555;
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+            background: #16213e;
+            border-radius: 8px;
+            border: 2px dashed #333;
+        }
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            display: none;
+            z-index: 1000;
+        }
+        #toast.success { background: #4caf50; color: white; }
+        #toast.error { background: #f44336; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a class="nav-link" id="back-link">← Back to Game Master</a>
+        <h1>⚙️ Game Settings</h1>
+
+        <div class="modes-grid">
+            <!-- Bomb Drip -->
+            <div class="mode-card" id="card-bomb-drip">
+                <h3>💧 Bomb Drip</h3>
+                <p class="description">Automatically give each team bombs every N minutes while the game is running.</p>
+                <div class="mode-controls">
+                    <label>
+                        <input type="checkbox" id="drip-enabled">
+                        Enable
+                    </label>
+                    <label>
+                        <input type="number" id="drip-bombs" value="1" min="1">
+                        bombs every
+                    </label>
+                    <label>
+                        <input type="number" id="drip-minutes" value="10" min="1">
+                        minutes
+                    </label>
+                    <button class="btn btn-primary" onclick="saveBombDrip()">Save</button>
+                </div>
+            </div>
+
+            <!-- Placeholder for future modes -->
+            <div class="coming-soon">
+                <p style="font-size: 24px; margin-bottom: 10px;">➕</p>
+                <p>More game modes coming soon...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+        function getGmToken() {
+            const m = window.location.pathname.match(/^\/(game-master|admin)\/([^/]+)/);
+            return m ? m[2] : '';
+        }
+
+        async function apiCall(url, method, body) {
+            try {
+                const token = getGmToken();
+                const sep = url.includes('?') ? '&' : '?';
+                const options = { method: method || 'GET' };
+                if (body) {
+                    options.headers = { 'Content-Type': 'application/json' };
+                    options.body = JSON.stringify(body);
+                }
+                const resp = await fetch(url + sep + 'gm_token=' + encodeURIComponent(token), options);
+                return await resp.json();
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+                return null;
+            }
+        }
+
+        function showToast(msg, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = type;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 3000);
+        }
+
+        (function setBackLink() {
+            const m = window.location.pathname.match(/^\/(game-master|admin)\/([^/]+)/);
+            if (m) {
+                const link = document.getElementById('back-link');
+                link.href = '/' + m[1] + '/' + m[2];
+                link.textContent = m[1] === 'game-master' ? '← Back to Game Master' : '← Back to Admin Panel';
+            }
+        })();
+
+        async function loadBombDrip() {
+            const state = await apiCall('/api/state');
+            if (!state) return;
+
+            document.getElementById('drip-enabled').checked = state.trickle_enabled || false;
+            document.getElementById('drip-bombs').value = state.trickle_bombs_per_interval || 1;
+            document.getElementById('drip-minutes').value = state.trickle_interval_minutes || 10;
+        }
+
+        async function saveBombDrip() {
+            const enabled = document.getElementById('drip-enabled').checked;
+            const bombs = parseInt(document.getElementById('drip-bombs').value) || 1;
+            const minutes = parseInt(document.getElementById('drip-minutes').value) || 10;
+
+            const result = await apiCall('/api/quick/trickle_settings', 'POST', {
+                enabled: enabled,
+                bombs_per_interval: bombs,
+                interval_minutes: minutes,
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+        }
+
+        loadBombDrip();
+    </script>
+</body>
+</html>

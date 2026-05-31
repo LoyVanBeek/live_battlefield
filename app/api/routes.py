@@ -345,6 +345,20 @@ async def game_master_events_page(
     )
 
 
+@app.get("/game-master/{gm_token}/game-settings", response_class=HTMLResponse)
+async def game_master_settings_page(
+    request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_game_by_gm_token
+
+    game = await get_game_by_gm_token(db, gm_token)
+    if not game:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "game_settings.html", {"request": request, "gm_token": gm_token}
+    )
+
+
 # Keep old /admin/{token} sub-routes for backward compat (now check gm_token)
 @app.get("/admin/{token}/locations-secret", response_class=HTMLResponse)
 async def admin_locations_page_legacy(
@@ -371,6 +385,20 @@ async def admin_events_page_legacy(
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
         request, "events.html", {"request": request, "token": token}
+    )
+
+
+@app.get("/admin/{token}/game-settings", response_class=HTMLResponse)
+async def admin_settings_page_legacy(
+    request: Request, token: str, db: AsyncSession = Depends(get_api_db)
+):
+    from app.models import get_game_by_gm_token
+
+    game = await get_game_by_gm_token(db, token)
+    if not game:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "game_settings.html", {"request": request, "token": token}
     )
 
 
