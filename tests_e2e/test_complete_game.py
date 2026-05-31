@@ -1,6 +1,7 @@
 import random
 import httpx
 import pytest
+from tests_e2e.config import HTTPX_TIMEOUT
 from tests_e2e.pages.gm_page import GameMasterPage
 from tests_e2e.pages.team_page import TeamPage
 
@@ -22,7 +23,7 @@ def _find_unbombed_empty_cell(grid):
 
 
 def test_play_full_game(page, app_url, admin_token):
-    with httpx.Client(base_url=app_url, timeout=30) as client:
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
         resp = client.post(
             "/api/admin/create-game",
             params={"token": admin_token},
@@ -83,7 +84,7 @@ def test_play_full_game(page, app_url, admin_token):
     winner = None
 
     for turn in range(max_turns):
-        with httpx.Client(base_url=app_url, timeout=30) as client:
+        with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
             resp = client.get("/api/state", params={"gm_token": gm_token})
             state = resp.json()
             winner = state.get("winner")

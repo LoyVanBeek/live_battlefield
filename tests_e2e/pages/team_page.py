@@ -7,7 +7,7 @@ class TeamPage:
 
     def goto(self):
         self.page.goto(self.url)
-        self.page.wait_for_load_state("networkidle")
+        self.page.wait_for_load_state("load")
 
     def board_cells(self):
         return self.page.locator("table.board-table td.cell")

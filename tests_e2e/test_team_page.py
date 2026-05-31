@@ -1,5 +1,6 @@
 import httpx
 import pytest
+from tests_e2e.config import HTTPX_TIMEOUT
 from tests_e2e.pages.gm_page import GameMasterPage
 from tests_e2e.pages.team_page import TeamPage
 
@@ -43,7 +44,7 @@ def test_remove_ship_from_team_page(page, app_url, seeded_game_with_teams):
     ships_text_before = tp.ships_placed_text().text_content()
     placed_before = int(ships_text_before)
 
-    with httpx.Client(base_url=app_url, timeout=30) as client:
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
         resp = client.get(
             "/api/board/red/private.json",
             params={"gm_token": gm_token},
@@ -67,7 +68,7 @@ def test_remove_ship_from_team_page(page, app_url, seeded_game_with_teams):
     assert ship_coord is not None, "No ship found on board"
 
     # Try removing the ship directly via API
-    with httpx.Client(base_url=app_url, timeout=30) as client:
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
         resp = client.post(
             "/api/quick/remove_ship",
             params={"team_token": seed["teams"]["red"]["token"]},

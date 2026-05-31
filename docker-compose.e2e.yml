@@ -24,11 +24,11 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@test-postgres:5432/battleship_test
       ADMIN_TOKEN: e2e-test-admin
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000', timeout=2)"]
-      interval: 3s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000', timeout=5)"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
     command: >
       sh -c "python app/scripts/init_test_db.py && python -m app.main"
 

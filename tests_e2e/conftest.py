@@ -1,6 +1,7 @@
 import os
 import sys
 import pytest
+from tests_e2e.config import IS_CI, HTTPX_TIMEOUT, PLAYWRIGHT_TIMEOUT
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -21,6 +22,11 @@ APP_URL = os.environ.get("APP_URL", "http://localhost:8000")
 ADMIN_TOKEN = "e2e-test-admin"
 
 
+@pytest.fixture(autouse=True)
+def _page_timeout(page):
+    page.set_default_timeout(PLAYWRIGHT_TIMEOUT)
+
+
 @pytest.fixture(scope="session")
 def app_url() -> str:
     return APP_URL
@@ -36,7 +42,7 @@ def seeded_game(app_url: str, admin_token: str) -> dict:
     """Create a fresh game via API and return its GM token."""
     import httpx
 
-    with httpx.Client(base_url=app_url, timeout=30) as client:
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
         resp = client.post(
             "/api/admin/create-game",
             params={"token": admin_token},
@@ -61,7 +67,7 @@ def seeded_game_with_locations(app_url: str, admin_token: str) -> dict:
     """Create a fresh game with locations already placed."""
     import httpx
 
-    with httpx.Client(base_url=app_url, timeout=30) as client:
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
         resp = client.post(
             "/api/admin/create-game",
             params={"token": admin_token},
@@ -105,7 +111,7 @@ def seeded_game_with_teams(app_url: str, admin_token: str) -> dict:
     """Create a fresh game with 2 teams joined and ships placed."""
     import httpx
 
-    with httpx.Client(base_url=app_url, timeout=30) as client:
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
         resp = client.post(
             "/api/admin/create-game",
             params={"token": admin_token},
