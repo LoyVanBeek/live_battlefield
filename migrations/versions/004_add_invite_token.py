@@ -29,12 +29,13 @@ def upgrade() -> None:
 
     conn.execute(
         sa.text(
-            "ALTER TABLE games ADD COLUMN invite_token VARCHAR(20)"
+            "ALTER TABLE games ADD COLUMN IF NOT EXISTS invite_token VARCHAR(20)"
         )
     )
 
-    result = conn.execute(sa.text("SELECT id FROM games"))
-    for row in result:
+    result = conn.execute(sa.text("SELECT id FROM games WHERE invite_token IS NULL"))
+    rows = result.fetchall()
+    for row in rows:
         token = generate_token()
         while True:
             existing = conn.execute(
@@ -52,6 +53,11 @@ def upgrade() -> None:
     conn.execute(
         sa.text(
             "ALTER TABLE games ALTER COLUMN invite_token SET NOT NULL"
+        )
+    )
+    conn.execute(
+        sa.text(
+            "ALTER TABLE games DROP CONSTRAINT IF EXISTS games_invite_token_key"
         )
     )
     conn.execute(
