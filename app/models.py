@@ -258,6 +258,19 @@ async def get_all_teams_in_game(db: AsyncSession, game_id: uuid.UUID) -> list[Pl
     return list(result.scalars().all())
 
 
+async def delete_game(db: AsyncSession, game_id: uuid.UUID) -> bool:
+    await delete_all_players(db, game_id)
+    await delete_all_events(db, game_id)
+    await delete_all_locations(db, game_id)
+    await delete_all_team_tokens(db, game_id)
+    game = await get_game(db, game_id)
+    if not game:
+        return False
+    await db.delete(game)
+    await db.commit()
+    return True
+
+
 async def update_game_status(
     db: AsyncSession, game_id: uuid.UUID, status: GameStatus, started_at: Optional[datetime] = None
 ) -> Optional[Game]:
