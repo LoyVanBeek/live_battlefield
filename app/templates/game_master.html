@@ -62,6 +62,30 @@
             position: relative;
             display: inline-block;
         }
+        /* Invite Button — styled as nav link */
+        .invite-btn-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        .invite-btn-wrapper .invite-btn {
+            color: #00d9ff;
+            padding: 8px 15px;
+            background: #16213e;
+            border-radius: 5px;
+            border: none;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.2s;
+        }
+        .invite-btn-wrapper .invite-btn:hover:not(:disabled) {
+            background: #0f3460;
+        }
+        .invite-btn-wrapper .invite-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
         .invite-btn-wrapper .invite-tooltip {
             visibility: hidden;
             opacity: 0;
@@ -72,7 +96,7 @@
             padding: 6px 10px;
             border-radius: 5px;
             position: absolute;
-            bottom: 130%;
+            top: 120%;
             left: 50%;
             transform: translateX(-50%);
             font-size: 12px;
@@ -85,12 +109,12 @@
         .invite-btn-wrapper .invite-tooltip::after {
             content: '';
             position: absolute;
-            top: 100%;
+            bottom: 100%;
             left: 50%;
             margin-left: -5px;
             border-width: 5px;
             border-style: solid;
-            border-color: #444 transparent transparent transparent;
+            border-color: transparent transparent #444 transparent;
         }
         .invite-btn-wrapper.disabled:hover .invite-tooltip {
             visibility: visible;
@@ -261,6 +285,10 @@
         <a href="/game-master/{{ gm_token }}/events">📊 Events Timeline</a>
         <a href="/game-master/{{ gm_token }}/locations-secret">📍 Locations</a>
         <a href="/game-master/{{ gm_token }}/game-settings">⚙️ Game Settings</a>
+        <div class="invite-btn-wrapper" id="invite-btn-wrapper">
+            <button class="invite-btn" id="btn-copy-invite" onclick="copyInviteUrl()">🔗 Invite</button>
+            <span class="invite-tooltip" id="invite-tooltip">Game has already started — no more players can join</span>
+        </div>
     </div>
 
         <!-- Game Status Bar -->
@@ -273,10 +301,6 @@
                 <button class="btn btn-success" id="btn-start" onclick="startGame()">Start Game</button>
                 <button class="btn btn-danger" id="btn-end" onclick="endGame()">End Game</button>
                 <button class="btn btn-primary" id="btn-new" onclick="startNewGame()">Start New Game</button>
-                <div class="invite-btn-wrapper" id="invite-btn-wrapper">
-                    <button class="btn btn-primary" id="btn-copy-invite" onclick="copyInviteUrl()">🔗 Invite</button>
-                    <span class="invite-tooltip" id="invite-tooltip">Game has already started — no more players can join</span>
-                </div>
             </div>
         </div>
 
@@ -539,6 +563,8 @@
                 btnStart.disabled = true;
                 btnEnd.disabled = true;
                 btnNew.disabled = false;
+                inviteBtn.disabled = true;
+                inviteWrapper.classList.add('disabled');
             } else {
                 statusEl.textContent = '⏳ WAITING';
                 statusEl.className = 'status waiting';
