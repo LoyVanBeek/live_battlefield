@@ -335,7 +335,7 @@
                 <span class="team-status-badge waiting" id="game-status-badge">{{ tr.status.loading }}</span>
             </div>
             <div class="team-stats">
-                <span>💣 <span id="bomb-count">-</span> <span id="drip-countdown" class="drip-countdown"></span></span>
+                <span>💣 <span id="bomb-count">-</span>/<span id="bomb-max">-</span> <span id="drip-countdown" class="drip-countdown"></span></span>
                 <span>🚢 <span id="ship-count">-</span>/10</span>
                 <span>💥 <span id="sunk-count">-</span> {{ tr.team.sunk }}</span>
             </div>
@@ -547,10 +547,13 @@
             setTimeout(() => toast.style.display = 'none', duration);
         }
 
+        let maxBombs = 100;
+
         function updateBombCountDisplay(count) {
             const el = document.getElementById('bomb-count');
             el.textContent = count;
             el.className = count <= 0 ? 'bomb-count-empty' : count <= 2 ? 'bomb-count-low' : 'bomb-count-ok';
+            document.getElementById('bomb-max').textContent = maxBombs;
         }
 
         function updateDripCountdown() {
@@ -582,6 +585,7 @@
             trickleEnabled = data.te || false;
             trickleIntervalSeconds = (data.ti || 1) * 60;
             lastTrickleAt = data.tl ? new Date(data.tl) : null;
+            if (data.mb) maxBombs = data.mb;
 
             // Game status badge (inline in header)
             var badgeEl = document.getElementById('game-status-badge');

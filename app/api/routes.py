@@ -211,6 +211,7 @@ class TrickleSettings(BaseModel):
     enabled: bool
     bombs_per_interval: int = 1
     interval_minutes: int = 1
+    max_bombs: int = 100
 
 
 @app.get("/")
@@ -791,6 +792,7 @@ async def get_game_state(
         "trickle_enabled": game.trickle_enabled if game else False,
         "trickle_bombs_per_interval": game.trickle_bombs_per_interval if game else 1,
         "trickle_interval_minutes": game.trickle_interval_minutes if game else 10,
+        "max_bombs": game.max_bombs if game else 100,
     }
 
 
@@ -1330,14 +1332,18 @@ async def execute_command(
                     result["message"] = "You've already visited this location!"
                     return result
 
-        from app.models import get_location_by_number
+        from app.models import get_location_by_number, get_game
 
         location = await get_location_by_number(db, game_uuid, location_num)
         bomb_value = location.bomb_value if location else 1
 
-        team.bombs += bomb_value
+        game = await get_game(db, game_uuid)
+        max_bombs = game.max_bombs if game else 100
+        capped = min(bomb_value, max_bombs - team.bombs)
+        capped = max(capped, 0)
+        team.bombs += capped
         result["success"] = True
-        result["message"] = f"Code redeemed! +{bomb_value} bombs. Total: {team.bombs}"
+        result["message"] = f"Code redeemed! +{capped} bombs. Total: {team.bombs}/{max_bombs}"
 
     else:
         result["message"] = f"Unknown command: {cmd.command}"
@@ -1390,18 +1396,27 @@ async def quick_add_bombs(
     if action.team_color not in state.teams:
         return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
 
+    from app.models import get_game
+    game = await get_game(db, game_uuid)
+    max_bombs = game.max_bombs if game else 100
+
+    team = state.teams[action.team_color]
+    capped = min(action.count or 1, max_bombs - team.bombs)
+    if capped <= 0:
+        return {"success": True, "message": f"Team already at max bombs ({max_bombs})"}
+
     event = BombsAddedEvent(
         color=action.team_color,
-        count=action.count or 1,
+        count=capped,
     )
     new_state, updated_event = event.apply(state)
 
     await save_event(db, updated_event, game_uuid)
 
-    team = new_state.teams[action.team_color]
+    new_bombs = new_state.teams[action.team_color].bombs
     return {
         "success": True,
-        "message": f"Added {action.count} bombs. Total: {team.bombs}",
+        "message": f"Added {capped} bombs. Total: {new_bombs}/{max_bombs}",
     }
 
 
@@ -1800,6 +1815,7 @@ async def set_trickle_settings(
         enabled=settings.enabled,
         bombs_per_interval=settings.bombs_per_interval,
         interval_minutes=settings.interval_minutes,
+        max_bombs=settings.max_bombs,
     )
     if not game:
         return {"success": False, "message": "Game not found!"}
@@ -2050,6 +2066,7 @@ async def get_game_status(
         "trickle_enabled": game.trickle_enabled if game else False,
         "trickle_bombs_per_interval": game.trickle_bombs_per_interval if game else 1,
         "trickle_interval_minutes": game.trickle_interval_minutes if game else 10,
+        "max_bombs": game.max_bombs if game else 100,
     }
 
 

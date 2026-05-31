@@ -131,6 +131,7 @@ class Game(Base):
     trickle_bombs_per_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     trickle_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     last_trickle_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    max_bombs: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
 
 
 class TeamToken(Base):

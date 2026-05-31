@@ -31,9 +31,13 @@ async def _deliver_trickle() -> None:
                     await db.commit()
 
                     for color in state.teams:
+                        team = state.teams[color]
+                        capped = min(game.trickle_bombs_per_interval, game.max_bombs - team.bombs)
+                        if capped <= 0:
+                            continue
                         event = BombsAddedEvent(
                             color=color,
-                            count=game.trickle_bombs_per_interval,
+                            count=capped,
                         )
                         _, updated_event = event.apply(state)
                         await save_event(db, updated_event, game.id)
