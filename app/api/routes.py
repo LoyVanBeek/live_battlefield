@@ -1804,6 +1804,11 @@ async def set_trickle_settings(
     if not game:
         return {"success": False, "message": "Game not found!"}
 
+    logger.info(
+        "Game settings changed: game_id=%s bomb_drip_enabled=%s bombs_per_interval=%d interval_minutes=%d",
+        game_id, settings.enabled, settings.bombs_per_interval, settings.interval_minutes,
+    )
+
     return {
         "success": True,
         "message": f"Trickle {'enabled' if settings.enabled else 'disabled'}: {settings.bombs_per_interval} bombs every {settings.interval_minutes} minutes",
