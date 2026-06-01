@@ -324,16 +324,39 @@ async def admin_dashboard(
 
 @app.get("/game-master/{gm_token}", response_class=HTMLResponse)
 async def game_master_page(
-    request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db)
+    request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db),
+    lang: Optional[str] = Query(None),
 ):
     from app.models import get_game_by_gm_token
 
     game = await get_game_by_gm_token(db, gm_token)
     if not game:
         return HTMLResponse("Not found", status_code=404)
-    return templates.TemplateResponse(
-        request, "game_master.html", {"request": request, "gm_token": gm_token, "game_name": game.name or "Battlefield"}
+
+    if lang and lang in SUPPORTED_LANGS:
+        chosen_lang = lang
+    else:
+        chosen_lang = request.cookies.get("lang", "")
+        if chosen_lang not in SUPPORTED_LANGS:
+            accept = request.headers.get("accept-language", "")
+            chosen_lang = detect_language(accept)
+
+    translations = get_translations(chosen_lang)
+
+    response = templates.TemplateResponse(
+        request, "game_master.html",
+        {
+            "request": request,
+            "gm_token": gm_token,
+            "game_name": game.name or "Battlefield",
+            "tr": translations,
+            "tr_json": json.dumps(translations),
+            "current_lang": chosen_lang,
+        },
     )
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.set_cookie(key="lang", value=chosen_lang, max_age=365 * 24 * 3600)
+    return response
 
 
 @app.get("/game-master/{gm_token}/locations-secret", response_class=HTMLResponse)

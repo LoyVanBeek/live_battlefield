@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Battlefield - Game Master Panel</title>
+    <title>{{ tr.page.gm_title }}</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -317,27 +317,33 @@
         
         <!-- Navigation -->
     <div class="nav-links">
-        <a href="/map">🗺️ Map</a>
-        <a href="/game-master/{{ gm_token }}/events">📊 Events Timeline</a>
-        <a href="/game-master/{{ gm_token }}/locations-secret">📍 Locations</a>
-        <a href="/game-master/{{ gm_token }}/game-settings">⚙️ Game Settings</a>
-        <div class="invite-btn-wrapper" id="invite-btn-wrapper">
-            <button class="invite-btn" id="btn-copy-invite" onclick="copyInviteUrl()">🔗 Invite</button>
-            <span class="invite-tooltip" id="invite-tooltip">Game has already started — no more players can join</span>
+        <a href="/map">{{ tr.gm.nav_map }}</a>
+        <a href="/game-master/{{ gm_token }}/events">{{ tr.gm.nav_events }}</a>
+        <a href="/game-master/{{ gm_token }}/locations-secret">{{ tr.gm.nav_locations }}</a>
+        <a href="/game-master/{{ gm_token }}/game-settings">{{ tr.gm.nav_settings }}</a>
+        <div style="display:flex;gap:10px;align-items:center;margin-left:auto;">
+            <div class="invite-btn-wrapper" id="invite-btn-wrapper">
+                <button class="invite-btn" id="btn-copy-invite" onclick="copyInviteUrl()">{{ tr.gm.nav_invite }}</button>
+                <span class="invite-tooltip" id="invite-tooltip">Game has already started — no more players can join</span>
+            </div>
+            <select class="lang-select" id="lang-select" onchange="switchLanguage(this.value)" style="padding:6px 10px;font-size:13px;border:2px solid #0f3460;border-radius:5px;background:#1a1a2e;color:#eee;cursor:pointer;">
+                <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
+                <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>{{ tr.lang.nl }}</option>
+            </select>
         </div>
     </div>
 
         <!-- Game Status Bar -->
         <div class="status-bar">
             <div>
-                <span class="status waiting" id="game-status">⏳ WAITING</span>
-                <span class="locations" id="location-progress">0 locations</span>
+                <span class="status waiting" id="game-status">{{ tr.gm.status_waiting }}</span>
+                <span class="locations" id="location-progress">0 {{ tr.gm.locations }}</span>
             </div>
             <div class="buttons">
-                <button class="btn btn-success" id="btn-start" onclick="startGame()">Start Game</button>
-                <button class="btn btn-danger" id="btn-end" onclick="endGame()">End Game</button>
+                <button class="btn btn-success" id="btn-start" onclick="startGame()">{{ tr.gm.start_game }}</button>
+                <button class="btn btn-danger" id="btn-end" onclick="endGame()">{{ tr.gm.end_game }}</button>
                 <select id="pause-duration" style="padding:8px;font-size:13px;border-radius:5px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
-                    <option value="0">∞ Indefinite</option>
+                    <option value="0">{{ tr.gm.pause_indefinite }}</option>
                     <option value="1">1m</option>
                     <option value="5" selected>5m</option>
                     <option value="10">10m</option>
@@ -345,21 +351,21 @@
                     <option value="30">30m</option>
                     <option value="60">1h</option>
                 </select>
-                <button class="btn btn-warning" onclick="pauseGame()" id="btn-pause">⏸️ Pause</button>
-                <button class="btn btn-success" onclick="resumeGame()" id="btn-resume" style="display:none">▶️ Resume</button>
+                <button class="btn btn-warning" onclick="pauseGame()" id="btn-pause">{{ tr.gm.pause }}</button>
+                <button class="btn btn-success" onclick="resumeGame()" id="btn-resume" style="display:none">{{ tr.gm.resume }}</button>
             </div>
         </div>
 
         <!-- Pause Banner -->
         <div class="pause-banner" id="pause-banner">
-            <span>⏸️ Game Paused</span>
-            <span id="pause-resume-text">Resumes in <span class="pause-countdown" id="pause-countdown">--:--</span></span>
-            <button class="btn btn-success" onclick="resumeGame()">▶️ Resume Now</button>
+            <span>{{ tr.gm.banner_paused }}</span>
+            <span id="pause-resume-text">{{ tr.gm.banner_resumes }} <span class="pause-countdown" id="pause-countdown">--:--</span></span>
+            <button class="btn btn-success" onclick="resumeGame()">{{ tr.gm.banner_resume_now }}</button>
         </div>
 
         <!-- Public Boards -->
         <div class="section">
-            <h2>📺 All Public Boards</h2>
+            <h2>{{ tr.gm.public_boards }}</h2>
             <div class="public-boards-grid" id="public-boards">
             </div>
         </div>
@@ -367,36 +373,36 @@
         <!-- Teams -->
         <div class="section">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:15px;">
-                <h2 style="margin:0;">🚢 Teams</h2>
-                <button class="btn btn-primary" id="btn-auto-place-all" onclick="autoPlaceAllShips()">🚢 Auto-place All Ships</button>
+                <h2 style="margin:0;">{{ tr.gm.teams }}</h2>
+                <button class="btn btn-primary" id="btn-auto-place-all" onclick="autoPlaceAllShips()">{{ tr.gm.auto_place_ships }}</button>
             </div>
             <div id="available-teams-section">
-                <div class="section-heading">➕ Joinable Teams</div>
+                <div class="section-heading">{{ tr.gm.teams_joinable }}</div>
                 <div class="teams-grid" id="available-teams-grid"></div>
             </div>
-            <div class="section-heading" style="margin-top:20px;">🚢 Joined Teams</div>
+            <div class="section-heading" style="margin-top:20px;">{{ tr.gm.teams_joined }}</div>
             <div class="teams-grid" id="teams-grid">
             </div>
         </div>
 
         <!-- AI Players -->
         <div class="section">
-            <h2>🤖 AI Players</h2>
+            <h2>{{ tr.gm.ai_heading }}</h2>
             
             <div style="margin-bottom: 15px; padding: 15px; background: #0f3460; border-radius: 8px;">
-                <h3 style="margin-bottom: 10px;">➕ Add AI Player</h3>
+                <h3 style="margin-bottom: 10px;">{{ tr.gm.ai_add_heading }}</h3>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                     <select id="ai-color" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
-                        <option value="">Select color...</option>
+                        <option value="">{{ tr.gm.ai_select_color }}</option>
                     </select>
-                    <input type="text" id="ai-name" placeholder="AI name (optional)" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
-                    <button class="btn btn-primary" onclick="addAI()">Add AI</button>
+                    <input type="text" id="ai-name" placeholder="{{ tr.gm.ai_name_placeholder }}" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                    <button class="btn btn-primary" onclick="addAI()">{{ tr.gm.ai_add }}</button>
                 </div>
             </div>
             
             <div style="margin-bottom: 15px;">
-                <button class="btn btn-warning" onclick="pauseAllAI()">⏸️ Pause All AI</button>
-                <button class="btn btn-success" onclick="resumeAllAI()">▶️ Resume All AI</button>
+                <button class="btn btn-warning" onclick="pauseAllAI()">{{ tr.gm.ai_pause_all }}</button>
+                <button class="btn btn-success" onclick="resumeAllAI()">{{ tr.gm.ai_resume_all }}</button>
             </div>
 
         </div>
@@ -407,6 +413,22 @@
     <div id="toast"></div>
 
     <script>
+        const TR = {{ tr_json|safe }};
+        function _(key, params) {
+            let val = TR;
+            for (const part of key.split('.')) {
+                val = val[part];
+                if (val === undefined) return key;
+            }
+            if (typeof val !== 'string') return key;
+            if (params) {
+                for (const [k, v] of Object.entries(params)) {
+                    val = val.replace('{' + k + '}', v);
+                }
+            }
+            return val;
+        }
+
         let gameStatus = 'waiting';
         const TEAM_COLORS_RGB = {
             'red': 'rgb(220, 60, 60)',
@@ -554,6 +576,10 @@
             }
         }
 
+        function switchLanguage(lang) {
+            window.location.href = window.location.pathname + '?lang=' + lang;
+        }
+
         function getGmToken() {
             const m = window.location.pathname.match(/^\/game-master\/([^/]+)/);
             if (m) return m[1];
@@ -602,28 +628,28 @@
 
             const isPaused = status.paused_until && status.paused_until.length > 0;
             if (status.status === 'started' && isPaused) {
-                statusEl.textContent = '⏸️ PAUSED';
+                statusEl.textContent = _('gm.status_paused');
                 statusEl.className = 'status paused';
                 btnStart.disabled = true;
                 btnEnd.disabled = true;
                 inviteBtn.disabled = true;
                 inviteWrapper.classList.add('disabled');
             } else if (status.status === 'started') {
-                statusEl.textContent = '🎮 STARTED';
+                statusEl.textContent = _('gm.status_started');
                 statusEl.className = 'status started';
                 btnStart.disabled = true;
                 btnEnd.disabled = false;
                 inviteBtn.disabled = true;
                 inviteWrapper.classList.add('disabled');
             } else if (status.status === 'ended') {
-                statusEl.textContent = '🏁 ENDED';
+                statusEl.textContent = _('gm.status_ended');
                 statusEl.className = 'status ended';
                 btnStart.disabled = true;
                 btnEnd.disabled = true;
                 inviteBtn.disabled = true;
                 inviteWrapper.classList.add('disabled');
             } else {
-                statusEl.textContent = '⏳ WAITING';
+                statusEl.textContent = _('gm.status_waiting');
                 statusEl.className = 'status waiting';
                 inviteBtn.disabled = false;
                 inviteWrapper.classList.remove('disabled');
@@ -650,7 +676,7 @@
             }
 
             document.getElementById('location-progress').textContent = 
-                `${status.locations_placed} locations`;
+                _('gm.locations', {n: status.locations_placed});
             const autoBtn = document.getElementById('btn-auto-place-all');
             if (autoBtn) {
                 autoBtn.style.display = gameStatus === 'waiting' ? '' : 'none';
