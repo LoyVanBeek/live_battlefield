@@ -18,10 +18,10 @@
         h3 { color: #00d9ff; margin-bottom: 10px; }
         .container { max-width: 1600px; margin: 0 auto; }
         .btn {
-            padding: 10px 20px;
-            font-size: 14px;
+            padding: 8px 14px;
+            font-size: 12px;
             border: none;
-            border-radius: 5px;
+            border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
             transition: all 0.2s;
@@ -166,12 +166,12 @@
         /* Teams Grid */
         .teams-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 10px;
         }
         .team-card {
             background: #0f3460;
-            padding: 15px;
+            padding: 10px;
             border-radius: 8px;
         }
         .team-card-header {
@@ -186,7 +186,7 @@
             border-radius: 50%;
             display: inline-block;
         }
-        .team-name { font-size: 18px; font-weight: bold; }
+        .team-name { font-size: 14px; font-weight: bold; }
         .ai-badge {
             margin-left: 8px;
             background: #6366f1;
@@ -200,25 +200,25 @@
             display: flex;
             gap: 15px;
             margin-bottom: 10px;
-            font-size: 14px;
+            font-size: 12px;
             color: #aaa;
         }
         .team-stats span { display: flex; align-items: center; gap: 5px; }
         .team-board img { width: 100%; border-radius: 4px; }
         .team-board-grid {
             display: inline-grid;
-            grid-template-columns: 20px repeat(10, 20px);
-            grid-template-rows: 20px repeat(10, 20px);
+            grid-template-columns: 14px repeat(10, 14px);
+            grid-template-rows: 14px repeat(10, 14px);
             background: white;
             border: 1px solid #333;
-            margin: 10px 0;
+            margin: 6px 0;
             /* Fixed dimensions to prevent layout shifts */
-            width: 222px;  /* 1px border + 11 header + 10*20 cells */
-            height: 222px;
+            width: 156px;  /* 2px border + 11*14 cells */
+            height: 156px;
         }
         .team-board-cell {
-            width: 20px;
-            height: 20px;
+            width: 14px;
+            height: 14px;
             border: 1px solid #ccc;
             display: flex;
             align-items: center;
@@ -241,13 +241,14 @@
         .team-play-link {
             display: block;
             text-align: center;
-            margin-top: 10px;
-            padding: 8px;
+            margin-top: 6px;
+            padding: 5px;
             background: #00d9ff;
             color: #1a1a2e;
             text-decoration: none;
-            border-radius: 5px;
+            border-radius: 4px;
             font-weight: bold;
+            font-size: 12px;
         }
         .team-play-link:hover { background: #00b8d4; }
         .no-teams { text-align: center; color: #888; padding: 40px; }
@@ -791,8 +792,8 @@
                             <div class="team-board" id="team-board-${team.color}">
                             </div>
                             <a href="/team/${team.token}" class="team-play-link">🎮 Play as ${team.color}</a>
-                            <button class="btn btn-primary" style="margin-top: 10px;" onclick="copyTeamUrl('${team.token}', '${team.color}')">📋 Copy URL</button>
-                            <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')" id="add-bombs-${team.color}">💣 +5 Bombs</button>
+                            <button class="btn btn-primary" style="margin-top: 6px;" onclick="copyTeamUrl('${team.token}', '${team.color}')">📋 Copy</button>
+                            <button class="btn btn-success" style="margin-top: 6px;" onclick="addBombs('${team.color}')" id="add-bombs-${team.color}">💣 +5</button>
                             <div class="ai-buttons" id="ai-buttons-${team.color}"></div>
                         `;
                         if (canRename) {
@@ -846,8 +847,8 @@
                         if (aiButtonsContainer) {
                             if (team.is_ai) {
                                 aiButtonsContainer.innerHTML = `
-                                    <button class="btn btn-primary" style="margin-top: 5px; margin-right: 5px;" onclick="triggerAIMove('${team.color}')">⚡ Next Move</button>
-                                    <button class="btn btn-danger" style="margin-top: 5px;" onclick="removeAI('${team.color}')">🤖 Remove AI</button>
+                                    <button class="btn btn-primary" style="margin-top: 4px; margin-right: 4px;font-size:11px;" onclick="triggerAIMove('${team.color}')">⚡ Move</button>
+                                    <button class="btn btn-danger" style="margin-top: 4px;font-size:11px;" onclick="removeAI('${team.color}')">✕ AI</button>
                                 `;
                             } else {
                                 aiButtonsContainer.innerHTML = '';
