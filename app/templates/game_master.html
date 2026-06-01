@@ -366,7 +366,10 @@
 
         <!-- Teams -->
         <div class="section">
-            <h2>🚢 Teams</h2>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:15px;">
+                <h2 style="margin:0;">🚢 Teams</h2>
+                <button class="btn btn-primary" id="btn-auto-place-all" onclick="autoPlaceAllShips()">🚢 Auto-place All Ships</button>
+            </div>
             <div id="available-teams-section">
                 <div class="section-heading">➕ Joinable Teams</div>
                 <div class="teams-grid" id="available-teams-grid"></div>
@@ -639,6 +642,10 @@
 
             document.getElementById('location-progress').textContent = 
                 `${status.locations_placed} locations`;
+            const autoBtn = document.getElementById('btn-auto-place-all');
+            if (autoBtn) {
+                autoBtn.style.display = gameStatus === 'waiting' ? '' : 'none';
+            }
         }
 
         async function loadPublicBoards() {
@@ -1004,6 +1011,27 @@
                 args: { name: name }
             });
             showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
+        }
+
+        async function autoPlaceAllShips() {
+            if (!confirm('Auto-place ships for all teams that have not yet placed all ships?')) return;
+            const state = await apiCall('/api/state');
+            if (!state || !state.teams) return;
+            const incomplete = state.teams.filter(t => !t.has_all_ships);
+            if (incomplete.length === 0) {
+                showToast('All teams already have all ships placed!', 'success');
+                return;
+            }
+            showToast(`Placing ships for ${incomplete.length} team(s)...`, 'success');
+            for (const team of incomplete) {
+                const result = await apiCall('/api/quick/place_all_ships', 'POST', { team_color: team.color });
+                if (result && result.success) {
+                    showToast(`✅ ${team.name} (${team.color}): ${result.message}`, 'success');
+                } else {
+                    showToast(`❌ ${team.name} (${team.color}): ${result ? result.message : 'Error'}`, 'error');
+                }
+            }
             loadTeams();
         }
 
