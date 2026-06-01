@@ -52,6 +52,7 @@
             font-weight: bold;
         }
         .status-bar .status.started { color: #4caf50; }
+        .status-bar .status.paused { color: #ff9800; }
         .status-bar .status.ended { color: #f44336; }
         .status-bar .status.waiting { color: #ff9800; }
         .status-bar .buttons { display: flex; gap: 10px; align-items: center; }
@@ -269,11 +270,44 @@
 
         /* Loading */
         .loading { opacity: 0.5; pointer-events: none; }
+
+        /* Pause Banner */
+        .pause-banner {
+            background: #e65100;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .pause-banner.active { display: flex; }
+        .pause-banner .pause-countdown { font-family: monospace; font-size: 18px; }
+
+        /* Pause Controls */
+        .pause-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .pause-controls select, .pause-controls input {
+            padding: 8px;
+            font-size: 14px;
+            border-radius: 5px;
+            border: 2px solid #0f3460;
+            background: #1a1a2e;
+            color: #eee;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🕵️ Game Master Panel</h1>
+        <h1>🕵️ <span id="game-name">{{ game_name }}</span></h1>
         
         <!-- Navigation -->
     <div class="nav-links">
@@ -297,7 +331,25 @@
                 <button class="btn btn-success" id="btn-start" onclick="startGame()">Start Game</button>
                 <button class="btn btn-danger" id="btn-end" onclick="endGame()">End Game</button>
                 <button class="btn btn-primary" id="btn-new" onclick="startNewGame()">Start New Game</button>
+                <select id="pause-duration" style="padding:8px;font-size:13px;border-radius:5px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
+                    <option value="0">∞ Indefinite</option>
+                    <option value="1">1m</option>
+                    <option value="5" selected>5m</option>
+                    <option value="10">10m</option>
+                    <option value="15">15m</option>
+                    <option value="30">30m</option>
+                    <option value="60">1h</option>
+                </select>
+                <button class="btn btn-warning" onclick="pauseGame()" id="btn-pause">⏸️ Pause</button>
+                <button class="btn btn-success" onclick="resumeGame()" id="btn-resume" style="display:none">▶️ Resume</button>
             </div>
+        </div>
+
+        <!-- Pause Banner -->
+        <div class="pause-banner" id="pause-banner">
+            <span>⏸️ Game Paused</span>
+            <span id="pause-resume-text">Resumes in <span class="pause-countdown" id="pause-countdown">--:--</span></span>
+            <button class="btn btn-success" onclick="resumeGame()">▶️ Resume Now</button>
         </div>
 
         <!-- Public Boards -->
@@ -346,6 +398,7 @@
                 <button class="btn btn-warning" onclick="pauseAllAI()">⏸️ Pause All AI</button>
                 <button class="btn btn-success" onclick="resumeAllAI()">▶️ Resume All AI</button>
             </div>
+
         </div>
 
         <!-- Reset Buttons -->
@@ -545,14 +598,18 @@
             const btnNew = document.getElementById('btn-new');
             const inviteBtn = document.getElementById('btn-copy-invite');
             const inviteWrapper = document.getElementById('invite-btn-wrapper');
+            const nameEl = document.getElementById('game-name');
+            if (status.name) nameEl.textContent = status.name;
 
-            if (status.status === 'started') {
-                statusEl.textContent = '🎮 STARTED';
-                statusEl.className = 'status started';
+            const isPaused = status.paused_until && status.paused_until.length > 0;
+            if (status.status === 'started' && isPaused) {
+                statusEl.textContent = '⏸️ PAUSED';
+                statusEl.className = 'status paused';
                 btnStart.disabled = true;
-                btnEnd.disabled = false;
+                btnEnd.disabled = true;
                 inviteBtn.disabled = true;
                 inviteWrapper.classList.add('disabled');
+            } else if (status.status === 'started') {
             } else if (status.status === 'ended') {
                 statusEl.textContent = '🏁 ENDED';
                 statusEl.className = 'status ended';
@@ -1013,6 +1070,87 @@
                 setTimeout(() => { window.location.reload(); }, 1000);
             }
         }
+
+        // --- Game Pause UI ---
+        let pausedUntil = null;
+        let pauseTimerInterval = null;
+
+        function updatePauseBanner() {
+            const banner = document.getElementById('pause-banner');
+            const countdownEl = document.getElementById('pause-countdown');
+            const resumeText = document.getElementById('pause-resume-text');
+            const btnPause = document.getElementById('btn-pause');
+            const btnResume = document.getElementById('btn-resume');
+
+            if (!pausedUntil) {
+                banner.classList.remove('active');
+                btnPause.style.display = '';
+                btnResume.style.display = 'none';
+                return;
+            }
+
+            const now = new Date();
+            const remaining = Math.max(0, pausedUntil - now);
+
+            if (remaining <= 0) {
+                pausedUntil = null;
+                banner.classList.remove('active');
+                btnPause.style.display = '';
+                btnResume.style.display = 'none';
+                return;
+            }
+
+            banner.classList.add('active');
+            btnPause.style.display = 'none';
+            btnResume.style.display = '';
+
+            const INDEFINITE_THRESHOLD = 365 * 24 * 60 * 60 * 1000;
+            if (remaining > INDEFINITE_THRESHOLD) {
+                resumeText.style.display = 'none';
+            } else {
+                resumeText.style.display = '';
+                const minutes = Math.floor(remaining / 60000);
+                const seconds = Math.floor((remaining % 60000) / 1000);
+                countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            }
+        }
+
+        async function pauseGame() {
+            const duration = parseInt(document.getElementById('pause-duration').value);
+            const result = await apiCall('/api/quick/pause-game', 'POST', { duration_minutes: duration });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success && result.paused_until) {
+                pausedUntil = new Date(result.paused_until);
+                updatePauseBanner();
+            }
+            loadGameStatus();
+        }
+
+        async function resumeGame() {
+            const result = await apiCall('/api/quick/resume-game', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success) {
+                pausedUntil = null;
+                updatePauseBanner();
+            }
+            loadGameStatus();
+        }
+
+        // Incorporate pause info into loadGameStatus
+        const origLoadGameStatus = loadGameStatus;
+        loadGameStatus = async function() {
+            await origLoadGameStatus();
+            const status = await apiCall('/api/game-status');
+            if (status && status.paused_until) {
+                pausedUntil = new Date(status.paused_until);
+            } else {
+                pausedUntil = null;
+            }
+            updatePauseBanner();
+        };
+
+        // Start pause countdown timer
+        pauseTimerInterval = setInterval(updatePauseBanner, 1000);
 
         // Handle Enter key for join form
         document.getElementById('join-name').addEventListener('keydown', function(event) {
