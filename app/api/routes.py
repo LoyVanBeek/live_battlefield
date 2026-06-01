@@ -18,6 +18,7 @@ import math
 import random
 import string
 import asyncio
+from datetime import datetime, timezone, timedelta
 
 from app.config import settings
 from app.game.state import GameState, TEAM_COLORS, TeamState
@@ -214,6 +215,20 @@ class TrickleSettings(BaseModel):
     max_bombs: int = 100
 
 
+class PauseGameRequest(BaseModel):
+    duration_minutes: int = 5
+
+
+async def _check_game_paused(db: AsyncSession, game_id: str) -> dict | None:
+    from app.models import is_game_paused
+    paused, paused_until = await is_game_paused(db, uuid.UUID(game_id))
+    if paused and paused_until is not None:
+        remaining_seconds = int((paused_until - datetime.now(timezone.utc)).total_seconds())
+        remaining_minutes = max(1, remaining_seconds // 60)
+        return {"success": False, "message": f"Game is paused! Resumes in ~{remaining_minutes} minute(s)."}
+    return None
+
+
 @app.get("/")
 async def root():
     from fastapi.responses import RedirectResponse
@@ -277,9 +292,12 @@ async def get_public_state(
             }
         )
 
+    paused_until = game.paused_until.isoformat() if game and game.paused_until and game.paused_until > datetime.now(timezone.utc) else ""
+
     return {
         "status": game.status.value if game else "PREPARING",
         "teams": teams,
+        "paused_until": paused_until,
     }
 
 
@@ -314,7 +332,7 @@ async def game_master_page(
     if not game:
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
-        request, "game_master.html", {"request": request, "gm_token": gm_token}
+        request, "game_master.html", {"request": request, "gm_token": gm_token, "game_name": game.name or "Battlefield"}
     )
 
 
@@ -924,7 +942,10 @@ async def get_game_state(
 
     game = await get_game(db, game_uuid)
 
+    paused_until = game.paused_until.isoformat() if game and game.paused_until and game.paused_until > datetime.now(timezone.utc) else ""
+
     return {
+        "name": game.name if game else None,
         "teams": teams,
         "winner": {"name": winner.name, "color": winner.color} if winner else None,
         "locations": locations,
@@ -934,6 +955,7 @@ async def get_game_state(
         "trickle_interval_minutes": game.trickle_interval_minutes if game else 10,
         "max_bombs": game.max_bombs if game else 100,
         "invite_token": game.invite_token if game else None,
+        "paused_until": paused_until,
     }
 
 
@@ -1333,6 +1355,10 @@ async def execute_command(
             result["message"] = "Cannot bomb - game hasn't started yet!"
             return result
 
+        paused_check = await _check_game_paused(db, game_id)
+        if paused_check:
+            return paused_check
+
         if cmd.team_color not in state.teams:
             result["message"] = f"Team {cmd.team_color} doesn't exist!"
             return result
@@ -1447,6 +1473,10 @@ async def execute_command(
             result["message"] = "Cannot redeem codes - game hasn't started yet!"
             return result
 
+        paused_check = await _check_game_paused(db, game_id)
+        if paused_check:
+            return paused_check
+
         if cmd.team_color not in state.teams:
             result["message"] = f"Team {cmd.team_color} doesn't exist!"
             return result
@@ -1534,6 +1564,10 @@ async def quick_add_bombs(
     if state.status == GameStatusField.ENDED:
         return {"success": False, "message": "Cannot add bombs - game has ended!"}
 
+    paused_check = await _check_game_paused(db, game_id)
+    if paused_check:
+        return paused_check
+
     if action.team_color not in state.teams:
         return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
 
@@ -1607,6 +1641,10 @@ async def trigger_ai_move(
 
     if state.status != GameStatusField.STARTED:
         return {"success": False, "message": "Game not started!"}
+
+    paused_check = await _check_game_paused(db, game_id)
+    if paused_check:
+        return paused_check
 
     success = await ai.execute_bomb(db, state, game_id)
     if success:
@@ -1972,6 +2010,54 @@ async def set_trickle_settings(
     }
 
 
+@app.post("/api/quick/pause-game")
+async def pause_game(
+    action: PauseGameRequest,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import update_game_pause
+    from datetime import datetime, timezone, timedelta
+
+    game_uuid = uuid.UUID(game_id)
+    if action.duration_minutes <= 0:
+        paused_until = datetime(9999, 12, 31, tzinfo=timezone.utc)
+        label = "indefinitely"
+    else:
+        paused_until = datetime.now(timezone.utc) + timedelta(minutes=action.duration_minutes)
+        label = f"{action.duration_minutes} minute(s)"
+    game = await update_game_pause(db, game_uuid, paused_until)
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    await manager.broadcast(game_id, "refresh")
+
+    logger.info("Game paused: id=%s until=%s", game_id, paused_until.isoformat())
+    return {
+        "success": True,
+        "message": f"Game paused {label}!",
+        "paused_until": paused_until.isoformat(),
+    }
+
+
+@app.post("/api/quick/resume-game")
+async def resume_game(
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import update_game_pause
+
+    game_uuid = uuid.UUID(game_id)
+    game = await update_game_pause(db, game_uuid, None)
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    await manager.broadcast(game_id, "refresh")
+
+    logger.info("Game resumed: id=%s", game_id)
+    return {"success": True, "message": "Game resumed! Players can now act."}
+
+
 @app.post("/api/quick/reset-game")
 async def reset_game(
     db: AsyncSession = Depends(get_api_db),
@@ -2198,7 +2284,10 @@ async def get_game_status(
         1 for team in state.teams.values() if team.has_all_ships()
     )
 
+    paused_until = game.paused_until.isoformat() if game and game.paused_until and game.paused_until > datetime.now(timezone.utc) else ""
+
     return {
+        "name": game.name if game else None,
         "status": game.status.value if game else "PREPARING",
         "locations_placed": len(locations),
         "total_locations_needed": 0,
@@ -2208,6 +2297,7 @@ async def get_game_status(
         "trickle_bombs_per_interval": game.trickle_bombs_per_interval if game else 1,
         "trickle_interval_minutes": game.trickle_interval_minutes if game else 10,
         "max_bombs": game.max_bombs if game else 100,
+        "paused_until": paused_until,
     }
 
 
