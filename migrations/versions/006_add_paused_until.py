@@ -26,6 +26,9 @@ def upgrade() -> None:
         "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'TEAM_RENAMED'"
     ))
     conn.execute(sa.text(
+        "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'TEAM_REMOVED'"
+    ))
+    conn.execute(sa.text(
         "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'GAME_PAUSED'"
     ))
     conn.execute(sa.text(

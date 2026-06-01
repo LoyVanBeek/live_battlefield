@@ -427,6 +427,30 @@ class BombsAddedEvent:
 
 
 @dataclass
+class TeamRemovedEvent:
+    event_type: EventType = EventType.TEAM_REMOVED
+    color: str = ""
+    success: bool = False
+
+    def apply(self, state: "GameState") -> tuple["GameState", "TeamRemovedEvent"]:
+        color = self.color
+        if color not in state.teams:
+            return state, replace(self, success=False)
+
+        new_teams = {k: v for k, v in state.teams.items() if k != color}
+        new_team_tokens = {k: v for k, v in state.team_tokens.items() if v != color}
+        return replace(state, teams=new_teams, team_tokens=new_team_tokens), replace(self, success=True)
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.TEAM_REMOVED,
+            payload={"color": self.color, "success": self.success},
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
+@dataclass
 class TeamResetEvent:
     event_type: EventType = EventType.TEAM_RESET
     color: str = ""
@@ -555,6 +579,7 @@ class GameResumedEvent:
 AnyEvent = Union[
     "TeamJoinedEvent",
     "TeamRenamedEvent",
+    "TeamRemovedEvent",
     "ShipPlacedEvent",
     "ShipRemovedEvent",
     "BombThrownEvent",

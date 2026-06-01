@@ -1813,6 +1813,52 @@ async def quick_remove_ship(
     }
 
 
+@app.post("/api/quick/remove-team")
+async def quick_remove_team(
+    action: QuickAction,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_game_events, delete_team_token
+    from app.events.models import TeamRemovedEvent
+
+    game_uuid = uuid.UUID(game_id)
+    events = await get_game_events(db, game_uuid)
+    state = GameState.from_events(events)
+
+    if state.status != GameStatusField.PREPARING:
+        return {
+            "success": False,
+            "message": "Cannot remove team - game has already started!",
+        }
+
+    if action.team_color not in state.teams:
+        return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
+
+    event = TeamRemovedEvent(color=action.team_color)
+    new_state, updated_event = event.apply(state)
+
+    await save_event(db, updated_event, game_uuid)
+
+    from app.models import delete_team_token
+    await delete_team_token(db, game_uuid, action.team_color)
+
+    from app.database import Player, Role
+    from sqlalchemy import select
+    result = await db.execute(
+        select(Player).where(Player.game_id == game_uuid, Player.color == action.team_color)
+    )
+    player = result.scalar_one_or_none()
+    if player:
+        await db.delete(player)
+        await db.commit()
+
+    return {
+        "success": True,
+        "message": f"Removed team {action.team_color}! Color is now free.",
+    }
+
+
 class CreateLocations(BaseModel):
     latitude: float
     longitude: float

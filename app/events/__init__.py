@@ -8,6 +8,7 @@ from app.events.models import (
     CodeRedeemedEvent,
     LocationAddedEvent,
     BombsAddedEvent,
+    TeamRemovedEvent,
     TeamResetEvent,
     GameStartedEvent,
     GameEndedEvent,

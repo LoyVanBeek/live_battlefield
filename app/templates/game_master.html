@@ -792,6 +792,7 @@
                             <a href="/team/${team.token}" class="team-play-link">🎮 Play as ${team.color}</a>
                             <button class="btn btn-primary" style="margin-top: 10px;" onclick="copyTeamUrl('${team.token}', '${team.color}')">📋 Copy URL</button>
                             <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')" id="add-bombs-${team.color}">💣 +5 Bombs</button>
+                            ${gameStatus === 'waiting' ? `<button class="btn btn-danger" style="margin-top: 10px; margin-left: 5px;" onclick="removeTeam('${team.color}')">✕ Remove</button>` : ''}
                             <div class="ai-buttons" id="ai-buttons-${team.color}"></div>
                         `;
                         if (canRename) {
@@ -999,6 +1000,13 @@
                 command: 'join',
                 args: { name: name }
             });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
+        }
+
+        async function removeTeam(color) {
+            if (!confirm(`Remove team ${color}? This will delete all their ships and free the color.`)) return;
+            const result = await apiCall('/api/quick/remove-team', 'POST', { team_color: color });
             showToast(result.message, result.success ? 'success' : 'error');
             loadTeams();
         }
