@@ -411,13 +411,16 @@ async def admin_create_game(
     from app.models import create_game
     from app.events.models import generate_team_token
 
+    gm_token = generate_team_token()
+    invite_token = generate_team_token()
     game = await create_game(
         db,
         name=None,
-        gm_token=generate_team_token(),
+        gm_token=gm_token,
+        invite_token=invite_token,
     )
     logger.info("Game created: id=%s gm_token=%s", game.id, game.gm_token)
-    return {"token": game.gm_token}
+    return {"token": game.gm_token, "invite_token": game.invite_token}
 
 
 class CreateGameRequest(BaseModel):
@@ -461,16 +464,20 @@ async def admin_create_games(
     from app.models import create_game
     from app.events.models import generate_team_token
 
+    gm_token = generate_team_token()
+    invite_token = generate_team_token()
     game = await create_game(
         db,
         name=body.name,
-        gm_token=generate_team_token(),
+        gm_token=gm_token,
+        invite_token=invite_token,
     )
     logger.info("Game created: id=%s gm_token=%s", game.id, game.gm_token)
     return {
         "id": str(game.id),
         "name": game.name,
         "gm_token": game.gm_token,
+        "invite_token": game.invite_token,
     }
 
 
@@ -631,6 +638,114 @@ async def team_page(
     return response
 
 
+@app.get("/join/{invite_token}", response_class=HTMLResponse)
+async def join_page(
+    request: Request,
+    invite_token: str,
+    db: AsyncSession = Depends(get_api_db),
+    lang: Optional[str] = Query(None),
+):
+    from app.models import get_game_by_invite_token
+
+    game = await get_game_by_invite_token(db, invite_token)
+    if not game:
+        return HTMLResponse("Game not found", status_code=404)
+
+    if lang and lang in SUPPORTED_LANGS:
+        chosen_lang = lang
+    else:
+        chosen_lang = request.cookies.get("lang", "")
+        if chosen_lang not in SUPPORTED_LANGS:
+            accept = request.headers.get("accept-language", "")
+            chosen_lang = detect_language(accept)
+
+    translations = get_translations(chosen_lang)
+
+    response = templates.TemplateResponse(
+        request,
+        "join.html",
+        {
+            "request": request,
+            "game_name": game.name or "Battlefield",
+            "invite_token": invite_token,
+            "tr": translations,
+            "tr_json": json.dumps(translations),
+            "current_lang": chosen_lang,
+        },
+    )
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.set_cookie(key="lang", value=chosen_lang, max_age=365 * 24 * 3600)
+    return response
+
+
+class JoinGameRequest(BaseModel):
+    team_color: str
+    name: str = ""
+
+
+@app.post("/api/join-game/{invite_token}")
+async def join_game(
+    invite_token: str,
+    body: JoinGameRequest,
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_game_by_invite_token, get_game_events, create_team_token
+    from app.events.models import TeamJoinedEvent, generate_team_token
+    from app.events.saver import save_event
+
+    game = await get_game_by_invite_token(db, invite_token)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    game_uuid = game.id
+
+    events = await get_game_events(db, game_uuid)
+    state = GameState.from_events(events)
+
+    if state.status != GameStatusField.PREPARING:
+        return {"success": False, "message": "Game has already started! No new teams can join."}
+
+    if body.team_color in state.teams:
+        return {"success": False, "message": f"Team {body.team_color} already exists!"}
+
+    team_name = body.name or body.team_color
+
+    token = generate_team_token()
+    event = TeamJoinedEvent(
+        name=team_name,
+        color=body.team_color,
+        chat_id=999999,
+        bombs=3,
+        token=token,
+    )
+    state.handle_team_joined(event)
+    await save_event(db, event, game_uuid)
+    await create_team_token(db, game_uuid, token, body.team_color)
+
+    return {"success": True, "token": token, "team_url": f"/team/{token}"}
+
+
+@app.get("/api/join-state/{invite_token}")
+async def get_join_state(
+    invite_token: str,
+    db: AsyncSession = Depends(get_api_db),
+):
+    from app.models import get_game_by_invite_token, get_game_events
+
+    game = await get_game_by_invite_token(db, invite_token)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    events = await get_game_events(db, game.id)
+    state = GameState.from_events(events)
+
+    return {
+        "game_name": game.name or "Battlefield",
+        "status": state.status.value,
+        "available_colors": [c for c in TEAM_COLORS if c not in state.teams],
+    }
+
+
 @app.get("/api/admin/locations")
 async def get_admin_locations(
     game_id: Optional[str] = Query(None),
@@ -755,11 +870,12 @@ async def get_game_state(
     game_id: str = Depends(verify_gm_token),
     db: AsyncSession = Depends(get_api_db),
 ):
-    from app.models import get_game_events, get_all_players_in_game
+    from app.models import get_game_events, get_all_players_in_game, get_game
     from app.services.ai_player import get_all_ai_players
     from app.database import Role
 
     game_uuid = uuid.UUID(game_id)
+    game = await get_game(db, game_uuid)
     events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
 
@@ -817,6 +933,7 @@ async def get_game_state(
         "trickle_bombs_per_interval": game.trickle_bombs_per_interval if game else 1,
         "trickle_interval_minutes": game.trickle_interval_minutes if game else 10,
         "max_bombs": game.max_bombs if game else 100,
+        "invite_token": game.invite_token if game else None,
     }
 
 

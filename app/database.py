@@ -123,6 +123,7 @@ class Game(Base):
     name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[GameStatus] = mapped_column(Enum(GameStatus), nullable=False, default=GameStatus.WAITING)
     gm_token: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+    invite_token: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
     total_locations_needed: Mapped[int] = mapped_column(Integer, nullable=False, default=33)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

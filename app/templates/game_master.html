@@ -54,8 +54,68 @@
         .status-bar .status.started { color: #4caf50; }
         .status-bar .status.ended { color: #f44336; }
         .status-bar .status.waiting { color: #ff9800; }
-        .status-bar .buttons { display: flex; gap: 10px; }
+        .status-bar .buttons { display: flex; gap: 10px; align-items: center; }
         .status-bar .locations { color: #888; }
+
+        /* Invite Button — styled as nav link */
+        .invite-btn-wrapper {
+            position: relative;
+            display: inline-block;
+            margin-left: auto;
+        }
+        .invite-btn-wrapper .invite-btn {
+            color: #00d9ff;
+            padding: 8px 15px;
+            background: #16213e;
+            border-radius: 5px;
+            border: none;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.2s;
+        }
+        .invite-btn-wrapper .invite-btn:hover:not(:disabled) {
+            background: #0f3460;
+        }
+        .invite-btn-wrapper .invite-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .invite-btn-wrapper .invite-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            width: 280px;
+            background: #444;
+            color: #fff;
+            text-align: center;
+            padding: 6px 10px;
+            border-radius: 5px;
+            position: absolute;
+            top: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: normal;
+            z-index: 100;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        .invite-btn-wrapper .invite-tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: transparent transparent #444 transparent;
+        }
+        .invite-btn-wrapper.disabled:hover .invite-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
 
         /* Navigation */
         .nav-links {
@@ -221,6 +281,10 @@
         <a href="/game-master/{{ gm_token }}/events">📊 Events Timeline</a>
         <a href="/game-master/{{ gm_token }}/locations-secret">📍 Locations</a>
         <a href="/game-master/{{ gm_token }}/game-settings">⚙️ Game Settings</a>
+        <div class="invite-btn-wrapper" id="invite-btn-wrapper">
+            <button class="invite-btn" id="btn-copy-invite" onclick="copyInviteUrl()">🔗 Invite</button>
+            <span class="invite-tooltip" id="invite-tooltip">Game has already started — no more players can join</span>
+        </div>
     </div>
 
         <!-- Game Status Bar -->
@@ -479,21 +543,29 @@
             const btnStart = document.getElementById('btn-start');
             const btnEnd = document.getElementById('btn-end');
             const btnNew = document.getElementById('btn-new');
+            const inviteBtn = document.getElementById('btn-copy-invite');
+            const inviteWrapper = document.getElementById('invite-btn-wrapper');
 
             if (status.status === 'started') {
                 statusEl.textContent = '🎮 STARTED';
                 statusEl.className = 'status started';
                 btnStart.disabled = true;
                 btnEnd.disabled = false;
+                inviteBtn.disabled = true;
+                inviteWrapper.classList.add('disabled');
             } else if (status.status === 'ended') {
                 statusEl.textContent = '🏁 ENDED';
                 statusEl.className = 'status ended';
                 btnStart.disabled = true;
                 btnEnd.disabled = true;
                 btnNew.disabled = false;
+                inviteBtn.disabled = true;
+                inviteWrapper.classList.add('disabled');
             } else {
                 statusEl.textContent = '⏳ WAITING';
                 statusEl.className = 'status waiting';
+                inviteBtn.disabled = false;
+                inviteWrapper.classList.remove('disabled');
                 
                 // Check preconditions
                 const hasLocations = status.locations_placed > 0;
@@ -595,6 +667,12 @@
         async function loadTeams() {
             const state = await apiCall('/api/state');
             if (!state) return;
+
+            // Store invite URL on the button data attribute
+            const inviteBtn = document.getElementById('btn-copy-invite');
+            if (state.invite_token) {
+                inviteBtn.dataset.inviteUrl = window.location.origin + '/join/' + state.invite_token;
+            }
 
             // Populate available colors dropdown (preserve selection)
             const joinColorSelect = document.getElementById('join-color');
@@ -812,6 +890,20 @@
             const url = window.location.origin + '/team/' + token;
             navigator.clipboard.writeText(url).then(() => {
                 showToast(`URL copied: ${url}`, 'success');
+            }).catch(() => {
+                showToast('Failed to copy URL', 'error');
+            });
+        }
+
+        function copyInviteUrl() {
+            const btn = document.getElementById('btn-copy-invite');
+            const url = btn.dataset.inviteUrl;
+            if (!url) {
+                showToast('No invite URL available', 'error');
+                return;
+            }
+            navigator.clipboard.writeText(url).then(() => {
+                showToast(`Invite URL copied: ${url}`, 'success');
             }).catch(() => {
                 showToast('Failed to copy URL', 'error');
             });

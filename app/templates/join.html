@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Game - Live Battlefield</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .join-container {
+            background: #16213e;
+            padding: 40px;
+            border-radius: 12px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 {
+            color: #00d9ff;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .game-name {
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #aaa;
+            font-size: 14px;
+        }
+        .form-group select,
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            font-size: 15px;
+            border-radius: 6px;
+            border: 2px solid #0f3460;
+            background: #1a1a2e;
+            color: #eee;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-group select:focus,
+        .form-group input:focus {
+            border-color: #00d9ff;
+        }
+        .form-group select option {
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .btn-join {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: #4caf50;
+            color: white;
+            transition: background 0.2s;
+        }
+        .btn-join:hover {
+            background: #45a049;
+        }
+        .btn-join:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .message {
+            margin-top: 16px;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 14px;
+            display: none;
+        }
+        .message.error {
+            display: block;
+            background: #f44336;
+            color: white;
+        }
+        .message.success {
+            display: block;
+            background: #4caf50;
+            color: white;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #555;
+            border-top-color: #00d9ff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin: 10px auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .lang-select {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 6px 10px;
+            font-size: 13px;
+            border-radius: 5px;
+            border: 2px solid #0f3460;
+            background: #1a1a2e;
+            color: #eee;
+            cursor: pointer;
+        }
+        .game-status {
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <select class="lang-select" id="lang-select" onchange="switchLanguage(this.value)">
+        <option value="en" {% if current_lang == 'en' %}selected{% endif %}>🇬🇧 English</option>
+        <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>🇳🇱 Nederlands</option>
+    </select>
+
+    <div class="join-container">
+        <h1>🎮 Join Game</h1>
+        <div class="game-name" id="game-name">{{ game_name }}</div>
+        <div class="game-status" id="game-status"></div>
+
+        <div id="join-form">
+            <div class="form-group">
+                <label for="team-color">Choose your color</label>
+                <select id="team-color">
+                    <option value="">Loading colors...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="team-name">Team name</label>
+                <input type="text" id="team-name" placeholder="Enter team name" maxlength="100">
+            </div>
+
+            <button class="btn-join" id="btn-join" onclick="joinGame()">Join Game</button>
+        </div>
+
+        <div id="loading" class="loading" style="display:none;"></div>
+        <div id="message" class="message"></div>
+    </div>
+
+    <script>
+        const INVITE_TOKEN = '{{ invite_token }}';
+
+        function switchLanguage(lang) {
+            document.cookie = 'lang=' + lang + ';max-age=' + (365 * 24 * 3600) + ';path=/';
+            window.location.reload();
+        }
+
+        function showMessage(text, type) {
+            const el = document.getElementById('message');
+            el.textContent = text;
+            el.className = 'message ' + type;
+        }
+
+        function setLoading(loading) {
+            document.getElementById('btn-join').disabled = loading;
+            document.getElementById('loading').style.display = loading ? 'block' : 'none';
+            document.getElementById('join-form').style.opacity = loading ? '0.5' : '1';
+        }
+
+        async function loadJoinState() {
+            try {
+                const res = await fetch('/api/join-state/' + encodeURIComponent(INVITE_TOKEN));
+                if (!res.ok) {
+                    document.getElementById('join-form').innerHTML = '<p style="color:#f44336;">Game not found.</p>';
+                    return;
+                }
+                const data = await res.json();
+
+                const statusEl = document.getElementById('game-status');
+                if (data.status === 'started') {
+                    statusEl.textContent = '❌ This game has already started. No new teams can join.';
+                    document.getElementById('join-form').style.display = 'none';
+                    return;
+                }
+                if (data.status === 'ended') {
+                    statusEl.textContent = '🏁 This game has already ended.';
+                    document.getElementById('join-form').style.display = 'none';
+                    return;
+                }
+
+                document.getElementById('game-name').textContent = data.game_name;
+
+                const select = document.getElementById('team-color');
+                select.innerHTML = '<option value="">Select color...</option>';
+                if (data.available_colors && data.available_colors.length > 0) {
+                    data.available_colors.forEach(function(color) {
+                        const opt = document.createElement('option');
+                        opt.value = color;
+                        opt.textContent = color.toUpperCase();
+                        select.appendChild(opt);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">No colors available - game is full</option>';
+                    document.getElementById('btn-join').disabled = true;
+                }
+
+                document.getElementById('team-name').focus();
+            } catch (e) {
+                showMessage('Failed to load game state.', 'error');
+            }
+        }
+
+        async function joinGame() {
+            const color = document.getElementById('team-color').value;
+            const name = document.getElementById('team-name').value.trim();
+
+            if (!color) {
+                showMessage('Please select a color!', 'error');
+                return;
+            }
+
+            setLoading(true);
+            showMessage('', '');
+
+            try {
+                const res = await fetch('/api/join-game/' + encodeURIComponent(INVITE_TOKEN), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ team_color: color, name: name }),
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showMessage('Joined! Redirecting...', 'success');
+                    setTimeout(function() {
+                        window.location.href = data.team_url;
+                    }, 800);
+                } else {
+                    showMessage(data.message || 'Failed to join.', 'error');
+                    setLoading(false);
+                }
+            } catch (e) {
+                showMessage('Network error. Please try again.', 'error');
+                setLoading(false);
+            }
+        }
+
+        document.getElementById('team-name').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); joinGame(); }
+        });
+        document.getElementById('team-color').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); joinGame(); }
+        });
+
+        loadJoinState();
+    </script>
+</body>
+</html>
