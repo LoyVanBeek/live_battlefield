@@ -83,6 +83,11 @@
             opacity: 0.4;
             cursor: not-allowed;
         }
+        .section-heading {
+            color: #00d9ff;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
         .invite-btn-wrapper .invite-tooltip {
             visibility: hidden;
             opacity: 0;
@@ -361,6 +366,11 @@
         <!-- Teams -->
         <div class="section">
             <h2>🚢 Teams</h2>
+            <div id="available-teams-section">
+                <div class="section-heading">➕ Joinable Teams</div>
+                <div class="teams-grid" id="available-teams-grid"></div>
+            </div>
+            <div class="section-heading" style="margin-top:20px;">🚢 Joined Teams</div>
             <div class="teams-grid" id="teams-grid">
             </div>
         </div>
@@ -725,29 +735,24 @@
             }
             aiColorSelect.value = aiSelectedValue;
 
-            const grid = document.getElementById('teams-grid');
+            const teamsGrid = document.getElementById('teams-grid');
+            const availGrid = document.getElementById('available-teams-grid');
+            const availSection = document.getElementById('available-teams-section');
+            
+            // Show/hide available teams section based on game status
+            availSection.style.display = gameStatus === 'waiting' ? '' : 'none';
             
             // Clear "Loading..." text on first load
-            if (grid.innerHTML.toLowerCase().includes('loading')) {
-                grid.innerHTML = '';
+            if (teamsGrid.innerHTML.toLowerCase().includes('loading')) {
+                teamsGrid.innerHTML = '';
             }
-            
+
             if ((!state.teams || state.teams.length === 0) && (!state.available_colors || state.available_colors.length === 0)) {
-                grid.innerHTML = '<div class="no-teams">No teams available</div>';
+                teamsGrid.innerHTML = '<div class="no-teams">No teams available</div>';
                 return;
             }
 
-            // Keep track of existing team cards to avoid rebuilding
-            const existingCards = new Set();
-            for (let i = 0; i < grid.children.length; i++) {
-                const child = grid.children[i];
-                const match = child.id && child.id.match(/^team-card-(.+)$/);
-                if (match) {
-                    existingCards.add(match[1]);
-                }
-            }
-
-            // Update or create team cards
+            // Update or create joined team cards
             if (state.teams && state.teams.length > 0) {
                 state.teams.forEach(team => {
                     const cardId = `team-card-${team.color}`;
@@ -781,7 +786,7 @@
                             <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')" id="add-bombs-${team.color}">💣 +5 Bombs</button>
                             <div class="ai-buttons" id="ai-buttons-${team.color}"></div>
                         `;
-                        grid.appendChild(card);
+                        teamsGrid.appendChild(card);
                     } else {
                         // Update existing card content
                         const nameElement = card.querySelector('.team-name-text');
@@ -862,7 +867,7 @@
                     card = document.createElement('div');
                     card.className = 'team-card';
                     card.id = cardId;
-                    card.style.opacity = '0.6';
+                    card.style.background = getRgba(color, 0.25);
                     card.style.cursor = isClickable ? 'pointer' : 'default';
                     card.innerHTML = `
                         <div class="team-card-header">
@@ -892,7 +897,7 @@
                             setTimeout(() => document.getElementById('join-name-' + color).focus(), 100);
                         });
                     }
-                    grid.appendChild(card);
+                    availGrid.appendChild(card);
                 }
             });
 
@@ -900,23 +905,23 @@
             const currentTeams = new Set((state.teams || []).map(t => t.color));
             const currentAvailable = new Set(availableColors);
             
-            for (let i = grid.children.length - 1; i >= 0; i--) {
-                const child = grid.children[i];
+            for (let i = teamsGrid.children.length - 1; i >= 0; i--) {
+                const child = teamsGrid.children[i];
                 const match = child.id && child.id.match(/^team-card-(.+)$/);
                 if (match) {
-                    const idParts = match[1].split('-');
-                    if (idParts[0] === 'available') {
-                        // This is an available team card
-                        const color = idParts[1];
-                        if (!currentAvailable.has(color)) {
-                            grid.removeChild(child);
-                        }
-                    } else {
-                        // This is a joined team card
-                        const color = match[1];
-                        if (!currentTeams.has(color)) {
-                            grid.removeChild(child);
-                        }
+                    const color = match[1];
+                    if (!currentTeams.has(color)) {
+                        teamsGrid.removeChild(child);
+                    }
+                }
+            }
+            for (let i = availGrid.children.length - 1; i >= 0; i--) {
+                const child = availGrid.children[i];
+                const match = child.id && child.id.match(/^team-card-available-(.+)$/);
+                if (match) {
+                    const color = match[1];
+                    if (!currentAvailable.has(color)) {
+                        availGrid.removeChild(child);
                     }
                 }
             }
