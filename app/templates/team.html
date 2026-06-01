@@ -1037,6 +1037,14 @@
             }
         }
 
+        // Click team name to rename (during PREPARING)
+        document.addEventListener('click', function(e) {
+            var nameEl = document.getElementById('team-name');
+            if (e.target === nameEl && gameStatus === 'preparing') {
+                toggleRename();
+            }
+        });
+
         // SSE: pushes state updates when events occur
         var currentES = null;
         function connectSSE() {

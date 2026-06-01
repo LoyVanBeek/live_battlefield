@@ -765,14 +765,22 @@
                         card = document.createElement('div');
                         card.className = 'team-card';
                         card.id = cardId;
+                        const canRename = gameStatus === 'waiting' && !team.is_ai;
                         card.innerHTML = `
                             <div class="team-card-header">
                                 <span class="team-name">
                                     <span class="team-color-dot" style="background: ${team.color}"></span>
-                                    <span class="team-name-text">${team.name}</span>
+                                    <span class="team-name-text" id="team-name-label-${team.color}" style="${canRename ? 'cursor:pointer;border-bottom:1px dashed #888;' : ''}">${team.name}</span>
                                     <span class="trophy-icon" id="trophy-${team.color}" style="display:none">🏆</span>
                                     ${aiIndicator}
                                 </span>
+                                <div class="rename-input-area" id="rename-input-${team.color}" style="display:none; margin-top:6px;">
+                                    <div style="display:flex; gap:6px;">
+                                        <input type="text" id="rename-name-${team.color}" value="${team.name}" maxlength="30" style="flex:1; padding:6px; font-size:13px; border-radius:4px; border:2px solid #0f3460; background:#1a1a2e; color:#eee;" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();renameTeam('${team.color}')}">
+                                        <button class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="renameTeam('${team.color}')">Save</button>
+                                        <button class="btn" style="padding:6px 10px;font-size:12px;background:#555;color:#eee;" onclick="cancelRename('${team.color}')">✕</button>
+                                    </div>
+                                </div>
                             </div>
                             <div class="team-stats">
                                 <span class="team-bombs">💣 <span class="bombs-count">${team.bombs}</span></span>
@@ -786,6 +794,14 @@
                             <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')" id="add-bombs-${team.color}">💣 +5 Bombs</button>
                             <div class="ai-buttons" id="ai-buttons-${team.color}"></div>
                         `;
+                        if (canRename) {
+                            card.querySelector('#team-name-label-' + team.color).addEventListener('click', function() {
+                                document.querySelectorAll('.rename-input-area').forEach(el => el.style.display = 'none');
+                                const r = document.getElementById('rename-input-' + team.color);
+                                r.style.display = 'flex';
+                                setTimeout(() => document.getElementById('rename-name-' + team.color).focus(), 100);
+                            });
+                        }
                         teamsGrid.appendChild(card);
                     } else {
                         // Update existing card content
@@ -952,6 +968,23 @@
             }).catch(() => {
                 showToast('Failed to copy URL', 'error');
             });
+        }
+
+        function cancelRename(color) {
+            document.getElementById('rename-input-' + color).style.display = 'none';
+        }
+
+        async function renameTeam(color) {
+            const input = document.getElementById('rename-name-' + color);
+            const newName = input ? input.value.trim() : '';
+            if (!newName) return;
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: color,
+                command: 'rename',
+                args: { name: newName }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            loadTeams();
         }
 
         async function joinTeam(color) {
