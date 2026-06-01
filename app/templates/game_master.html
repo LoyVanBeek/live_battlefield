@@ -984,6 +984,9 @@
                 args: { name: newName }
             });
             showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success) {
+                document.getElementById('rename-input-' + color).style.display = 'none';
+            }
             loadTeams();
         }
 
