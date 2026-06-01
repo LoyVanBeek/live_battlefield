@@ -14,6 +14,7 @@
         "started": "\ud83c\udfae Spel gestart - Gooi bommen!",
         "ended": "\ud83c\udfc1 Spel afgelopen",
         "waiting": "\u23f3 Wachten op start",
+        "paused": "\u23f8\ufe0f Gepauzeerd",
         "loading": "Laden..."
     },
     "board": {
@@ -64,6 +65,8 @@
         "button": "\ud83d\udca5 Gooi Bom!",
         "cancel": "Annuleren"
     },
+    "game_paused": "Spel is gepauzeerd",
+    "game_paused_resumes": "Hervat over {time}",
     "error": {
         "select_target": "Selecteer een doelwit!",
         "enter_coord": "Voer een co\u00f6rdinaat in!",
@@ -73,6 +76,7 @@
         "game_not_started": "Spel is niet gestart!",
         "cannot_bomb_self": "Je kunt jezelf niet bombarderen!",
         "no_bombs": "Geen bommen over! Wis codes in om meer te krijgen!",
+        "game_paused": "Spel is gepauzeerd! Geen acties toegestaan totdat het spel hervat.",
         "fetch_prefix": "Fout: "
     },
     "lang": {

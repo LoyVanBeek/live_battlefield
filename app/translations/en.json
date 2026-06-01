@@ -14,6 +14,7 @@
         "started": "\ud83c\udfae Game Started - Bombs away!",
         "ended": "\ud83c\udfc1 Game Ended",
         "waiting": "\u23f3 Waiting to Start",
+        "paused": "\u23f8\ufe0f Paused",
         "loading": "Loading..."
     },
     "board": {
@@ -64,6 +65,8 @@
         "button": "\ud83d\udca5 Throw Bomb!",
         "cancel": "Cancel"
     },
+    "game_paused": "Game is paused",
+    "game_paused_resumes": "Resumes in {time}",
     "error": {
         "select_target": "Select a target!",
         "enter_coord": "Enter a coordinate!",
@@ -73,6 +76,7 @@
         "game_not_started": "Game is not started!",
         "cannot_bomb_self": "Cannot bomb yourself!",
         "no_bombs": "No bombs left! Redeem codes to get more!",
+        "game_paused": "Game is paused! No actions allowed until the game resumes.",
         "fetch_prefix": "Error: "
     },
     "lang": {
