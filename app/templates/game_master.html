@@ -610,6 +610,12 @@
                 inviteBtn.disabled = true;
                 inviteWrapper.classList.add('disabled');
             } else if (status.status === 'started') {
+                statusEl.textContent = '🎮 STARTED';
+                statusEl.className = 'status started';
+                btnStart.disabled = true;
+                btnEnd.disabled = false;
+                inviteBtn.disabled = true;
+                inviteWrapper.classList.add('disabled');
             } else if (status.status === 'ended') {
                 statusEl.textContent = '🏁 ENDED';
                 statusEl.className = 'status ended';
