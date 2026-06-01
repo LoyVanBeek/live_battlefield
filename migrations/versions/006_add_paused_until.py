@@ -22,8 +22,18 @@ def upgrade() -> None:
     conn.execute(sa.text(
         "ALTER TABLE games ADD COLUMN IF NOT EXISTS paused_until TIMESTAMP WITH TIME ZONE"
     ))
+    conn.execute(sa.text(
+        "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'team_renamed'"
+    ))
+    conn.execute(sa.text(
+        "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'game_paused'"
+    ))
+    conn.execute(sa.text(
+        "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'game_resumed'"
+    ))
 
 
 def downgrade() -> None:
     conn = op.get_bind()
     conn.execute(sa.text("ALTER TABLE games DROP COLUMN IF EXISTS paused_until"))
+    # Note: PostgreSQL doesn't support removing values from enums without recreating the type
