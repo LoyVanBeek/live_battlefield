@@ -456,21 +456,30 @@ async def admin_list_games(
 ):
     from app.models import get_all_games
 
+    from app.database import Location
+    from app.models import get_game_events
+    from app.game.state import GameState
+    from sqlalchemy import select, func
+
     games = await get_all_games(db)
-    return {
-        "games": [
-            {
-                "id": str(g.id),
-                "name": g.name,
-                "status": g.status.value,
-                "gm_token": g.gm_token,
-                "team_count": 0,
-                "location_count": 0,
-                "created_at": g.created_at.isoformat() if g.created_at else None,
-            }
-            for g in games
-        ],
-    }
+    result = []
+    for g in games:
+        events = await get_game_events(db, g.id)
+        state = GameState.from_events(events)
+        loc_count_result = await db.execute(
+            select(func.count()).select_from(Location).where(Location.game_id == g.id)
+        )
+        loc_count = loc_count_result.scalar() or 0
+        result.append({
+            "id": str(g.id),
+            "name": g.name,
+            "status": g.status.value,
+            "gm_token": g.gm_token,
+            "team_count": len(state.teams),
+            "location_count": loc_count,
+            "created_at": g.created_at.isoformat() if g.created_at else None,
+        })
+    return {"games": result}
 
 
 @app.post("/api/admin/games")
