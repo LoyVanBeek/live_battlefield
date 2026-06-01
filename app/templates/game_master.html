@@ -876,8 +876,8 @@
                         </div>
                         <div class="join-input-area" id="join-input-${color}" style="display:none; padding: 10px 0;">
                             <div style="display:flex; gap:8px;">
-                                <input type="text" id="join-name-${color}" placeholder="Team name" style="flex:1; padding:8px; font-size:14px; border-radius:5px; border:2px solid #0f3460; background:#1a1a2e; color:#eee;" autocomplete="off">
-                                <button class="btn btn-success" onclick="joinTeam('${color}')">Join</button>
+                                <input type="text" id="join-name-${color}" placeholder="Team name" style="flex:1; padding:8px; font-size:14px; border-radius:5px; border:2px solid #0f3460; background:#1a1a2e; color:#eee;" autocomplete="off" oninput="document.getElementById('join-btn-${color}').style.opacity=this.value.trim()?'1':'0.4'" onkeydown="if(event.key==='Enter'){event.preventDefault();joinTeam('${color}')}">
+                                <button class="btn btn-success" id="join-btn-${color}" style="opacity:0.4" onclick="joinTeam('${color}')">Join</button>
                             </div>
                         </div>
                         <p style="color: #888; text-align: center; padding: 20px;" id="join-hint-${color}">${isClickable ? 'Click to join' : ''}</p>
