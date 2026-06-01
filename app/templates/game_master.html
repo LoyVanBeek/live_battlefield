@@ -361,19 +361,6 @@
         <!-- Teams -->
         <div class="section">
             <h2>🚢 Teams</h2>
-            
-            <!-- Join Team -->
-            <div style="margin-bottom: 20px; padding: 15px; background: #0f3460; border-radius: 8px;">
-                <h3 style="margin-bottom: 10px;">➕ Join Team</h3>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                    <select id="join-color" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
-                        <option value="">Select color...</option>
-                    </select>
-                    <input type="text" id="join-name" placeholder="Team name" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
-                    <button class="btn btn-success" onclick="joinTeam()">Join</button>
-                </div>
-            </div>
-            
             <div class="teams-grid" id="teams-grid">
             </div>
         </div>
@@ -724,20 +711,6 @@
                 inviteBtn.dataset.inviteUrl = window.location.origin + '/join/' + state.invite_token;
             }
 
-            // Populate available colors dropdown (preserve selection)
-            const joinColorSelect = document.getElementById('join-color');
-            const joinSelectedValue = joinColorSelect.value;
-            joinColorSelect.innerHTML = '<option value="">Select color...</option>';
-            if (state.available_colors) {
-                state.available_colors.forEach(color => {
-                    const opt = document.createElement('option');
-                    opt.value = color;
-                    opt.textContent = color.toUpperCase();
-                    joinColorSelect.appendChild(opt);
-                });
-            }
-            joinColorSelect.value = joinSelectedValue;
-
             // Populate AI color dropdown (preserve selection)
             const aiColorSelect = document.getElementById('ai-color');
             const aiSelectedValue = aiColorSelect.value;
@@ -883,13 +856,14 @@
             availableColors.forEach(color => {
                 const cardId = `team-card-available-${color}`;
                 let card = document.getElementById(cardId);
+                const isClickable = gameStatus !== 'started' && gameStatus !== 'ended';
                 
                 if (!card) {
-                    // Create new available team card
                     card = document.createElement('div');
                     card.className = 'team-card';
                     card.id = cardId;
                     card.style.opacity = '0.6';
+                    card.style.cursor = isClickable ? 'pointer' : 'default';
                     card.innerHTML = `
                         <div class="team-card-header">
                             <span class="team-name">
@@ -900,8 +874,24 @@
                         <div class="team-stats">
                             <span>Not joined</span>
                         </div>
-                        <p style="color: #888; text-align: center; padding: 20px;">Select "${color.toUpperCase()}" above to join</p>
+                        <div class="join-input-area" id="join-input-${color}" style="display:none; padding: 10px 0;">
+                            <div style="display:flex; gap:8px;">
+                                <input type="text" id="join-name-${color}" placeholder="Team name" style="flex:1; padding:8px; font-size:14px; border-radius:5px; border:2px solid #0f3460; background:#1a1a2e; color:#eee;" autocomplete="off">
+                                <button class="btn btn-success" onclick="joinTeam('${color}')">Join</button>
+                            </div>
+                        </div>
+                        <p style="color: #888; text-align: center; padding: 20px;" id="join-hint-${color}">${isClickable ? 'Click to join' : ''}</p>
                     `;
+                    if (isClickable) {
+                        card.addEventListener('click', function(e) {
+                            if (e.target.closest('.join-input-area') || e.target.closest('button')) return;
+                            document.querySelectorAll('.join-input-area').forEach(el => el.style.display = 'none');
+                            document.querySelectorAll('[id^="join-hint-"]').forEach(el => el.style.display = '');
+                            document.getElementById('join-input-' + color).style.display = 'block';
+                            document.getElementById('join-hint-' + color).style.display = 'none';
+                            setTimeout(() => document.getElementById('join-name-' + color).focus(), 100);
+                        });
+                    }
                     grid.appendChild(card);
                 }
             });
@@ -959,14 +949,9 @@
             });
         }
 
-        async function joinTeam() {
-            const color = document.getElementById('join-color').value;
-            const name = document.getElementById('join-name').value || color;
-            
-            if (!color) {
-                showToast('Select a color first!', 'error');
-                return;
-            }
+        async function joinTeam(color) {
+            const nameInput = document.getElementById('join-name-' + color);
+            const name = (nameInput ? nameInput.value : '') || color;
             
             const result = await apiCall('/api/execute', 'POST', {
                 team_color: color,
@@ -974,9 +959,6 @@
                 args: { name: name }
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            if (result.success) {
-                document.getElementById('join-name').value = '';
-            }
             loadTeams();
         }
 
@@ -1134,20 +1116,6 @@
 
         // Start pause countdown timer
         pauseTimerInterval = setInterval(updatePauseBanner, 1000);
-
-        // Handle Enter key for join form
-        document.getElementById('join-name').addEventListener('keydown', function(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                joinTeam();
-            }
-        });
-        document.getElementById('join-color').addEventListener('keydown', function(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                joinTeam();
-            }
-        });
 
         // Initial load
         loadGameStatus();
