@@ -670,6 +670,7 @@
             // Team header
             document.getElementById('team-color-dot').style.background = myTeam.c;
             document.getElementById('team-name').textContent = myTeam.n;
+            document.getElementById('rename-btn').style.display = gameStatus === 'preparing' ? '' : 'none';
             currentBombCount = myTeam.b;
             updateBombCountDisplay(myTeam.b);
             document.getElementById('ship-count').textContent = myTeam.sp;
@@ -1008,6 +1009,7 @@
 
         // Rename team
         function toggleRename() {
+            if (gameStatus !== 'preparing') return;
             var group = document.getElementById('rename-input-group');
             var input = document.getElementById('rename-input');
             var nameEl = document.getElementById('team-name');
