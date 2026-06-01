@@ -23,13 +23,13 @@ def upgrade() -> None:
         "ALTER TABLE games ADD COLUMN IF NOT EXISTS paused_until TIMESTAMP WITH TIME ZONE"
     ))
     conn.execute(sa.text(
-        "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'team_renamed'"
+        "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'TEAM_RENAMED'"
     ))
     conn.execute(sa.text(
-        "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'game_paused'"
+        "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'GAME_PAUSED'"
     ))
     conn.execute(sa.text(
-        "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'game_resumed'"
+        "ALTER TYPE eventtype ADD VALUE IF NOT EXISTS 'GAME_RESUMED'"
     ))
 
 

@@ -72,6 +72,7 @@ class EventType(str, enum.Enum):
     GAME_STARTED = "game_started"
     GAME_ENDED = "game_ended"
     BOMBS_ADDED = "bombs_added"
+    TEAM_RENAMED = "team_renamed"
     TEAM_RESET = "team_reset"
     GAME_PAUSED = "game_paused"
     GAME_RESUMED = "game_resumed"
