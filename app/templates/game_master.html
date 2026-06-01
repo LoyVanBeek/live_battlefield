@@ -330,7 +330,6 @@
             <div class="buttons">
                 <button class="btn btn-success" id="btn-start" onclick="startGame()">Start Game</button>
                 <button class="btn btn-danger" id="btn-end" onclick="endGame()">End Game</button>
-                <button class="btn btn-primary" id="btn-new" onclick="startNewGame()">Start New Game</button>
                 <select id="pause-duration" style="padding:8px;font-size:13px;border-radius:5px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
                     <option value="0">∞ Indefinite</option>
                     <option value="1">1m</option>
@@ -407,7 +406,6 @@
             <div class="reset-buttons">
                 <button class="btn btn-danger" onclick="resetGame()">Reset Game</button>
                 <button class="btn btn-warning" onclick="clearLocations()">Clear Locations</button>
-                <button class="btn btn-danger" onclick="clearDatabase()">Clear Database</button>
             </div>
         </div>
     </div>
@@ -595,7 +593,6 @@
             const statusEl = document.getElementById('game-status');
             const btnStart = document.getElementById('btn-start');
             const btnEnd = document.getElementById('btn-end');
-            const btnNew = document.getElementById('btn-new');
             const inviteBtn = document.getElementById('btn-copy-invite');
             const inviteWrapper = document.getElementById('invite-btn-wrapper');
             const nameEl = document.getElementById('game-name');
@@ -621,7 +618,6 @@
                 statusEl.className = 'status ended';
                 btnStart.disabled = true;
                 btnEnd.disabled = true;
-                btnNew.disabled = false;
                 inviteBtn.disabled = true;
                 inviteWrapper.classList.add('disabled');
             } else {
@@ -649,7 +645,6 @@
                     btnStart.title = 'Start the game';
                 }
                 btnEnd.disabled = true;
-                btnNew.disabled = true;
             }
 
             document.getElementById('location-progress').textContent = 
@@ -1065,16 +1060,6 @@
             loadGameStatus();
             loadPublicBoards();
             loadTeams();
-        }
-
-        async function startNewGame() {
-            if (!confirm('Start a new game? This will clear ALL data (teams, locations, events).')) return;
-            if (!confirm('Are you REALLY sure? Everything will be deleted!')) return;
-            const result = await apiCall('/api/quick/clear-database', 'POST', {});
-            showToast(result.message, result.success ? 'success' : 'error');
-            if (result.success) {
-                setTimeout(() => { window.location.reload(); }, 1000);
-            }
         }
 
         // --- Game Pause UI ---
