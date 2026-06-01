@@ -11,6 +11,8 @@ from app.events.models import (
     TeamResetEvent,
     GameStartedEvent,
     GameEndedEvent,
+    GamePausedEvent,
+    GameResumedEvent,
 )
 from app.events.factory import create_event, create_events
 from app.events.saver import save_event

@@ -14,3 +14,5 @@ class EventType(str, Enum):
     TEAM_RESET = "team_reset"
     GAME_STARTED = "game_started"
     GAME_ENDED = "game_ended"
+    GAME_PAUSED = "game_paused"
+    GAME_RESUMED = "game_resumed"

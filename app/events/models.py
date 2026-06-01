@@ -515,6 +515,43 @@ class GameEndedEvent:
         )
 
 
+@dataclass
+class GamePausedEvent:
+    event_type: EventType = EventType.GAME_PAUSED
+    duration_minutes: int = 0
+    paused_until: str = ""
+
+    def apply(self, state: "GameState") -> tuple["GameState", "GamePausedEvent"]:
+        return state, self
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.GAME_PAUSED,
+            payload={
+                "duration_minutes": self.duration_minutes,
+                "paused_until": self.paused_until,
+            },
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
+@dataclass
+class GameResumedEvent:
+    event_type: EventType = EventType.GAME_RESUMED
+
+    def apply(self, state: "GameState") -> tuple["GameState", "GameResumedEvent"]:
+        return state, self
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.GAME_RESUMED,
+            payload={},
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
 AnyEvent = Union[
     "TeamJoinedEvent",
     "TeamRenamedEvent",
@@ -528,4 +565,6 @@ AnyEvent = Union[
     "TeamResetEvent",
     "GameStartedEvent",
     "GameEndedEvent",
+    "GamePausedEvent",
+    "GameResumedEvent",
 ]
