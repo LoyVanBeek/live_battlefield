@@ -10,7 +10,7 @@ from app.database import (
     Game,
     TeamToken,
 )
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from datetime import datetime, timezone
@@ -307,10 +307,32 @@ async def update_trickle_settings(
 
 
 async def get_active_trickle_games(db: AsyncSession) -> list[Game]:
+    now = datetime.now(timezone.utc)
     result = await db.execute(
         select(Game).where(
             Game.trickle_enabled == True,
             Game.status == GameStatus.STARTED,
+            or_(Game.paused_until == None, Game.paused_until <= now),
         )
     )
     return list(result.scalars().all())
+
+
+async def update_game_pause(db: AsyncSession, game_id: uuid.UUID, paused_until: datetime | None) -> Optional[Game]:
+    game = await get_game(db, game_id)
+    if not game:
+        return None
+    game.paused_until = paused_until
+    await db.commit()
+    await db.refresh(game)
+    return game
+
+
+async def is_game_paused(db: AsyncSession, game_id: uuid.UUID) -> tuple[bool, datetime | None]:
+    game = await get_game(db, game_id)
+    if not game or not game.paused_until:
+        return False, None
+    now = datetime.now(timezone.utc)
+    if game.paused_until <= now:
+        return False, None
+    return True, game.paused_until
