@@ -49,14 +49,14 @@
         .game-row {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            gap: 15px;
             padding: 15px;
             background: #0f3460;
             border-radius: 8px;
             margin-bottom: 10px;
         }
-        .game-row .game-info { flex: 1; }
-        .game-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: #00d9ff; }
+        .game-row .game-info { flex: 1; min-width: 0; }
+        .game-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: #00d9ff; flex-shrink: 0; }
         .games-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
         .games-header-left { display: flex; align-items: center; gap: 10px; }
         .game-row .name { font-size: 16px; font-weight: bold; }
@@ -159,12 +159,12 @@
                 const displayName = g.name || 'Game ' + g.id.slice(0, 8);
                 const gmUrl = window.location.origin + '/game-master/' + g.gm_token;
                 return '<div class="game-row">' +
-                    '<input type="checkbox" class="game-checkbox" value="' + g.id + '" data-name="' + displayName + '" onchange="updateDeleteButton()">' +
+                    '<input type="checkbox" class="game-checkbox" value="' + g.id + '" data-name="' + displayName + '" onchange="updateDeleteButton()" style="margin-right:15px;">' +
                     '<div class="game-info"><div class="name">' + displayName + '</div>' +
                     '<div class="status ' + statusClass + '">' + statusLabel + ' — ' + g.team_count + ' teams, ' + g.location_count + ' locations</div></div>' +
-                    '<div style="display:flex;flex-direction:column;gap:5px;align-items:end;">' +
+                    '<div style="display:flex;gap:8px;">' +
                     '<button class="btn btn-primary" onclick="copyText(\'' + gmUrl + '\')">📋 Copy GM URL</button>' +
-                    '<a href="' + gmUrl + '" target="_blank" style="color:#00d9ff;font-size:12px;">Open GM page →</a>' +
+                    '<button class="btn btn-primary" onclick="window.open(\'' + gmUrl + '\', \'_blank\')">🌐 Open GM page</button>' +
                     '</div></div>';
             }).join('');
         }
