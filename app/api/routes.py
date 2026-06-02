@@ -389,16 +389,38 @@ async def game_master_events_page(
 
 @app.get("/game-master/{gm_token}/game-settings", response_class=HTMLResponse)
 async def game_master_settings_page(
-    request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db)
+    request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db),
+    lang: Optional[str] = Query(None),
 ):
     from app.models import get_game_by_gm_token
 
     game = await get_game_by_gm_token(db, gm_token)
     if not game:
         return HTMLResponse("Not found", status_code=404)
-    return templates.TemplateResponse(
-        request, "game_settings.html", {"request": request, "gm_token": gm_token}
+
+    if lang and lang in SUPPORTED_LANGS:
+        chosen_lang = lang
+    else:
+        chosen_lang = request.cookies.get("lang", "")
+        if chosen_lang not in SUPPORTED_LANGS:
+            accept = request.headers.get("accept-language", "")
+            chosen_lang = detect_language(accept)
+
+    translations = get_translations(chosen_lang)
+
+    response = templates.TemplateResponse(
+        request, "game_settings.html",
+        {
+            "request": request,
+            "gm_token": gm_token,
+            "tr": translations,
+            "tr_json": json.dumps(translations),
+            "current_lang": chosen_lang,
+        },
     )
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.set_cookie(key="lang", value=chosen_lang, max_age=365 * 24 * 3600)
+    return response
 
 
 # Keep old /admin/{token} sub-routes for backward compat (now check gm_token)

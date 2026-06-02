@@ -129,6 +129,19 @@
         "button": "\ud83d\udca5 Gooi Bom!",
         "cancel": "Annuleren"
     },
+    "settings": {
+        "title": "Spelinstellingen",
+        "back": "\u2190 Terug naar Spelmeester",
+        "back_admin": "\u2190 Terug naar Beheerderspaneel",
+        "bomb_drip": "\ud83d\udca7 Druppel Bommen",
+        "bomb_drip_desc": "Geef elk team automatisch bommen elke N minuten terwijl het spel actief is.",
+        "enable": "Inschakelen",
+        "bombs_every": "bommen elke",
+        "minutes": "minuten",
+        "max_bombs": "max bommen",
+        "save": "Opslaan",
+        "coming_soon": "Binnenkort meer spelmodi..."
+    },
     "game_paused": "Spel is gepauzeerd",
     "game_paused_resumes": "Hervat over {time}",
     "error": {

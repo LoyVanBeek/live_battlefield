@@ -129,6 +129,19 @@
         "button": "\ud83d\udca5 Throw Bomb!",
         "cancel": "Cancel"
     },
+    "settings": {
+        "title": "Game Settings",
+        "back": "\u2190 Back to Game Master",
+        "back_admin": "\u2190 Back to Admin Panel",
+        "bomb_drip": "\ud83d\udca7 Bomb Drip",
+        "bomb_drip_desc": "Automatically give each team bombs every N minutes while the game is running.",
+        "enable": "Enable",
+        "bombs_every": "bombs every",
+        "minutes": "minutes",
+        "max_bombs": "max bombs",
+        "save": "Save",
+        "coming_soon": "More game modes coming soon..."
+    },
     "game_paused": "Game is paused",
     "game_paused_resumes": "Resumes in {time}",
     "error": {
