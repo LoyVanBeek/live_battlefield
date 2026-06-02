@@ -833,7 +833,7 @@
                             </div>
                             <div class="team-board" id="team-board-${team.color}" style="text-align:center;">
                             </div>
-                            <a href="/team/${team.token}" class="team-play-link">🎮 Play as ${team.color}</a>
+                            <a href="/team/${team.token}" class="team-play-link">${_('gm.play_as', {color: team.color})}</a>
                             <div style="display:flex;gap:6px;margin-top:6px;">
                                 <button class="btn btn-primary" style="flex:1;" onclick="copyTeamUrl('${team.token}', '${team.color}')">📋 Copy</button>
                                 <button class="btn btn-success" style="flex:1;" onclick="addBombs('${team.color}')" id="add-bombs-${team.color}">💣 +5</button>
