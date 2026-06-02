@@ -2,7 +2,7 @@
     "page": {
         "title": "Live Battlefield - Team Spel",
         "heading": "\ud83c\udfae Team Spel",
-        "gm_title": "Spelmeester Paneel"
+        "gm_title": "Spelleider Paneel"
     },
     "team": {
         "not_joined": "{color} (niet deelgenomen)",
@@ -131,7 +131,7 @@
     },
     "settings": {
         "title": "Spelinstellingen",
-        "back": "\u2190 Terug naar Spelmeester",
+        "back": "\u2190 Terug naar Spelleider",
         "back_admin": "\u2190 Terug naar Beheerderspaneel",
         "bomb_drip": "\ud83d\udca7 Druppel Bommen",
         "bomb_drip_desc": "Geef elk team automatisch bommen elke N minuten terwijl het spel actief is.",
