@@ -490,6 +490,7 @@
         let currentBombCount = 0;
         let trickleEnabled = false;
         let trickleIntervalSeconds = 60;
+        let trickleBombsPerInterval = 1;
         let lastTrickleAt = null;
         let dripCountdownTimer = null;
 
@@ -644,13 +645,14 @@
             const now = new Date();
             const elapsed = (now - lastTrickleAt) / 1000;
             const remaining = Math.max(0, trickleIntervalSeconds - elapsed);
-            if (remaining <= 0) {
-                el.textContent = '⏳ 0:00';
-                return;
-            }
             const minutes = Math.floor(remaining / 60);
             const seconds = Math.floor(remaining % 60);
-            el.textContent = '⏳ ' + minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            const timeStr = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            if (remaining <= 0) {
+                el.textContent = '⏳ +' + trickleBombsPerInterval + ' \u2022 0:00';
+                return;
+            }
+            el.textContent = '⏳ +' + trickleBombsPerInterval + ' \u2022 ' + timeStr;
         }
 
         // Render everything from a single compact state object pushed via SSE
@@ -663,6 +665,7 @@
             // Trickle/drip state for countdown
             trickleEnabled = data.te || false;
             trickleIntervalSeconds = (data.ti || 1) * 60;
+            trickleBombsPerInterval = data.tb || 1;
             lastTrickleAt = data.tl ? new Date(data.tl) : null;
             if (data.mb) maxBombs = data.mb;
 
