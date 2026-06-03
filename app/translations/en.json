@@ -167,7 +167,8 @@
         "step4_desc": "You need bombs to attack. Redeem codes to get more. The trickle system may also give you bombs over time.",
         "step5_title": "\ud83c\udfc6 Winning",
         "step5_desc": "Sink all enemy ships to be the last team standing!",
-        "bookmark": "\ud83d\udd17 Save or bookmark this page URL to return to your team later. You can also copy it with the \ud83d\udccb button next to your team name."
+        "bookmark": "\ud83d\udd17 Save or bookmark this page URL to return to your team later. You can also copy it with the \ud83d\udccb button next to your team name.",
+        "share_text": "Join my team in Battlefield!"
     },
     "help_gm": {
         "title": "\u2753 GM Guide",

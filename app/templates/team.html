@@ -1035,8 +1035,9 @@
         }
 
         function shareWhatsApp() {
-            const url = encodeURIComponent(window.location.href.split('?')[0]);
-            window.open('https://wa.me/?text=' + url, '_blank');
+            const url = window.location.href.split('?')[0];
+            const text = encodeURIComponent(_('help_team.share_text') + '\n' + url);
+            window.open('https://wa.me/?text=' + text, '_blank');
         }
 
         function quickRedeem() {
