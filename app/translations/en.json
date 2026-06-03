@@ -146,8 +146,8 @@
         "title": "\ud83d\udd14 Notifications",
         "enable": "Enable desktop notifications",
         "game_started": "\ud83c\udfae Game started",
-        "was_hit": "\ud83d\udca5 I was hit by a bomb",
-        "bombs_added": "\ud83d\udca3 Bombs added by timer",
+        "was_hit": "\ud83d\udca5 You were hit by a bomb",
+        "bombs_added": "\ud83d\udca3 Bombs added automatically",
         "close": "Close"
     },
     "help": {
