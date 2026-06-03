@@ -413,13 +413,13 @@
             </label>
             <div id="notify-options" style="margin:16px 0 0 20px;display:none;">
                 <label style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;font-size:14px;">
-                    <input type="checkbox" id="notify-game-started" checked> {{ tr.notify.game_started }}
+                    <input type="checkbox" id="notify-game-started" onchange="saveNotifyPrefs()" checked> {{ tr.notify.game_started }}
                 </label>
                 <label style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;font-size:14px;">
-                    <input type="checkbox" id="notify-was-hit" checked> {{ tr.notify.was_hit }}
+                    <input type="checkbox" id="notify-was-hit" onchange="saveNotifyPrefs()" checked> {{ tr.notify.was_hit }}
                 </label>
                 <label style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;font-size:14px;">
-                    <input type="checkbox" id="notify-bombs-added" checked> {{ tr.notify.bombs_added }}
+                    <input type="checkbox" id="notify-bombs-added" onchange="saveNotifyPrefs()" checked> {{ tr.notify.bombs_added }}
                 </label>
             </div>
             <button class="btn btn-primary" onclick="toggleNotifyModal()" style="width:100%;padding:12px;margin-top:10px;">{{ tr.notify.close }}</button>
