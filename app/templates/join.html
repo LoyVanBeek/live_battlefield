@@ -158,7 +158,7 @@
 
             <div style="display:flex;gap:8px;">
                 <button class="btn-join" id="btn-join" onclick="joinGame()" style="flex:1;">{{ tr.join.join_button }}</button>
-                <button class="btn-join" style="flex:0 0 auto;background:#0f3460;padding:12px 16px;font-size:16px;" onclick="toggleHelp()">❓</button>
+                <button onclick="toggleHelp()" style="width:48px;height:48px;border:none;border-radius:6px;background:#0f3460;color:#eee;font-size:20px;cursor:pointer;flex-shrink:0;">❓</button>
             </div>
         </div>
 
@@ -170,15 +170,15 @@
     <div id="help-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;">
         <div style="background:#16213e;border-radius:12px;padding:30px;max-width:500px;width:90%;max-height:85vh;overflow-y:auto;margin:20px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-                <h2 style="margin:0;" id="help-title">{{ tr.help.title }}</h2>
+                <h2 style="margin:0;">{{ tr.help_join.title }}</h2>
                 <span onclick="toggleHelp()" style="cursor:pointer;font-size:28px;color:#888;">&times;</span>
             </div>
-            <div style="margin-bottom:16px;"><strong id="help-step1">{{ tr.help.step1_title }}</strong><br><span id="help-desc1">{{ tr.help.step1_desc }}</span></div>
-            <div style="margin-bottom:16px;"><strong id="help-step2">{{ tr.help.step2_title }}</strong><br><span id="help-desc2">{{ tr.help.step2_desc }}</span></div>
-            <div style="margin-bottom:16px;"><strong id="help-step3">{{ tr.help.step3_title }}</strong><br><span id="help-desc3">{{ tr.help.step3_desc }}</span></div>
-            <div style="margin-bottom:16px;"><strong id="help-step4">{{ tr.help.step4_title }}</strong><br><span id="help-desc4">{{ tr.help.step4_desc }}</span></div>
-            <div style="margin-bottom:16px;"><strong id="help-step5">{{ tr.help.step5_title }}</strong><br><span id="help-desc5">{{ tr.help.step5_desc }}</span></div>
-            <div style="margin-bottom:16px;color:#888;font-size:14px;" id="help-gmnote">{{ tr.help.gm_note }}</div>
+            <p style="margin-bottom:16px;line-height:1.5;">{{ tr.help_join.intro }}</p>
+            <div style="margin-bottom:12px;">\u279c {{ tr.help_join.step1 }}</div>
+            <div style="margin-bottom:12px;">\u279c {{ tr.help_join.step2 }}</div>
+            <div style="margin-bottom:12px;">\u279c {{ tr.help_join.step3 }}</div>
+            <div style="margin-bottom:12px;">\u279c {{ tr.help_join.step4 }}</div>
+            <div style="margin-bottom:16px;">\u279c {{ tr.help_join.step5 }}</div>
             <button class="btn-join" onclick="toggleHelp()" style="margin-top:10px;">{{ tr.help.close }}</button>
         </div>
     </div>
