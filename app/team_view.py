@@ -26,6 +26,7 @@ async def get_team_view(team_token: str, db: AsyncSession) -> dict:
     if game:
         result["te"] = game.trickle_enabled
         result["ti"] = game.trickle_interval_minutes
+        result["tb"] = game.trickle_bombs_per_interval
         result["tl"] = game.last_trickle_at.isoformat() if game.last_trickle_at else ""
         result["mb"] = game.max_bombs
         from datetime import datetime, timezone

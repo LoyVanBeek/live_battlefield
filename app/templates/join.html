@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ current_lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Join Game - Live Battlefield</title>
+    <title>{{ tr.join.title }}</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -134,36 +134,76 @@
 </head>
 <body>
     <select class="lang-select" id="lang-select" onchange="switchLanguage(this.value)">
-        <option value="en" {% if current_lang == 'en' %}selected{% endif %}>🇬🇧 English</option>
-        <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>🇳🇱 Nederlands</option>
+        <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
+        <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>{{ tr.lang.nl }}</option>
     </select>
 
     <div class="join-container">
-        <h1>🎮 Join Game</h1>
+        <h1>{{ tr.join.heading }}</h1>
         <div class="game-name" id="game-name">{{ game_name }}</div>
         <div class="game-status" id="game-status"></div>
 
         <div id="join-form">
             <div class="form-group">
-                <label for="team-color">Choose your color</label>
+                <label for="team-color">{{ tr.join.choose_color }}</label>
                 <select id="team-color">
-                    <option value="">Loading colors...</option>
+                    <option value="">{{ tr.join.loading_colors }}</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label for="team-name">Team name</label>
-                <input type="text" id="team-name" placeholder="Enter team name" maxlength="100">
+                <label for="team-name">{{ tr.join.team_name }}</label>
+                <input type="text" id="team-name" placeholder="{{ tr.join.placeholder_name }}" maxlength="100">
             </div>
 
-            <button class="btn-join" id="btn-join" onclick="joinGame()">Join Game</button>
+            <div style="display:flex;gap:8px;">
+                <button class="btn-join" id="btn-join" onclick="joinGame()" style="flex:1;">{{ tr.join.join_button }}</button>
+                <button onclick="toggleHelp()" style="width:48px;height:48px;border:none;border-radius:6px;background:#0f3460;color:#eee;font-size:20px;cursor:pointer;flex-shrink:0;">❓</button>
+            </div>
         </div>
 
         <div id="loading" class="loading" style="display:none;"></div>
         <div id="message" class="message"></div>
     </div>
 
+    <!-- Help Modal -->
+    <div id="help-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;">
+        <div style="background:#16213e;border-radius:12px;padding:30px;max-width:500px;width:90%;max-height:85vh;overflow-y:auto;margin:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                <h2 style="margin:0;">{{ tr.help_join.title }}</h2>
+                <span onclick="toggleHelp()" style="cursor:pointer;font-size:28px;color:#888;">&times;</span>
+            </div>
+            <p style="margin-bottom:16px;line-height:1.5;">{{ tr.help_join.intro }}</p>
+            <div style="margin-bottom:12px;">\u279c {{ tr.help_join.step1 }}</div>
+            <div style="margin-bottom:12px;">\u279c {{ tr.help_join.step2 }}</div>
+            <div style="margin-bottom:12px;">\u279c {{ tr.help_join.step3 }}</div>
+            <div style="margin-bottom:12px;">\u279c {{ tr.help_join.step4 }}</div>
+            <div style="margin-bottom:16px;">\u279c {{ tr.help_join.step5 }}</div>
+            <button class="btn-join" onclick="toggleHelp()" style="margin-top:10px;">{{ tr.help.close }}</button>
+        </div>
+    </div>
+
     <script>
+        const TR = {{ tr_json|safe }};
+        function _(key, params) {
+            let val = TR;
+            for (const part of key.split('.')) {
+                val = val[part];
+                if (val === undefined) return key;
+            }
+            if (typeof val !== 'string') return key;
+            if (params) {
+                for (const [k, v] of Object.entries(params)) {
+                    val = val.replace('{' + k + '}', v);
+                }
+            }
+            return val;
+        }
+        function toggleHelp() {
+            const m = document.getElementById('help-modal');
+            m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+        }
+
         const INVITE_TOKEN = '{{ invite_token }}';
 
         function switchLanguage(lang) {
@@ -194,12 +234,12 @@
 
                 const statusEl = document.getElementById('game-status');
                 if (data.status === 'started') {
-                    statusEl.textContent = '❌ This game has already started. No new teams can join.';
+                    statusEl.textContent = _('join.game_started');
                     document.getElementById('join-form').style.display = 'none';
                     return;
                 }
                 if (data.status === 'ended') {
-                    statusEl.textContent = '🏁 This game has already ended.';
+                    statusEl.textContent = _('join.game_ended');
                     document.getElementById('join-form').style.display = 'none';
                     return;
                 }
@@ -207,7 +247,7 @@
                 document.getElementById('game-name').textContent = data.game_name;
 
                 const select = document.getElementById('team-color');
-                select.innerHTML = '<option value="">Select color...</option>';
+                select.innerHTML = '<option value="">' + _('join.select_color') + '</option>';
                 if (data.available_colors && data.available_colors.length > 0) {
                     data.available_colors.forEach(function(color) {
                         const opt = document.createElement('option');
@@ -216,13 +256,13 @@
                         select.appendChild(opt);
                     });
                 } else {
-                    select.innerHTML = '<option value="">No colors available - game is full</option>';
+                    select.innerHTML = '<option value="">' + _('join.game_full') + '</option>';
                     document.getElementById('btn-join').disabled = true;
                 }
 
                 document.getElementById('team-name').focus();
             } catch (e) {
-                showMessage('Failed to load game state.', 'error');
+                showMessage(_('join.failed_load'), 'error');
             }
         }
 
@@ -231,7 +271,7 @@
             const name = document.getElementById('team-name').value.trim();
 
             if (!color) {
-                showMessage('Please select a color!', 'error');
+                showMessage(_('join.select_color_error'), 'error');
                 return;
             }
 
@@ -247,16 +287,16 @@
                 const data = await res.json();
 
                 if (data.success) {
-                    showMessage('Joined! Redirecting...', 'success');
+                    showMessage(_('join.joined_redirect'), 'success');
                     setTimeout(function() {
                         window.location.href = data.team_url;
                     }, 800);
                 } else {
-                    showMessage(data.message || 'Failed to join.', 'error');
+                    showMessage(data.message || _('join.select_color_error'), 'error');
                     setLoading(false);
                 }
             } catch (e) {
-                showMessage('Network error. Please try again.', 'error');
+                showMessage(_('join.network_error'), 'error');
                 setLoading(false);
             }
         }

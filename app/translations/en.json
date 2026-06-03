@@ -142,6 +142,67 @@
         "save": "Save",
         "coming_soon": "More game modes coming soon..."
     },
+    "help": {
+        "title": "\u2753 How to Play",
+        "close": "Close"
+    },
+    "help_join": {
+        "title": "\u2753 Welcome!",
+        "intro": "You have reached the join page for this Battlefield game. Select a color, enter a team name, and click Join to get started.",
+        "step1": "Pick an available color and give your team a name.",
+        "step2": "After joining, you will be redirected to your team page.",
+        "step3": "There you can place your ships on the board before the game starts.",
+        "step4": "Once the GM starts the game, you can throw bombs at enemies and redeem codes at real-world locations.",
+        "step5": "The last team standing wins!"
+    },
+    "help_team": {
+        "title": "\u2753 How to Play",
+        "step1_title": "\ud83d\udea2 Your Private Board",
+        "step1_desc": "This is where your ships are placed. The enemy cannot see this board.",
+        "step2_title": "\ud83d\udca5 Enemy Boards",
+        "step2_desc": "Click on an enemy board cell to throw a bomb at that coordinate. Hits are marked with a cross, misses with a dot.",
+        "step3_title": "\ud83d\udd11 Redeem Codes",
+        "step3_desc": "Visit real-world locations to find codes. Enter them here to earn more bombs!",
+        "step4_title": "\ud83d\udca3 Bombs",
+        "step4_desc": "You need bombs to attack. Redeem codes to get more. The trickle system may also give you bombs over time.",
+        "step5_title": "\ud83c\udfc6 Winning",
+        "step5_desc": "Sink all enemy ships to be the last team standing!",
+        "bookmark": "\ud83d\udd17 Save or bookmark this page URL to return to your team later. You can also copy it with the \ud83d\udccb button next to your team name.",
+        "share_text": "Join my team in Battlefield!"
+    },
+    "help_gm": {
+        "title": "\u2753 GM Guide",
+        "step1_title": "\ud83d\udea2 Managing Teams",
+        "step1_desc": "Click on an available color card to add a team. Click a team name to rename it. Use the \u2715 button to remove a team and free its color.",
+        "step2_title": "\ud83e\udd16 AI Players",
+        "step2_desc": "Add AI players to fill empty colors. They auto-place ships and throw bombs during the game.",
+        "step3_title": "\u25b6\ufe0f Starting & Ending",
+        "step3_desc": "Use the Start Game button once all teams have ships placed and locations exist. End Game stops the match.",
+        "step4_title": "\u23f8\ufe0f Pausing",
+        "step4_desc": "Pause the game to prevent all player actions (bombing, code redemption, trickle, AI moves). Resume when ready.",
+        "step5_title": "\ud83d\udca7 Bomb Drip",
+        "step5_desc": "Configure automatic bomb delivery in the Settings page. Teams receive bombs at set intervals.",
+        "step6_title": "\ud83d\udccd Locations & Codes",
+        "step6_desc": "Visit the Locations page to manage real-world locations and their codes. Players visit these to earn bombs."
+    },
+    "join": {
+        "title": "Join Game",
+        "heading": "\ud83c\udfae Join Game",
+        "choose_color": "Choose your color",
+        "select_color": "Select color...",
+        "team_name": "Team name",
+        "placeholder_name": "Enter team name",
+        "join_button": "Join Game",
+        "loading_colors": "Loading colors...",
+        "game_full": "No colors available \u2014 game is full",
+        "game_started": "\u274c This game has already started. No new teams can join.",
+        "game_ended": "\ud83c\udfc1 This game has already ended.",
+        "game_not_found": "Game not found.",
+        "select_color_error": "Please select a color!",
+        "joined_redirect": "Joined! Redirecting...",
+        "network_error": "Network error. Please try again.",
+        "failed_load": "Failed to load game state."
+    },
     "game_paused": "Game is paused",
     "game_paused_resumes": "Resumes in {time}",
     "error": {

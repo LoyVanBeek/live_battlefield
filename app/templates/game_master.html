@@ -322,6 +322,7 @@
         <a href="/game-master/{{ gm_token }}/locations-secret">{{ tr.gm.nav_locations }}</a>
         <a href="/game-master/{{ gm_token }}/game-settings">{{ tr.gm.nav_settings }}</a>
         <div style="display:flex;gap:10px;align-items:center;margin-left:auto;">
+            <button class="invite-btn" onclick="toggleHelp()" style="margin-right:5px;">❓</button>
             <div class="invite-btn-wrapper" id="invite-btn-wrapper">
                 <button class="invite-btn" id="btn-copy-invite" onclick="copyInviteUrl()">{{ tr.gm.nav_invite }}</button>
                 <span class="invite-tooltip" id="invite-tooltip">Game has already started — no more players can join</span>
@@ -407,6 +408,23 @@
 
         </div>
 
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;">
+        <div style="background:#16213e;border-radius:12px;padding:30px;max-width:500px;width:90%;max-height:85vh;overflow-y:auto;margin:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                <h2 style="margin:0;">{{ tr.help_gm.title }}</h2>
+                <span onclick="toggleHelp()" style="cursor:pointer;font-size:28px;color:#888;">&times;</span>
+            </div>
+            <div style="margin-bottom:14px;"><strong>{{ tr.help_gm.step1_title }}</strong><br>{{ tr.help_gm.step1_desc }}</div>
+            <div style="margin-bottom:14px;"><strong>{{ tr.help_gm.step2_title }}</strong><br>{{ tr.help_gm.step2_desc }}</div>
+            <div style="margin-bottom:14px;"><strong>{{ tr.help_gm.step3_title }}</strong><br>{{ tr.help_gm.step3_desc }}</div>
+            <div style="margin-bottom:14px;"><strong>{{ tr.help_gm.step4_title }}</strong><br>{{ tr.help_gm.step4_desc }}</div>
+            <div style="margin-bottom:14px;"><strong>{{ tr.help_gm.step5_title }}</strong><br>{{ tr.help_gm.step5_desc }}</div>
+            <div style="margin-bottom:16px;"><strong>{{ tr.help_gm.step6_title }}</strong><br>{{ tr.help_gm.step6_desc }}</div>
+            <button class="btn btn-primary" onclick="toggleHelp()" style="width:100%;padding:12px;">{{ tr.help.close }}</button>
+        </div>
     </div>
 
     <!-- Toast -->
@@ -574,6 +592,11 @@
                     }
                 }
             }
+        }
+
+        function toggleHelp() {
+            const m = document.getElementById('help-modal');
+            m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
         }
 
         function switchLanguage(lang) {
