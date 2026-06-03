@@ -142,6 +142,14 @@
         "save": "Opslaan",
         "coming_soon": "Binnenkort meer spelmodi..."
     },
+    "notify": {
+        "title": "\ud83d\udd14 Meldingen",
+        "enable": "Schakel bureaubladmeldingen in",
+        "game_started": "\ud83c\udfae Spel gestart",
+        "was_hit": "\ud83d\udca5 Ik ben geraakt door een bom",
+        "bombs_added": "\ud83d\udca3 Bommen toegevoegd door timer",
+        "close": "Sluiten"
+    },
     "help": {
         "title": "\u2753 Hoe te Spelen",
         "close": "Sluiten"
