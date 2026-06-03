@@ -366,6 +366,7 @@
             </div>
             <div class="team-actions">
                 <button class="btn btn-primary btn-small" onclick="quickRedeem()">🔑 {{ tr.action.code.redeem }}</button>
+                <button class="btn btn-small" onclick="copyTeamUrl()" style="font-size:12px;padding:6px 10px;" title="Copy team URL">📋</button>
                 <button class="btn btn-small" onclick="toggleHelp()" style="font-size:14px;padding:6px 10px;">❓</button>
                 <select class="lang-select" id="lang-select" onchange="switchLanguage(this.value)">
                     <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
@@ -410,6 +411,7 @@
             <div style="margin-bottom:16px;"><strong>{{ tr.help_team.step3_title }}</strong><br>{{ tr.help_team.step3_desc }}</div>
             <div style="margin-bottom:16px;"><strong>{{ tr.help_team.step4_title }}</strong><br>{{ tr.help_team.step4_desc }}</div>
             <div style="margin-bottom:16px;"><strong>{{ tr.help_team.step5_title }}</strong><br>{{ tr.help_team.step5_desc }}</div>
+            <div style="margin-bottom:16px;padding:10px;background:#0f3460;border-radius:6px;font-size:14px;">{{ tr.help_team.bookmark }}</div>
             <button class="btn btn-primary" onclick="toggleHelp()" style="width:100%;padding:12px;">{{ tr.help.close }}</button>
         </div>
     </div>
@@ -1020,6 +1022,15 @@
         function toggleHelp() {
             const m = document.getElementById('help-modal');
             m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        function copyTeamUrl() {
+            const url = window.location.href.split('?')[0];
+            navigator.clipboard.writeText(url).then(() => {
+                showToast('📋 URL copied!', 'success');
+            }).catch(() => {
+                showToast(_('error.fetch_prefix') + 'Failed to copy', 'error');
+            });
         }
 
         function quickRedeem() {
