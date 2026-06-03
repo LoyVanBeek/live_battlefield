@@ -1105,6 +1105,11 @@
                 sendNotify(_('notify.title_game_started'), _('notify.game_started'));
             }
 
+            // Game resumed after pause
+            if (localStorage.getItem('notify_game_started') !== 'false' && curS === 'started' && prevState.pu && prevState.pu.length > 0 && (!data.pu || data.pu.length === 0)) {
+                sendNotify(_('notify.title_game_resumed'), _('notify.game_started'));
+            }
+
             // Bombs added by timer
             if (localStorage.getItem('notify_bombs_added') !== 'false' && curS === 'started') {
                 const prevBombs = prevState.t ? prevState.t.b : 0;

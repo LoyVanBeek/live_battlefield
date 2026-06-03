@@ -150,6 +150,7 @@
         "bombs_added": "\ud83d\udca3 Bombs added by timer",
         "close": "Close",
         "title_game_started": "\ud83c\udfae Game Started!",
+        "title_game_resumed": "\u25b6\ufe0f Game Resumed!",
         "title_bombs_added": "\ud83d\udca3 +{n} bombs",
         "title_hit": "\ud83d\udca5 Hit by {color}!"
     },
