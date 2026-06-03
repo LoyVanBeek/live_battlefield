@@ -367,6 +367,7 @@
             <div class="team-actions">
                 <button class="btn btn-primary btn-small" onclick="quickRedeem()">🔑 {{ tr.action.code.redeem }}</button>
                 <button class="btn btn-small" onclick="copyTeamUrl()" style="font-size:12px;padding:6px 10px;" title="Copy team URL">📋</button>
+                <button class="btn btn-small" onclick="shareWhatsApp()" style="font-size:14px;padding:6px 8px;background:#25D366;color:white;" title="Share via WhatsApp">💬</button>
                 <button class="btn btn-small" onclick="toggleHelp()" style="font-size:14px;padding:6px 10px;">❓</button>
                 <select class="lang-select" id="lang-select" onchange="switchLanguage(this.value)">
                     <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
@@ -1031,6 +1032,11 @@
             }).catch(() => {
                 showToast(_('error.fetch_prefix') + 'Failed to copy', 'error');
             });
+        }
+
+        function shareWhatsApp() {
+            const url = encodeURIComponent(window.location.href.split('?')[0]);
+            window.open('https://wa.me/?text=' + url, '_blank');
         }
 
         function quickRedeem() {
