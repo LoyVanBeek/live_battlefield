@@ -1115,12 +1115,12 @@
                 }
             }
 
-            // You were hit (check my public board — attacker marks on my grid)
+            // You were hit (only when a ship was actually hit — not on misses)
             if (localStorage.getItem('notify_was_hit') !== 'false' && curS === 'started' && prevState.t && data.t) {
-                const prevHits = prevState.t.g ? prevState.t.g.flat().filter(c => c.s === 'h' || c.s === 'm').length : 0;
-                const curHits = data.t.g ? data.t.g.flat().filter(c => c.s === 'h' || c.s === 'm').length : 0;
+                const prevHits = prevState.t.g ? prevState.t.g.flat().filter(c => c.s === 'h').length : 0;
+                const curHits = data.t.g ? data.t.g.flat().filter(c => c.s === 'h').length : 0;
                 if (curHits > prevHits) {
-                    sendNotify('💥 You were hit!', _('help_team.step2_desc'));
+                    sendNotify('💥 Ship hit!', _('help_team.step2_desc'));
                 }
             }
 
