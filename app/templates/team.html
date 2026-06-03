@@ -1102,7 +1102,7 @@
 
             // Game started
             if (localStorage.getItem('notify_game_started') !== 'false' && prevS !== 'started' && curS === 'started') {
-                sendNotify('🎮 ' + _('status.started'), _('help_team.step2_desc'));
+                sendNotify('🎮 ' + _('status.started'), _('notify.game_started'));
             }
 
             // Bombs added by timer
@@ -1111,7 +1111,7 @@
                 const curBombs = data.t ? data.t.b : 0;
                 if (curBombs > prevBombs) {
                     const diff = curBombs - prevBombs;
-                    sendNotify('💣 +' + diff + ' bombs', _('help_team.step4_desc'));
+                    sendNotify('💣 +' + diff + ' bombs', _('notify.bombs_added'));
                 }
             }
 
@@ -1120,7 +1120,7 @@
                 const prevHits = prevState.t.g ? prevState.t.g.flat().filter(c => c.s === 'h').length : 0;
                 const curHits = data.t.g ? data.t.g.flat().filter(c => c.s === 'h').length : 0;
                 if (curHits > prevHits) {
-                    sendNotify('💥 Ship hit!', _('help_team.step2_desc'));
+                    sendNotify('💥 Ship hit!', _('notify.was_hit'));
                 }
             }
 
