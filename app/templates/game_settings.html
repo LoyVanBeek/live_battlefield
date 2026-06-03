@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ current_lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Battlefield - Game Settings</title>
+    <title>{{ tr.settings.title }}</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -111,39 +111,45 @@
 </head>
 <body>
     <div class="container">
-        <a class="nav-link" id="back-link">← Back to Game Master</a>
-        <h1>⚙️ Game Settings</h1>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+            <a class="nav-link" id="back-link" style="margin-bottom:0;">{{ tr.settings.back }}</a>
+            <select onchange="switchLanguage(this.value)" style="padding:6px 10px;font-size:13px;border:2px solid #0f3460;border-radius:5px;background:#1a1a2e;color:#eee;cursor:pointer;">
+                <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
+                <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>{{ tr.lang.nl }}</option>
+            </select>
+        </div>
+        <h1>{{ tr.settings.title }}</h1>
 
         <div class="modes-grid">
             <!-- Bomb Drip -->
             <div class="mode-card" id="card-bomb-drip">
-                <h3>💧 Bomb Drip</h3>
-                <p class="description">Automatically give each team bombs every N minutes while the game is running.</p>
+                <h3>{{ tr.settings.bomb_drip }}</h3>
+                <p class="description">{{ tr.settings.bomb_drip_desc }}</p>
                 <div class="mode-controls">
                     <label>
                         <input type="checkbox" id="drip-enabled">
-                        Enable
+                        {{ tr.settings.enable }}
                     </label>
                     <label>
                         <input type="number" id="drip-bombs" value="1" min="1">
-                        bombs every
+                        {{ tr.settings.bombs_every }}
                     </label>
                     <label>
                         <input type="number" id="drip-minutes" value="1" min="1">
-                        minutes
+                        {{ tr.settings.minutes }}
                     </label>
                     <label>
                         <input type="number" id="drip-max" value="100" min="1">
-                        max bombs
+                        {{ tr.settings.max_bombs }}
                     </label>
-                    <button class="btn btn-primary" onclick="saveBombDrip()">Save</button>
+                    <button class="btn btn-primary" onclick="saveBombDrip()">{{ tr.settings.save }}</button>
                 </div>
             </div>
 
             <!-- Placeholder for future modes -->
             <div class="coming-soon">
                 <p style="font-size: 24px; margin-bottom: 10px;">➕</p>
-                <p>More game modes coming soon...</p>
+                <p>{{ tr.settings.coming_soon }}</p>
             </div>
         </div>
     </div>
@@ -151,6 +157,22 @@
     <div id="toast"></div>
 
     <script>
+        const TR = {{ tr_json|safe }};
+        function _(key, params) {
+            let val = TR;
+            for (const part of key.split('.')) {
+                val = val[part];
+                if (val === undefined) return key;
+            }
+            if (typeof val !== 'string') return key;
+            if (params) {
+                for (const [k, v] of Object.entries(params)) {
+                    val = val.replace('{' + k + '}', v);
+                }
+            }
+            return val;
+        }
+
         function getGmToken() {
             const m = window.location.pathname.match(/^\/(game-master|admin)\/([^/]+)/);
             return m ? m[2] : '';
@@ -186,9 +208,13 @@
             if (m) {
                 const link = document.getElementById('back-link');
                 link.href = '/' + m[1] + '/' + m[2];
-                link.textContent = m[1] === 'game-master' ? '← Back to Game Master' : '← Back to Admin Panel';
+                link.textContent = m[1] === 'game-master' ? _('settings.back') : _('settings.back_admin');
             }
         })();
+
+        function switchLanguage(lang) {
+            window.location.href = window.location.pathname + '?lang=' + lang;
+        }
 
         async function loadBombDrip() {
             const state = await apiCall('/api/state');

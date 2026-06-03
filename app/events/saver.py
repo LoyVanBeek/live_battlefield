@@ -14,9 +14,12 @@ from app.events.models import (
     LocationAddedEvent,
     LocationRemovedEvent,
     BombsAddedEvent,
+    TeamRemovedEvent,
     TeamResetEvent,
     GameStartedEvent,
     GameEndedEvent,
+    GamePausedEvent,
+    GameResumedEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,9 +37,12 @@ async def save_event(
         LocationAddedEvent,
         LocationRemovedEvent,
         BombsAddedEvent,
+        TeamRemovedEvent,
         TeamResetEvent,
         GameStartedEvent,
         GameEndedEvent,
+        GamePausedEvent,
+        GameResumedEvent,
     ],
     game_id: uuid.UUID,
 ) -> GameEvent:

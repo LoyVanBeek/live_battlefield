@@ -427,6 +427,30 @@ class BombsAddedEvent:
 
 
 @dataclass
+class TeamRemovedEvent:
+    event_type: EventType = EventType.TEAM_REMOVED
+    color: str = ""
+    success: bool = False
+
+    def apply(self, state: "GameState") -> tuple["GameState", "TeamRemovedEvent"]:
+        color = self.color
+        if color not in state.teams:
+            return state, replace(self, success=False)
+
+        new_teams = {k: v for k, v in state.teams.items() if k != color}
+        new_team_tokens = {k: v for k, v in state.team_tokens.items() if v != color}
+        return replace(state, teams=new_teams, team_tokens=new_team_tokens), replace(self, success=True)
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.TEAM_REMOVED,
+            payload={"color": self.color, "success": self.success},
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
+@dataclass
 class TeamResetEvent:
     event_type: EventType = EventType.TEAM_RESET
     color: str = ""
@@ -515,9 +539,47 @@ class GameEndedEvent:
         )
 
 
+@dataclass
+class GamePausedEvent:
+    event_type: EventType = EventType.GAME_PAUSED
+    duration_minutes: int = 0
+    paused_until: str = ""
+
+    def apply(self, state: "GameState") -> tuple["GameState", "GamePausedEvent"]:
+        return state, self
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.GAME_PAUSED,
+            payload={
+                "duration_minutes": self.duration_minutes,
+                "paused_until": self.paused_until,
+            },
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
+@dataclass
+class GameResumedEvent:
+    event_type: EventType = EventType.GAME_RESUMED
+
+    def apply(self, state: "GameState") -> tuple["GameState", "GameResumedEvent"]:
+        return state, self
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.GAME_RESUMED,
+            payload={},
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
 AnyEvent = Union[
     "TeamJoinedEvent",
     "TeamRenamedEvent",
+    "TeamRemovedEvent",
     "ShipPlacedEvent",
     "ShipRemovedEvent",
     "BombThrownEvent",
@@ -528,4 +590,6 @@ AnyEvent = Union[
     "TeamResetEvent",
     "GameStartedEvent",
     "GameEndedEvent",
+    "GamePausedEvent",
+    "GameResumedEvent",
 ]

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Battlefield - Game Master Panel</title>
+    <title>{{ tr.page.gm_title }}</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -18,10 +18,10 @@
         h3 { color: #00d9ff; margin-bottom: 10px; }
         .container { max-width: 1600px; margin: 0 auto; }
         .btn {
-            padding: 10px 20px;
-            font-size: 14px;
+            padding: 8px 14px;
+            font-size: 12px;
             border: none;
-            border-radius: 5px;
+            border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
             transition: all 0.2s;
@@ -52,6 +52,7 @@
             font-weight: bold;
         }
         .status-bar .status.started { color: #4caf50; }
+        .status-bar .status.paused { color: #ff9800; }
         .status-bar .status.ended { color: #f44336; }
         .status-bar .status.waiting { color: #ff9800; }
         .status-bar .buttons { display: flex; gap: 10px; align-items: center; }
@@ -81,6 +82,11 @@
         .invite-btn-wrapper .invite-btn:disabled {
             opacity: 0.4;
             cursor: not-allowed;
+        }
+        .section-heading {
+            color: #00d9ff;
+            margin-bottom: 10px;
+            font-size: 16px;
         }
         .invite-btn-wrapper .invite-tooltip {
             visibility: hidden;
@@ -160,12 +166,12 @@
         /* Teams Grid */
         .teams-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 10px;
         }
         .team-card {
             background: #0f3460;
-            padding: 15px;
+            padding: 10px;
             border-radius: 8px;
         }
         .team-card-header {
@@ -180,7 +186,7 @@
             border-radius: 50%;
             display: inline-block;
         }
-        .team-name { font-size: 18px; font-weight: bold; }
+        .team-name { font-size: 14px; font-weight: bold; }
         .ai-badge {
             margin-left: 8px;
             background: #6366f1;
@@ -194,25 +200,25 @@
             display: flex;
             gap: 15px;
             margin-bottom: 10px;
-            font-size: 14px;
+            font-size: 12px;
             color: #aaa;
         }
         .team-stats span { display: flex; align-items: center; gap: 5px; }
         .team-board img { width: 100%; border-radius: 4px; }
         .team-board-grid {
             display: inline-grid;
-            grid-template-columns: 20px repeat(10, 20px);
-            grid-template-rows: 20px repeat(10, 20px);
+            grid-template-columns: 14px repeat(10, 14px);
+            grid-template-rows: 14px repeat(10, 14px);
             background: white;
             border: 1px solid #333;
-            margin: 10px 0;
+            margin: 6px 0;
             /* Fixed dimensions to prevent layout shifts */
-            width: 222px;  /* 1px border + 11 header + 10*20 cells */
-            height: 222px;
+            width: 156px;  /* 2px border + 11*14 cells */
+            height: 156px;
         }
         .team-board-cell {
-            width: 20px;
-            height: 20px;
+            width: 14px;
+            height: 14px;
             border: 1px solid #ccc;
             display: flex;
             align-items: center;
@@ -235,13 +241,14 @@
         .team-play-link {
             display: block;
             text-align: center;
-            margin-top: 10px;
-            padding: 8px;
+            margin-top: 6px;
+            padding: 5px;
             background: #00d9ff;
             color: #1a1a2e;
             text-decoration: none;
-            border-radius: 5px;
+            border-radius: 4px;
             font-weight: bold;
+            font-size: 12px;
         }
         .team-play-link:hover { background: #00b8d4; }
         .no-teams { text-align: center; color: #888; padding: 40px; }
@@ -269,100 +276,159 @@
 
         /* Loading */
         .loading { opacity: 0.5; pointer-events: none; }
+
+        /* Pause Banner */
+        .pause-banner {
+            background: #e65100;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .pause-banner.active { display: flex; }
+        .pause-banner .pause-countdown { font-family: monospace; font-size: 18px; }
+
+        /* Pause Controls */
+        .pause-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .pause-controls select, .pause-controls input {
+            padding: 8px;
+            font-size: 14px;
+            border-radius: 5px;
+            border: 2px solid #0f3460;
+            background: #1a1a2e;
+            color: #eee;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🕵️ Game Master Panel</h1>
+        <h1>🕵️ <span id="game-name">{{ game_name }}</span></h1>
         
         <!-- Navigation -->
     <div class="nav-links">
-        <a href="/map">🗺️ Map</a>
-        <a href="/game-master/{{ gm_token }}/events">📊 Events Timeline</a>
-        <a href="/game-master/{{ gm_token }}/locations-secret">📍 Locations</a>
-        <a href="/game-master/{{ gm_token }}/game-settings">⚙️ Game Settings</a>
-        <div class="invite-btn-wrapper" id="invite-btn-wrapper">
-            <button class="invite-btn" id="btn-copy-invite" onclick="copyInviteUrl()">🔗 Invite</button>
-            <span class="invite-tooltip" id="invite-tooltip">Game has already started — no more players can join</span>
+        <a href="/map">{{ tr.gm.nav_map }}</a>
+        <a href="/game-master/{{ gm_token }}/events">{{ tr.gm.nav_events }}</a>
+        <a href="/game-master/{{ gm_token }}/locations-secret">{{ tr.gm.nav_locations }}</a>
+        <a href="/game-master/{{ gm_token }}/game-settings">{{ tr.gm.nav_settings }}</a>
+        <div style="display:flex;gap:10px;align-items:center;margin-left:auto;">
+            <div class="invite-btn-wrapper" id="invite-btn-wrapper">
+                <button class="invite-btn" id="btn-copy-invite" onclick="copyInviteUrl()">{{ tr.gm.nav_invite }}</button>
+                <span class="invite-tooltip" id="invite-tooltip">Game has already started — no more players can join</span>
+            </div>
+            <select class="lang-select" id="lang-select" onchange="switchLanguage(this.value)" style="padding:6px 10px;font-size:13px;border:2px solid #0f3460;border-radius:5px;background:#1a1a2e;color:#eee;cursor:pointer;">
+                <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
+                <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>{{ tr.lang.nl }}</option>
+            </select>
         </div>
     </div>
 
         <!-- Game Status Bar -->
         <div class="status-bar">
             <div>
-                <span class="status waiting" id="game-status">⏳ WAITING</span>
-                <span class="locations" id="location-progress">0 locations</span>
+                <span class="status waiting" id="game-status">{{ tr.gm.status_waiting }}</span>
+                <span class="locations" id="location-progress">0 {{ tr.gm.locations }}</span>
             </div>
             <div class="buttons">
-                <button class="btn btn-success" id="btn-start" onclick="startGame()">Start Game</button>
-                <button class="btn btn-danger" id="btn-end" onclick="endGame()">End Game</button>
-                <button class="btn btn-primary" id="btn-new" onclick="startNewGame()">Start New Game</button>
+                <button class="btn btn-success" id="btn-start" onclick="startGame()">{{ tr.gm.start_game }}</button>
+                <button class="btn btn-danger" id="btn-end" onclick="endGame()">{{ tr.gm.end_game }}</button>
+                <select id="pause-duration" style="padding:8px;font-size:13px;border-radius:5px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
+                    <option value="0">{{ tr.gm.pause_indefinite }}</option>
+                    <option value="1">1m</option>
+                    <option value="5" selected>5m</option>
+                    <option value="10">10m</option>
+                    <option value="15">15m</option>
+                    <option value="30">30m</option>
+                    <option value="60">1h</option>
+                </select>
+                <button class="btn btn-warning" onclick="pauseGame()" id="btn-pause">{{ tr.gm.pause }}</button>
+                <button class="btn btn-success" onclick="resumeGame()" id="btn-resume" style="display:none">{{ tr.gm.resume }}</button>
             </div>
+        </div>
+
+        <!-- Pause Banner -->
+        <div class="pause-banner" id="pause-banner">
+            <span>{{ tr.gm.banner_paused }}</span>
+            <span id="pause-resume-text">{{ tr.gm.banner_resumes }} <span class="pause-countdown" id="pause-countdown">--:--</span></span>
+            <button class="btn btn-success" onclick="resumeGame()">{{ tr.gm.banner_resume_now }}</button>
         </div>
 
         <!-- Public Boards -->
         <div class="section">
-            <h2>📺 All Public Boards</h2>
+            <h2>{{ tr.gm.public_boards }}</h2>
             <div class="public-boards-grid" id="public-boards">
             </div>
         </div>
 
         <!-- Teams -->
         <div class="section">
-            <h2>🚢 Teams</h2>
-            
-            <!-- Join Team -->
-            <div style="margin-bottom: 20px; padding: 15px; background: #0f3460; border-radius: 8px;">
-                <h3 style="margin-bottom: 10px;">➕ Join Team</h3>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                    <select id="join-color" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
-                        <option value="">Select color...</option>
-                    </select>
-                    <input type="text" id="join-name" placeholder="Team name" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
-                    <button class="btn btn-success" onclick="joinTeam()">Join</button>
-                </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:15px;">
+                <h2 style="margin:0;">{{ tr.gm.teams }}</h2>
+                <button class="btn btn-primary" id="btn-auto-place-all" onclick="autoPlaceAllShips()">{{ tr.gm.auto_place_ships }}</button>
             </div>
-            
+            <div id="available-teams-section">
+                <div class="section-heading">{{ tr.gm.teams_joinable }}</div>
+                <div class="teams-grid" id="available-teams-grid"></div>
+            </div>
+            <div class="section-heading" style="margin-top:20px;">{{ tr.gm.teams_joined }}</div>
             <div class="teams-grid" id="teams-grid">
             </div>
         </div>
 
         <!-- AI Players -->
         <div class="section">
-            <h2>🤖 AI Players</h2>
+            <h2>{{ tr.gm.ai_heading }}</h2>
             
             <div style="margin-bottom: 15px; padding: 15px; background: #0f3460; border-radius: 8px;">
-                <h3 style="margin-bottom: 10px;">➕ Add AI Player</h3>
+                <h3 style="margin-bottom: 10px;">{{ tr.gm.ai_add_heading }}</h3>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                     <select id="ai-color" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
-                        <option value="">Select color...</option>
+                        <option value="">{{ tr.gm.ai_select_color }}</option>
                     </select>
-                    <input type="text" id="ai-name" placeholder="AI name (optional)" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
-                    <button class="btn btn-primary" onclick="addAI()">Add AI</button>
+                    <input type="text" id="ai-name" placeholder="{{ tr.gm.ai_name_placeholder }}" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                    <button class="btn btn-primary" onclick="addAI()">{{ tr.gm.ai_add }}</button>
                 </div>
             </div>
             
             <div style="margin-bottom: 15px;">
-                <button class="btn btn-warning" onclick="pauseAllAI()">⏸️ Pause All AI</button>
-                <button class="btn btn-success" onclick="resumeAllAI()">▶️ Resume All AI</button>
+                <button class="btn btn-warning" onclick="pauseAllAI()">{{ tr.gm.ai_pause_all }}</button>
+                <button class="btn btn-success" onclick="resumeAllAI()">{{ tr.gm.ai_resume_all }}</button>
             </div>
+
         </div>
 
-        <!-- Reset Buttons -->
-        <div class="section">
-            <h2>🔧 Reset</h2>
-            <div class="reset-buttons">
-                <button class="btn btn-danger" onclick="resetGame()">Reset Game</button>
-                <button class="btn btn-warning" onclick="clearLocations()">Clear Locations</button>
-                <button class="btn btn-danger" onclick="clearDatabase()">Clear Database</button>
-            </div>
-        </div>
     </div>
 
     <!-- Toast -->
     <div id="toast"></div>
 
     <script>
+        const TR = {{ tr_json|safe }};
+        function _(key, params) {
+            let val = TR;
+            for (const part of key.split('.')) {
+                val = val[part];
+                if (val === undefined) return key;
+            }
+            if (typeof val !== 'string') return key;
+            if (params) {
+                for (const [k, v] of Object.entries(params)) {
+                    val = val.replace('{' + k + '}', v);
+                }
+            }
+            return val;
+        }
+
         let gameStatus = 'waiting';
         const TEAM_COLORS_RGB = {
             'red': 'rgb(220, 60, 60)',
@@ -400,9 +466,14 @@
 
         async function renderBoard(containerId, jsonUrl) {
             try {
+                const container = document.getElementById(containerId);
+                if (!container) {
+                    console.warn('Board container not found:', containerId);
+                    return;
+                }
                 const data = await apiCall(jsonUrl);
                 if (!data || data.error) {
-                    document.getElementById(containerId).innerHTML = '<p>' + (data?.error || 'Failed to load board') + '</p>';
+                    container.innerHTML = '<p style="color:#888;font-size:10px;padding:10px;">' + (data?.error || 'No data') + '</p>';
                     return;
                 }
                 updateBoardFromData(containerId, data, true);
@@ -413,12 +484,16 @@
 
         function updateBoardFromData(containerId, data, includeShips) {
             const container = document.getElementById(containerId);
+            if (!container) {
+                console.warn('updateBoardFromData: container not found', containerId);
+                return;
+            }
             const boardColor = data.team ? data.team.color : 'gray';
             
             // Check if we already have a grid for this container
             let grid = boardGridCache.get(containerId);
-            if (!grid) {
-                // Create new grid
+            if (!grid || !grid.parentNode) {
+                boardGridCache.delete(containerId);
                 grid = document.createElement('div');
                 grid.className = 'team-board-grid';
                 grid.dataset.containerId = containerId; // Store reference
@@ -501,6 +576,10 @@
             }
         }
 
+        function switchLanguage(lang) {
+            window.location.href = window.location.pathname + '?lang=' + lang;
+        }
+
         function getGmToken() {
             const m = window.location.pathname.match(/^\/game-master\/([^/]+)/);
             if (m) return m[1];
@@ -542,27 +621,35 @@
             const statusEl = document.getElementById('game-status');
             const btnStart = document.getElementById('btn-start');
             const btnEnd = document.getElementById('btn-end');
-            const btnNew = document.getElementById('btn-new');
             const inviteBtn = document.getElementById('btn-copy-invite');
             const inviteWrapper = document.getElementById('invite-btn-wrapper');
+            const nameEl = document.getElementById('game-name');
+            if (status.name) nameEl.textContent = status.name;
 
-            if (status.status === 'started') {
-                statusEl.textContent = '🎮 STARTED';
+            const isPaused = status.paused_until && status.paused_until.length > 0;
+            if (status.status === 'started' && isPaused) {
+                statusEl.textContent = _('gm.status_paused');
+                statusEl.className = 'status paused';
+                btnStart.disabled = true;
+                btnEnd.disabled = true;
+                inviteBtn.disabled = true;
+                inviteWrapper.classList.add('disabled');
+            } else if (status.status === 'started') {
+                statusEl.textContent = _('gm.status_started');
                 statusEl.className = 'status started';
                 btnStart.disabled = true;
                 btnEnd.disabled = false;
                 inviteBtn.disabled = true;
                 inviteWrapper.classList.add('disabled');
             } else if (status.status === 'ended') {
-                statusEl.textContent = '🏁 ENDED';
+                statusEl.textContent = _('gm.status_ended');
                 statusEl.className = 'status ended';
                 btnStart.disabled = true;
                 btnEnd.disabled = true;
-                btnNew.disabled = false;
                 inviteBtn.disabled = true;
                 inviteWrapper.classList.add('disabled');
             } else {
-                statusEl.textContent = '⏳ WAITING';
+                statusEl.textContent = _('gm.status_waiting');
                 statusEl.className = 'status waiting';
                 inviteBtn.disabled = false;
                 inviteWrapper.classList.remove('disabled');
@@ -586,11 +673,14 @@
                     btnStart.title = 'Start the game';
                 }
                 btnEnd.disabled = true;
-                btnNew.disabled = true;
             }
 
             document.getElementById('location-progress').textContent = 
-                `${status.locations_placed} locations`;
+                _('gm.locations', {n: status.locations_placed});
+            const autoBtn = document.getElementById('btn-auto-place-all');
+            if (autoBtn) {
+                autoBtn.style.display = gameStatus === 'waiting' ? '' : 'none';
+            }
         }
 
         async function loadPublicBoards() {
@@ -674,20 +764,6 @@
                 inviteBtn.dataset.inviteUrl = window.location.origin + '/join/' + state.invite_token;
             }
 
-            // Populate available colors dropdown (preserve selection)
-            const joinColorSelect = document.getElementById('join-color');
-            const joinSelectedValue = joinColorSelect.value;
-            joinColorSelect.innerHTML = '<option value="">Select color...</option>';
-            if (state.available_colors) {
-                state.available_colors.forEach(color => {
-                    const opt = document.createElement('option');
-                    opt.value = color;
-                    opt.textContent = color.toUpperCase();
-                    joinColorSelect.appendChild(opt);
-                });
-            }
-            joinColorSelect.value = joinSelectedValue;
-
             // Populate AI color dropdown (preserve selection)
             const aiColorSelect = document.getElementById('ai-color');
             const aiSelectedValue = aiColorSelect.value;
@@ -702,29 +778,24 @@
             }
             aiColorSelect.value = aiSelectedValue;
 
-            const grid = document.getElementById('teams-grid');
+            const teamsGrid = document.getElementById('teams-grid');
+            const availGrid = document.getElementById('available-teams-grid');
+            const availSection = document.getElementById('available-teams-section');
+            
+            // Show/hide available teams section based on game status
+            availSection.style.display = gameStatus === 'waiting' ? '' : 'none';
             
             // Clear "Loading..." text on first load
-            if (grid.innerHTML.toLowerCase().includes('loading')) {
-                grid.innerHTML = '';
+            if (teamsGrid.innerHTML.toLowerCase().includes('loading')) {
+                teamsGrid.innerHTML = '';
             }
-            
+
             if ((!state.teams || state.teams.length === 0) && (!state.available_colors || state.available_colors.length === 0)) {
-                grid.innerHTML = '<div class="no-teams">No teams available</div>';
+                teamsGrid.innerHTML = '<div class="no-teams">No teams available</div>';
                 return;
             }
 
-            // Keep track of existing team cards to avoid rebuilding
-            const existingCards = new Set();
-            for (let i = 0; i < grid.children.length; i++) {
-                const child = grid.children[i];
-                const match = child.id && child.id.match(/^team-card-(.+)$/);
-                if (match) {
-                    existingCards.add(match[1]);
-                }
-            }
-
-            // Update or create team cards
+            // Update or create joined team cards
             if (state.teams && state.teams.length > 0) {
                 state.teams.forEach(team => {
                     const cardId = `team-card-${team.color}`;
@@ -737,28 +808,47 @@
                         card = document.createElement('div');
                         card.className = 'team-card';
                         card.id = cardId;
+                        const canRename = gameStatus === 'waiting' && !team.is_ai;
                         card.innerHTML = `
                             <div class="team-card-header">
                                 <span class="team-name">
                                     <span class="team-color-dot" style="background: ${team.color}"></span>
-                                    <span class="team-name-text">${team.name}</span>
+                                    <span class="team-name-text" id="team-name-label-${team.color}" style="${canRename ? 'cursor:pointer;border-bottom:1px dashed #888;' : ''}">${team.name}</span>
                                     <span class="trophy-icon" id="trophy-${team.color}" style="display:none">🏆</span>
                                     ${aiIndicator}
                                 </span>
+                                ${gameStatus === 'waiting' ? `<span style="margin-left:auto;cursor:pointer;width:20px;height:20px;border-radius:50%;background:#f44336;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;" onclick="event.stopPropagation();removeTeam('${team.color}')" title="Remove team">✕</span>` : ''}
+                                <div class="rename-input-area" id="rename-input-${team.color}" style="display:none; margin-top:6px;">
+                                    <div style="display:flex; gap:6px;">
+                                        <input type="text" id="rename-name-${team.color}" value="${team.name}" maxlength="30" style="flex:1; padding:6px; font-size:13px; border-radius:4px; border:2px solid #0f3460; background:#1a1a2e; color:#eee;" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();renameTeam('${team.color}')}">
+                                        <button class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="renameTeam('${team.color}')">Save</button>
+                                        <button class="btn" style="padding:6px 10px;font-size:12px;background:#555;color:#eee;" onclick="cancelRename('${team.color}')">✕</button>
+                                    </div>
+                                </div>
                             </div>
                             <div class="team-stats">
                                 <span class="team-bombs">💣 <span class="bombs-count">${team.bombs}</span></span>
                                 <span class="team-ships">🚢 <span class="ships-count">${gameStatus === 'waiting' ? team.ships_placed : team.ships_remaining}</span>/${team.total_ships}</span>
                                 <span class="team-sunk">💥 <span class="sunk-count">${team.ships_sunk}</span> sunk</span>
                             </div>
-                            <div class="team-board" id="team-board-${team.color}">
+                            <div class="team-board" id="team-board-${team.color}" style="text-align:center;">
                             </div>
-                            <a href="/team/${team.token}" class="team-play-link">🎮 Play as ${team.color}</a>
-                            <button class="btn btn-primary" style="margin-top: 10px;" onclick="copyTeamUrl('${team.token}', '${team.color}')">📋 Copy URL</button>
-                            <button class="btn btn-success" style="margin-top: 10px;" onclick="addBombs('${team.color}')" id="add-bombs-${team.color}">💣 +5 Bombs</button>
+                            <a href="/team/${team.token}" class="team-play-link">${_('gm.play_as', {color: team.color})}</a>
+                            <div style="display:flex;gap:6px;margin-top:6px;">
+                                <button class="btn btn-primary" style="flex:1;" onclick="copyTeamUrl('${team.token}', '${team.color}')">📋 Copy</button>
+                                <button class="btn btn-success" style="flex:1;" onclick="addBombs('${team.color}')" id="add-bombs-${team.color}">💣 +5</button>
+                            </div>
                             <div class="ai-buttons" id="ai-buttons-${team.color}"></div>
                         `;
-                        grid.appendChild(card);
+                        if (canRename) {
+                            card.querySelector('#team-name-label-' + team.color).addEventListener('click', function() {
+                                document.querySelectorAll('.rename-input-area').forEach(el => el.style.display = 'none');
+                                const r = document.getElementById('rename-input-' + team.color);
+                                r.style.display = 'flex';
+                                setTimeout(() => document.getElementById('rename-name-' + team.color).focus(), 100);
+                            });
+                        }
+                        teamsGrid.appendChild(card);
                     } else {
                         // Update existing card content
                         const nameElement = card.querySelector('.team-name-text');
@@ -801,8 +891,8 @@
                         if (aiButtonsContainer) {
                             if (team.is_ai) {
                                 aiButtonsContainer.innerHTML = `
-                                    <button class="btn btn-primary" style="margin-top: 5px; margin-right: 5px;" onclick="triggerAIMove('${team.color}')">⚡ Next Move</button>
-                                    <button class="btn btn-danger" style="margin-top: 5px;" onclick="removeAI('${team.color}')">🤖 Remove AI</button>
+                                    <button class="btn btn-primary" style="margin-top: 4px; margin-right: 4px;font-size:11px;" onclick="triggerAIMove('${team.color}')">⚡ Move</button>
+                                    <button class="btn btn-danger" style="margin-top: 4px;font-size:11px;" onclick="removeAI('${team.color}')">✕ AI</button>
                                 `;
                             } else {
                                 aiButtonsContainer.innerHTML = '';
@@ -833,13 +923,14 @@
             availableColors.forEach(color => {
                 const cardId = `team-card-available-${color}`;
                 let card = document.getElementById(cardId);
+                const isClickable = gameStatus !== 'started' && gameStatus !== 'ended';
                 
                 if (!card) {
-                    // Create new available team card
                     card = document.createElement('div');
                     card.className = 'team-card';
                     card.id = cardId;
-                    card.style.opacity = '0.6';
+                    card.style.background = getRgba(color, 0.25);
+                    card.style.cursor = isClickable ? 'pointer' : 'default';
                     card.innerHTML = `
                         <div class="team-card-header">
                             <span class="team-name">
@@ -850,9 +941,25 @@
                         <div class="team-stats">
                             <span>Not joined</span>
                         </div>
-                        <p style="color: #888; text-align: center; padding: 20px;">Select "${color.toUpperCase()}" above to join</p>
+                        <div class="join-input-area" id="join-input-${color}" style="display:none; padding: 10px 0;">
+                            <div style="display:flex; gap:8px;">
+                                <input type="text" id="join-name-${color}" placeholder="Team name" style="flex:1; padding:8px; font-size:14px; border-radius:5px; border:2px solid #0f3460; background:#1a1a2e; color:#eee;" autocomplete="off" oninput="document.getElementById('join-btn-${color}').style.opacity=this.value.trim()?'1':'0.4'" onkeydown="if(event.key==='Enter'){event.preventDefault();joinTeam('${color}')}">
+                                <button class="btn btn-success" id="join-btn-${color}" style="opacity:0.4" onclick="joinTeam('${color}')">Join</button>
+                            </div>
+                        </div>
+                        <p style="color: #888; text-align: center; padding: 20px;" id="join-hint-${color}">${isClickable ? 'Click to join' : ''}</p>
                     `;
-                    grid.appendChild(card);
+                    if (isClickable) {
+                        card.addEventListener('click', function(e) {
+                            if (e.target.closest('.join-input-area') || e.target.closest('button')) return;
+                            document.querySelectorAll('.join-input-area').forEach(el => el.style.display = 'none');
+                            document.querySelectorAll('[id^="join-hint-"]').forEach(el => el.style.display = '');
+                            document.getElementById('join-input-' + color).style.display = 'block';
+                            document.getElementById('join-hint-' + color).style.display = 'none';
+                            setTimeout(() => document.getElementById('join-name-' + color).focus(), 100);
+                        });
+                    }
+                    availGrid.appendChild(card);
                 }
             });
 
@@ -860,23 +967,23 @@
             const currentTeams = new Set((state.teams || []).map(t => t.color));
             const currentAvailable = new Set(availableColors);
             
-            for (let i = grid.children.length - 1; i >= 0; i--) {
-                const child = grid.children[i];
+            for (let i = teamsGrid.children.length - 1; i >= 0; i--) {
+                const child = teamsGrid.children[i];
                 const match = child.id && child.id.match(/^team-card-(.+)$/);
                 if (match) {
-                    const idParts = match[1].split('-');
-                    if (idParts[0] === 'available') {
-                        // This is an available team card
-                        const color = idParts[1];
-                        if (!currentAvailable.has(color)) {
-                            grid.removeChild(child);
-                        }
-                    } else {
-                        // This is a joined team card
-                        const color = match[1];
-                        if (!currentTeams.has(color)) {
-                            grid.removeChild(child);
-                        }
+                    const color = match[1];
+                    if (!currentTeams.has(color)) {
+                        teamsGrid.removeChild(child);
+                    }
+                }
+            }
+            for (let i = availGrid.children.length - 1; i >= 0; i--) {
+                const child = availGrid.children[i];
+                const match = child.id && child.id.match(/^team-card-available-(.+)$/);
+                if (match) {
+                    const color = match[1];
+                    if (!currentAvailable.has(color)) {
+                        availGrid.removeChild(child);
                     }
                 }
             }
@@ -909,14 +1016,29 @@
             });
         }
 
-        async function joinTeam() {
-            const color = document.getElementById('join-color').value;
-            const name = document.getElementById('join-name').value || color;
-            
-            if (!color) {
-                showToast('Select a color first!', 'error');
-                return;
+        function cancelRename(color) {
+            document.getElementById('rename-input-' + color).style.display = 'none';
+        }
+
+        async function renameTeam(color) {
+            const input = document.getElementById('rename-name-' + color);
+            const newName = input ? input.value.trim() : '';
+            if (!newName) return;
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: color,
+                command: 'rename',
+                args: { name: newName }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success) {
+                document.getElementById('rename-input-' + color).style.display = 'none';
             }
+            loadTeams();
+        }
+
+        async function joinTeam(color) {
+            const nameInput = document.getElementById('join-name-' + color);
+            const name = (nameInput ? nameInput.value : '') || color;
             
             const result = await apiCall('/api/execute', 'POST', {
                 team_color: color,
@@ -924,9 +1046,34 @@
                 args: { name: name }
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            if (result.success) {
-                document.getElementById('join-name').value = '';
+            loadTeams();
+        }
+
+        async function autoPlaceAllShips() {
+            if (!confirm('Auto-place ships for all teams that have not yet placed all ships?')) return;
+            const state = await apiCall('/api/state');
+            if (!state || !state.teams) return;
+            const incomplete = state.teams.filter(t => !t.has_all_ships);
+            if (incomplete.length === 0) {
+                showToast('All teams already have all ships placed!', 'success');
+                return;
             }
+            showToast(`Placing ships for ${incomplete.length} team(s)...`, 'success');
+            for (const team of incomplete) {
+                const result = await apiCall('/api/quick/place_all_ships', 'POST', { team_color: team.color });
+                if (result && result.success) {
+                    showToast(`✅ ${team.name} (${team.color}): ${result.message}`, 'success');
+                } else {
+                    showToast(`❌ ${team.name} (${team.color}): ${result ? result.message : 'Error'}`, 'error');
+                }
+            }
+            loadTeams();
+        }
+
+        async function removeTeam(color) {
+            if (!confirm(`Remove team ${color}? This will delete all their ships and free the color.`)) return;
+            const result = await apiCall('/api/quick/remove-team', 'POST', { team_color: color });
+            showToast(result.message, result.success ? 'success' : 'error');
             loadTeams();
         }
 
@@ -1004,29 +1151,86 @@
             loadTeams();
         }
 
-        async function startNewGame() {
-            if (!confirm('Start a new game? This will clear ALL data (teams, locations, events).')) return;
-            if (!confirm('Are you REALLY sure? Everything will be deleted!')) return;
-            const result = await apiCall('/api/quick/clear-database', 'POST', {});
-            showToast(result.message, result.success ? 'success' : 'error');
-            if (result.success) {
-                setTimeout(() => { window.location.reload(); }, 1000);
+        // --- Game Pause UI ---
+        let pausedUntil = null;
+        let pauseTimerInterval = null;
+
+        function updatePauseBanner() {
+            const banner = document.getElementById('pause-banner');
+            const countdownEl = document.getElementById('pause-countdown');
+            const resumeText = document.getElementById('pause-resume-text');
+            const btnPause = document.getElementById('btn-pause');
+            const btnResume = document.getElementById('btn-resume');
+
+            if (!pausedUntil) {
+                banner.classList.remove('active');
+                btnPause.style.display = '';
+                btnResume.style.display = 'none';
+                return;
+            }
+
+            const now = new Date();
+            const remaining = Math.max(0, pausedUntil - now);
+
+            if (remaining <= 0) {
+                pausedUntil = null;
+                banner.classList.remove('active');
+                btnPause.style.display = '';
+                btnResume.style.display = 'none';
+                return;
+            }
+
+            banner.classList.add('active');
+            btnPause.style.display = 'none';
+            btnResume.style.display = '';
+
+            const INDEFINITE_THRESHOLD = 365 * 24 * 60 * 60 * 1000;
+            if (remaining > INDEFINITE_THRESHOLD) {
+                resumeText.style.display = 'none';
+            } else {
+                resumeText.style.display = '';
+                const minutes = Math.floor(remaining / 60000);
+                const seconds = Math.floor((remaining % 60000) / 1000);
+                countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
             }
         }
 
-        // Handle Enter key for join form
-        document.getElementById('join-name').addEventListener('keydown', function(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                joinTeam();
+        async function pauseGame() {
+            const duration = parseInt(document.getElementById('pause-duration').value);
+            const result = await apiCall('/api/quick/pause-game', 'POST', { duration_minutes: duration });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success && result.paused_until) {
+                pausedUntil = new Date(result.paused_until);
+                updatePauseBanner();
             }
-        });
-        document.getElementById('join-color').addEventListener('keydown', function(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                joinTeam();
+            loadGameStatus();
+        }
+
+        async function resumeGame() {
+            const result = await apiCall('/api/quick/resume-game', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success) {
+                pausedUntil = null;
+                updatePauseBanner();
             }
-        });
+            loadGameStatus();
+        }
+
+        // Incorporate pause info into loadGameStatus
+        const origLoadGameStatus = loadGameStatus;
+        loadGameStatus = async function() {
+            await origLoadGameStatus();
+            const status = await apiCall('/api/game-status');
+            if (status && status.paused_until) {
+                pausedUntil = new Date(status.paused_until);
+            } else {
+                pausedUntil = null;
+            }
+            updatePauseBanner();
+        };
+
+        // Start pause countdown timer
+        pauseTimerInterval = setInterval(updatePauseBanner, 1000);
 
         // Initial load
         loadGameStatus();

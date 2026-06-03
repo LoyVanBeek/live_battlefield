@@ -1,30 +1,95 @@
 {
     "page": {
         "title": "Live Battlefield - Team Play",
-        "heading": "\ud83c\udfae Team Play"
+        "heading": "\ud83c\udfae Team Play",
+        "gm_title": "Game Master Panel"
     },
     "team": {
         "not_joined": "{color} (not joined)",
         "bombs": "\ud83d\udca3",
         "ships": "\ud83d\udea2",
         "sunk": "\ud83d\udca5 sunk",
-        "renamed": "Renamed to {name}!"
+        "renamed": "Renamed to {name}!",
+        "stats": "\ud83d\udca3 {bombs} \u00b7 \ud83d\udea2 {ships}/{total} \u00b7 \ud83d\udca5 {sunk} sunk"
     },
     "status": {
         "started": "\ud83c\udfae Game Started - Bombs away!",
         "ended": "\ud83c\udfc1 Game Ended",
         "waiting": "\u23f3 Waiting to Start",
+        "paused": "\u23f8\ufe0f Paused",
         "loading": "Loading..."
+    },
+    "nav": {
+        "map": "\ud83d\uddfa\ufe0f Map",
+        "events": "\ud83d\udcca Events Timeline",
+        "locations": "\ud83d\udccd Locations",
+        "settings": "\u2699\ufe0f Game Settings",
+        "invite": "\ud83d\udd17 Invite"
     },
     "board": {
         "private": {
             "heading": "\ud83d\udea2 Your Private Board"
         },
         "public": {
-            "heading": "\ud83d\udca5 Public Boards (Opposing Teams)",
+            "heading": "\ud83d\udcfa All Public Boards",
             "team_label": "{name} ({color})",
             "replay_alt": "Replay of {name}'s board"
         }
+    },
+    "gm": {
+        "nav_map": "\ud83d\uddfa\ufe0f Map",
+        "nav_events": "\ud83d\udcca Events",
+        "nav_locations": "\ud83d\udccd Locations",
+        "nav_settings": "\u2699\ufe0f Settings",
+        "nav_invite": "\ud83d\udd17 Invite",
+        "status_started": "\ud83c\udfae STARTED",
+        "status_ended": "\ud83c\udfc1 ENDED",
+        "status_waiting": "\u23f3 WAITING",
+        "status_paused": "\u23f8\ufe0f PAUSED",
+        "start_game": "Start Game",
+        "end_game": "End Game",
+        "pause": "\u23f8\ufe0f Pause",
+        "resume": "\u25b6\ufe0f Resume",
+        "pause_indefinite": "\u221e Indefinite",
+        "pause_min": "{n}m",
+        "pause_hour": "1h",
+        "locations": "{n} locations",
+        "banner_paused": "\u23f8\ufe0f Game Paused",
+        "banner_resumes": "Resumes in",
+        "banner_resume_now": "\u25b6\ufe0f Resume Now",
+        "public_boards": "\ud83d\udcfa All Public Boards",
+        "teams": "\ud83d\udea2 Teams",
+        "teams_joinable": "\u2795 Joinable Teams",
+        "teams_joined": "\ud83d\udea2 Joined Teams",
+        "auto_place_ships": "\ud83d\udea2 Auto-place All Ships",
+        "team_remove_title": "Remove team",
+        "rename_save": "Save",
+        "rename_cancel": "\u2715",
+        "rename_placeholder": "Team name",
+        "available_not_joined": "Not joined",
+        "available_click_to_join": "Click to join",
+        "join_placeholder": "Team name",
+        "join": "Join",
+        "ai_heading": "\ud83e\udd16 AI Players",
+        "ai_add_heading": "\u2795 Add AI Player",
+        "ai_select_color": "Select color...",
+        "ai_name_placeholder": "AI name (optional)",
+        "ai_add": "Add AI",
+        "ai_pause_all": "\u23f8\ufe0f Pause All AI",
+        "ai_resume_all": "\u25b6\ufe0f Resume All AI",
+        "ai_badge": "\ud83e\udd16 AI",
+        "ai_move": "\u26a1 Move",
+        "ai_remove": "\u2715 AI",
+        "copy_url": "\ud83d\udccb Copy",
+        "add_bombs": "\ud83d\udca3 +5",
+        "play_as": "\ud83c\udfae Play as {color}",
+        "copy_url_btn": "\ud83d\udccb Copy URL",
+        "confirm_remove_team": "Remove team {color}? This will delete all their ships and free the color.",
+        "confirm_auto_ships": "Auto-place ships for all teams that have not yet placed all ships?",
+        "confirm_auto_ships_done": "All teams already have all ships placed!",
+        "confirm_auto_ships_started": "Placing ships for {n} team(s)...",
+        "confirm_auto_ships_ok": "\u2705 {name} ({color}): {msg}",
+        "confirm_auto_ships_fail": "\u274c {name} ({color}): {msg}"
     },
     "action": {
         "loading": "Loading actions...",
@@ -64,6 +129,21 @@
         "button": "\ud83d\udca5 Throw Bomb!",
         "cancel": "Cancel"
     },
+    "settings": {
+        "title": "Game Settings",
+        "back": "\u2190 Back to Game Master",
+        "back_admin": "\u2190 Back to Admin Panel",
+        "bomb_drip": "\ud83d\udca7 Bomb Drip",
+        "bomb_drip_desc": "Automatically give each team bombs every N minutes while the game is running.",
+        "enable": "Enable",
+        "bombs_every": "bombs every",
+        "minutes": "minutes",
+        "max_bombs": "max bombs",
+        "save": "Save",
+        "coming_soon": "More game modes coming soon..."
+    },
+    "game_paused": "Game is paused",
+    "game_paused_resumes": "Resumes in {time}",
     "error": {
         "select_target": "Select a target!",
         "enter_coord": "Enter a coordinate!",
@@ -73,6 +153,7 @@
         "game_not_started": "Game is not started!",
         "cannot_bomb_self": "Cannot bomb yourself!",
         "no_bombs": "No bombs left! Redeem codes to get more!",
+        "game_paused": "Game is paused! No actions allowed until the game resumes.",
         "fetch_prefix": "Error: "
     },
     "lang": {

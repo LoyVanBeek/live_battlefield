@@ -4,6 +4,7 @@ from enum import Enum
 class EventType(str, Enum):
     TEAM_JOINED = "team_joined"
     TEAM_RENAMED = "team_renamed"
+    TEAM_REMOVED = "team_removed"
     SHIP_PLACED = "ship_placed"
     SHIP_REMOVED = "ship_removed"
     BOMB_THROWN = "bomb_thrown"
@@ -14,3 +15,5 @@ class EventType(str, Enum):
     TEAM_RESET = "team_reset"
     GAME_STARTED = "game_started"
     GAME_ENDED = "game_ended"
+    GAME_PAUSED = "game_paused"
+    GAME_RESUMED = "game_resumed"

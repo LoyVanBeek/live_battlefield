@@ -77,6 +77,7 @@
         .team-status-badge.started { background: #4caf50; color: white; }
         .team-status-badge.waiting { background: #ff9800; color: white; }
         .team-status-badge.ended { background: #f44336; color: white; }
+        .team-status-badge.paused { background: #e65100; color: white; }
         .team-stats {
             display: flex;
             gap: 20px;
@@ -106,6 +107,24 @@
         .bomb-count-low { color: #ff9800; }
         .bomb-count-empty { color: #f44336; font-weight: bold; }
         .drip-countdown { font-size: 12px; color: #888; margin-left: 6px; }
+
+        /* Pause Banner */
+        .pause-banner {
+            background: #e65100;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-weight: bold;
+            font-size: 16px;
+            text-align: center;
+        }
+        .pause-banner.active { display: flex; }
+        .pause-banner .pause-countdown { font-family: monospace; font-size: 20px; }
 
         /* Board */
         .board-section {
@@ -316,7 +335,13 @@
 </head>
 <body>
     <div class="container">
-        
+
+        <!-- Pause Banner -->
+        <div class="pause-banner" id="pause-banner">
+            <span>⏸️ <span id="pause-text">{{ tr.game_paused }}</span></span>
+            <span id="pause-resume-text"><span>{{ tr.game_paused_resumes }}</span> <span class="pause-countdown" id="pause-countdown">--:--</span></span>
+        </div>
+
         <!-- Team Header (name + status + stats + actions) -->
         <div class="team-header" id="team-header">
             <div class="team-info">
@@ -548,6 +573,40 @@
         }
 
         let maxBombs = 100;
+        let pausedUntil = null;
+
+        function updatePauseBanner() {
+            const banner = document.getElementById('pause-banner');
+            const countdownEl = document.getElementById('pause-countdown');
+            const resumeText = document.getElementById('pause-resume-text');
+
+            if (!pausedUntil) {
+                banner.classList.remove('active');
+                return;
+            }
+
+            const now = new Date();
+            const remaining = Math.max(0, pausedUntil - now);
+
+            if (remaining <= 0) {
+                pausedUntil = null;
+                banner.classList.remove('active');
+                return;
+            }
+
+            banner.classList.add('active');
+
+            const INDEFINITE_THRESHOLD = 365 * 24 * 60 * 60 * 1000;
+            if (remaining > INDEFINITE_THRESHOLD) {
+                resumeText.style.display = 'none';
+            } else {
+                resumeText.style.display = '';
+                const totalSeconds = Math.floor(remaining / 1000);
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+                countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            }
+        }
 
         function updateBombCountDisplay(count) {
             const el = document.getElementById('bomb-count');
@@ -587,9 +646,16 @@
             lastTrickleAt = data.tl ? new Date(data.tl) : null;
             if (data.mb) maxBombs = data.mb;
 
+            // Pause state
+            pausedUntil = data.pu ? new Date(data.pu) : null;
+
             // Game status badge (inline in header)
             var badgeEl = document.getElementById('game-status-badge');
-            if (data.s === 'started') {
+            var isPaused = data.pu && new Date(data.pu) > new Date();
+            if (data.s === 'started' && isPaused) {
+                badgeEl.textContent = _('status.paused');
+                badgeEl.className = 'team-status-badge paused';
+            } else if (data.s === 'started') {
                 badgeEl.textContent = _('status.started');
                 badgeEl.className = 'team-status-badge started';
             } else if (data.s === 'ended') {
@@ -604,6 +670,7 @@
             // Team header
             document.getElementById('team-color-dot').style.background = myTeam.c;
             document.getElementById('team-name').textContent = myTeam.n;
+            document.getElementById('rename-btn').style.display = gameStatus === 'preparing' ? '' : 'none';
             currentBombCount = myTeam.b;
             updateBombCountDisplay(myTeam.b);
             document.getElementById('ship-count').textContent = myTeam.sp;
@@ -698,6 +765,10 @@
                 showToast(_('error.game_not_started'), 'error');
                 return;
             }
+            if (pausedUntil && pausedUntil > new Date()) {
+                showToast(_('error.game_paused'), 'error');
+                return;
+            }
 
             var boardItem = cell.closest('[id^="public-board-item-"]');
             if (!boardItem) return;
@@ -751,6 +822,12 @@
 
             if (gameStatus === 'ended') {
                 actionsEl.innerHTML = '<p>' + _('action.game_ended') + '</p>';
+                shipActionsEl.style.display = 'none';
+                return;
+            }
+
+            if (pausedUntil && pausedUntil > new Date()) {
+                actionsEl.innerHTML = '<div class="action-group"><p style="color:#ff9800;font-weight:bold;font-size:18px;">⏸️ ' + _('error.game_paused') + '</p></div>';
                 shipActionsEl.style.display = 'none';
                 return;
             }
@@ -932,6 +1009,7 @@
 
         // Rename team
         function toggleRename() {
+            if (gameStatus !== 'preparing') return;
             var group = document.getElementById('rename-input-group');
             var input = document.getElementById('rename-input');
             var nameEl = document.getElementById('team-name');
@@ -961,6 +1039,14 @@
             }
         }
 
+        // Click team name to rename (during PREPARING)
+        document.addEventListener('click', function(e) {
+            var nameEl = document.getElementById('team-name');
+            if (e.target === nameEl && gameStatus === 'preparing') {
+                toggleRename();
+            }
+        });
+
         // SSE: pushes state updates when events occur
         var currentES = null;
         function connectSSE() {
@@ -988,6 +1074,8 @@
 
         // Drip countdown: tick every second
         dripCountdownTimer = setInterval(updateDripCountdown, 1000);
+        // Pause countdown: tick every second
+        setInterval(updatePauseBanner, 1000);
 
         // Fetch initial state directly (so page renders even without SSE)
         apiCall('/api/team-state').then(function (data) {

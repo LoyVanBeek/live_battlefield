@@ -198,6 +198,7 @@
                     <input type="number" id="loc-radius" placeholder="Radius" value="2" step="0.1" style="width: 100px;">
                 </div>
                 <button class="btn-add" onclick="addLocations()" style="margin-top: 18px;">Add</button>
+                <button class="btn-remove" onclick="clearAllLocations()" style="margin-top: 18px; height: fit-content;">🗑️ Clear All</button>
             </div>
             <p style="color: #888; font-size: 12px; margin-top: 5px;">Leave count=1 for single location, or set higher for random batch. Or click on the map below to pick a location.</p>
         </div>
@@ -431,6 +432,22 @@
             } catch (e) {
                 console.error('Error adding locations:', e);
                 alert('Error adding locations');
+            }
+        }
+
+        async function clearAllLocations() {
+            if (!confirm('Clear ALL locations? This cannot be undone!')) return;
+            if (!confirm('Are you REALLY sure?')) return;
+            try {
+                const resp = await fetch('/api/quick/clear-locations?gm_token=' + encodeURIComponent(getGmToken()), {
+                    method: 'POST',
+                });
+                const data = await resp.json();
+                alert(data.message);
+                if (data.success) loadLocations();
+            } catch (e) {
+                console.error('Error clearing locations:', e);
+                alert('Error clearing locations');
             }
         }
 

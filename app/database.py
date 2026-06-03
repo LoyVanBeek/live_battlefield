@@ -72,7 +72,11 @@ class EventType(str, enum.Enum):
     GAME_STARTED = "game_started"
     GAME_ENDED = "game_ended"
     BOMBS_ADDED = "bombs_added"
+    TEAM_RENAMED = "team_renamed"
+    TEAM_REMOVED = "team_removed"
     TEAM_RESET = "team_reset"
+    GAME_PAUSED = "game_paused"
+    GAME_RESUMED = "game_resumed"
 
 
 class GameEvent(Base):
@@ -133,6 +137,7 @@ class Game(Base):
     trickle_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     last_trickle_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     max_bombs: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    paused_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class TeamToken(Base):

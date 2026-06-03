@@ -1,20 +1,30 @@
 {
     "page": {
         "title": "Live Battlefield - Team Spel",
-        "heading": "\ud83c\udfae Team Spel"
+        "heading": "\ud83c\udfae Team Spel",
+        "gm_title": "Spelleider Paneel"
     },
     "team": {
         "not_joined": "{color} (niet deelgenomen)",
         "bombs": "\ud83d\udca3",
         "ships": "\ud83d\udea2",
         "sunk": "\ud83d\udca5 gezonken",
-        "renamed": "Hernoemd naar {name}!"
+        "renamed": "Hernoemd naar {name}!",
+        "stats": "\ud83d\udca3 {bombs} \u00b7 \ud83d\udea2 {ships}/{total} \u00b7 \ud83d\udca5 {sunk} gezonken"
     },
     "status": {
         "started": "\ud83c\udfae Spel gestart - Gooi bommen!",
         "ended": "\ud83c\udfc1 Spel afgelopen",
         "waiting": "\u23f3 Wachten op start",
+        "paused": "\u23f8\ufe0f Gepauzeerd",
         "loading": "Laden..."
+    },
+    "nav": {
+        "map": "\ud83d\uddfa\ufe0f Kaart",
+        "events": "\ud83d\udcca Gebeurtenissen",
+        "locations": "\ud83d\udccd Locaties",
+        "settings": "\u2699\ufe0f Instellingen",
+        "invite": "\ud83d\udd17 Uitnodigen"
     },
     "board": {
         "private": {
@@ -25,6 +35,61 @@
             "team_label": "{name} ({color})",
             "replay_alt": "Herhaling van {name}'s bord"
         }
+    },
+    "gm": {
+        "nav_map": "\ud83d\uddfa\ufe0f Kaart",
+        "nav_events": "\ud83d\udcca Gebeurtenissen",
+        "nav_locations": "\ud83d\udccd Locaties",
+        "nav_settings": "\u2699\ufe0f Instellingen",
+        "nav_invite": "\ud83d\udd17 Uitnodigen",
+        "status_started": "\ud83c\udfae GESTART",
+        "status_ended": "\ud83c\udfc1 GEEINDIGD",
+        "status_waiting": "\u23f3 WACHTEN",
+        "status_paused": "\u23f8\ufe0f GEPAUZEERD",
+        "start_game": "Start Spel",
+        "end_game": "Eindig Spel",
+        "pause": "\u23f8\ufe0f Pauzeer",
+        "resume": "\u25b6\ufe0f Hervat",
+        "pause_indefinite": "\u221e Onbepaald",
+        "pause_min": "{n}m",
+        "pause_hour": "1u",
+        "locations": "{n} locaties",
+        "banner_paused": "\u23f8\ufe0f Spel Gepauzeerd",
+        "banner_resumes": "Hervat over",
+        "banner_resume_now": "\u25b6\ufe0f Hervat Nu",
+        "public_boards": "\ud83d\udcfa Alle Openbare Borden",
+        "teams": "\ud83d\udea2 Teams",
+        "teams_joinable": "\u2795 Beschikbare Teams",
+        "teams_joined": "\ud83d\udea2 Aangesloten Teams",
+        "auto_place_ships": "\ud83d\udea2 Plaats Alle Schepen",
+        "team_remove_title": "Verwijder team",
+        "rename_save": "Opslaan",
+        "rename_cancel": "\u2715",
+        "rename_placeholder": "Teamnaam",
+        "available_not_joined": "Niet aangesloten",
+        "available_click_to_join": "Klik om deel te nemen",
+        "join_placeholder": "Teamnaam",
+        "join": "Deelnemen",
+        "ai_heading": "\ud83e\udd16 AI Spelers",
+        "ai_add_heading": "\u2795 AI Speler Toevoegen",
+        "ai_select_color": "Selecteer kleur...",
+        "ai_name_placeholder": "AI naam (optioneel)",
+        "ai_add": "AI Toevoegen",
+        "ai_pause_all": "\u23f8\ufe0f Pauzeer Alle AI",
+        "ai_resume_all": "\u25b6\ufe0f Hervat Alle AI",
+        "ai_badge": "\ud83e\udd16 AI",
+        "ai_move": "\u26a1 Zet",
+        "ai_remove": "\u2715 AI",
+        "copy_url": "\ud83d\udccb Kopieer",
+        "add_bombs": "\ud83d\udca3 +5",
+        "play_as": "\ud83c\udfae Speel als {color}",
+        "copy_url_btn": "\ud83d\udccb Kopieer URL",
+        "confirm_remove_team": "Team {color} verwijderen? Dit verwijdert alle schepen en maakt de kleur vrij.",
+        "confirm_auto_ships": "Schepen plaatsen voor alle teams die nog niet alle schepen hebben geplaatst?",
+        "confirm_auto_ships_done": "Alle teams hebben al alle schepen geplaatst!",
+        "confirm_auto_ships_started": "Bezig met plaatsen voor {n} team(s)...",
+        "confirm_auto_ships_ok": "\u2705 {name} ({color}): {msg}",
+        "confirm_auto_ships_fail": "\u274c {name} ({color}): {msg}"
     },
     "action": {
         "loading": "Acties laden...",
@@ -64,6 +129,21 @@
         "button": "\ud83d\udca5 Gooi Bom!",
         "cancel": "Annuleren"
     },
+    "settings": {
+        "title": "Spelinstellingen",
+        "back": "\u2190 Terug naar Spelleider",
+        "back_admin": "\u2190 Terug naar Beheerderspaneel",
+        "bomb_drip": "\ud83d\udca7 Druppel Bommen",
+        "bomb_drip_desc": "Geef elk team automatisch bommen elke N minuten terwijl het spel actief is.",
+        "enable": "Inschakelen",
+        "bombs_every": "bommen elke",
+        "minutes": "minuten",
+        "max_bombs": "max bommen",
+        "save": "Opslaan",
+        "coming_soon": "Binnenkort meer spelmodi..."
+    },
+    "game_paused": "Spel is gepauzeerd",
+    "game_paused_resumes": "Hervat over {time}",
     "error": {
         "select_target": "Selecteer een doelwit!",
         "enter_coord": "Voer een co\u00f6rdinaat in!",
@@ -73,6 +153,7 @@
         "game_not_started": "Spel is niet gestart!",
         "cannot_bomb_self": "Je kunt jezelf niet bombarderen!",
         "no_bombs": "Geen bommen over! Wis codes in om meer te krijgen!",
+        "game_paused": "Spel is gepauzeerd! Geen acties toegestaan tot het spel hervat.",
         "fetch_prefix": "Fout: "
     },
     "lang": {
