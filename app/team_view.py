@@ -29,6 +29,7 @@ async def get_team_view(team_token: str, db: AsyncSession) -> dict:
         result["tb"] = game.trickle_bombs_per_interval
         result["tl"] = game.last_trickle_at.isoformat() if game.last_trickle_at else ""
         result["mb"] = game.max_bombs
+        result["qe"] = game.quiz_enabled
         from datetime import datetime, timezone
         result["pu"] = game.paused_until.isoformat() if game.paused_until and game.paused_until > datetime.now(timezone.utc) else ""
     winner = state.get_winner()

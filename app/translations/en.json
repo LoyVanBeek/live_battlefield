@@ -119,7 +119,10 @@
             "heading": "\ud83d\udd11 Redeem Code",
             "location_placeholder": "Location #",
             "value_placeholder": "ABCD",
-            "redeem": "Redeem"
+            "redeem": "Redeem",
+        "quiz_heading": "\ud83d\udcdd Quiz",
+        "quiz_loading": "Loading quiz...",
+        "quiz_done": "All questions answered!"
         },
         "save": "Save",
         "cancel": "Cancel"
@@ -140,7 +143,13 @@
         "minutes": "minutes",
         "max_bombs": "max bombs",
         "save": "Save",
-        "coming_soon": "More game modes coming soon..."
+        "quiz_title": "\ud83d\udcdd Quiz Mode",
+        "quiz_desc": "Create multiple-choice questions. Players earn bombs for submitting the correct answer.",
+        "quiz_total": "Total bomb budget:",
+        "quiz_questions": "Questions",
+        "quiz_add_q": "Add Question",
+        "quiz_add_a": "Add Answer",
+        "quiz_save": "Save Quiz Settings"
     },
     "notify": {
         "title": "\ud83d\udd14 Notifications",

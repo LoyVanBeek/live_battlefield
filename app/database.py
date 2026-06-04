@@ -77,6 +77,7 @@ class EventType(str, enum.Enum):
     TEAM_RESET = "team_reset"
     GAME_PAUSED = "game_paused"
     GAME_RESUMED = "game_resumed"
+    QUIZ_ANSWERED = "quiz_answered"
 
 
 class GameEvent(Base):
@@ -113,6 +114,25 @@ class GameStatus(str, enum.Enum):
     ENDED = "ended"
 
 
+class QuizQuestion(Base):
+    __tablename__ = "quiz_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    game_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("games.id"), nullable=False)
+    question_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class QuizAnswer(Base):
+    __tablename__ = "quiz_answers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    question_id: Mapped[int] = mapped_column(Integer, ForeignKey("quiz_questions.id"), nullable=False)
+    answer_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    bomb_value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_correct: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+
 class Admin(Base):
     __tablename__ = "admins"
 
@@ -138,6 +158,8 @@ class Game(Base):
     last_trickle_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     max_bombs: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     paused_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    quiz_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
+    quiz_total_bombs: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
 
 
 class TeamToken(Base):

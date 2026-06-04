@@ -215,6 +215,17 @@ class TrickleSettings(BaseModel):
     max_bombs: int = 100
 
 
+class QuizSettings(BaseModel):
+    enabled: bool
+    total_bombs: int = 100
+
+
+class QuizQuestionData(BaseModel):
+    id: Optional[int] = None
+    question_text: str = ""
+    answers: list[dict] = []
+
+
 class PauseGameRequest(BaseModel):
     duration_minutes: int = 5
 
@@ -1010,6 +1021,8 @@ async def get_game_state(
         "max_bombs": game.max_bombs if game else 100,
         "invite_token": game.invite_token if game else None,
         "paused_until": paused_until,
+        "quiz_enabled": game.quiz_enabled if game else False,
+        "quiz_total_bombs": game.quiz_total_bombs if game else 100,
     }
 
 
@@ -1570,6 +1583,61 @@ async def execute_command(
         result["success"] = True
         result["message"] = f"Code redeemed! +{capped} bombs. Total: {team.bombs}/{max_bombs}"
 
+    elif cmd.command == "quiz":
+        if state.status != GameStatusField.STARTED:
+            result["message"] = "Cannot answer quiz - game hasn't started yet!"
+            return result
+
+        paused_check = await _check_game_paused(db, game_id)
+        if paused_check:
+            return paused_check
+
+        if cmd.team_color not in state.teams:
+            result["message"] = f"Team {cmd.team_color} doesn't exist!"
+            return result
+
+        team = state.teams[cmd.team_color]
+        question_id = cmd.args.get("question_id")
+        answer_id = cmd.args.get("answer_id")
+
+        if not question_id or not answer_id:
+            result["message"] = "Missing question_id or answer_id!"
+            return result
+
+        from app.database import QuizAnswer, QuizQuestion
+        from sqlalchemy import select
+
+        answer = await db.execute(select(QuizAnswer).where(QuizAnswer.id == answer_id))
+        answer_row = answer.scalar_one_or_none()
+        if not answer_row:
+            result["message"] = "Invalid answer!"
+            return result
+
+        question = await db.execute(select(QuizQuestion).where(QuizQuestion.id == question_id))
+        question_row = question.scalar_one_or_none()
+        if not question_row or question_row.game_id != game_uuid:
+            result["message"] = "Invalid question!"
+            return result
+
+        # Check this team hasn't already answered this question
+        from app.models import get_game_events as get_ge
+        all_events = await get_ge(db, game_uuid)
+        for ev in all_events:
+            if ev.event_type.value == "quiz_answered":
+                p = ev.payload
+                if p.get("color") == cmd.team_color and p.get("question_id") == question_id:
+                    result["message"] = "You've already answered this question!"
+                    return result
+
+        game_obj = await get_game(db, game_uuid)
+        max_bombs = game_obj.max_bombs if game_obj else 100
+        bombs_earned = min(answer_row.bomb_value, max_bombs - team.bombs)
+        bombs_earned = max(bombs_earned, 0)
+
+        team.bombs += bombs_earned
+        result["success"] = True
+        result["message"] = f"Answer submitted! +{bombs_earned} bombs."
+
     else:
         result["message"] = f"Unknown command: {cmd.command}"
 
@@ -1597,6 +1665,15 @@ async def execute_command(
                 code=code,
                 success=True,
                 bombs_earned=bomb_value,
+            )
+            await save_event(db, event, game_uuid)
+        elif cmd.command == "quiz":
+            from app.events.models import QuizAnsweredEvent
+            event = QuizAnsweredEvent(
+                color=cmd.team_color,
+                question_id=question_id,
+                answer_id=answer_id,
+                bombs_earned=bombs_earned,
             )
             await save_event(db, event, game_uuid)
 
@@ -2158,6 +2235,53 @@ async def resume_game(
     return {"success": True, "message": "Game resumed! Players can now act."}
 
 
+@app.post("/api/quick/quiz_settings")
+async def set_quiz_settings(
+    settings: QuizSettings,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import update_quiz_settings
+
+    game_uuid = uuid.UUID(game_id)
+    game = await update_quiz_settings(db, game_uuid, enabled=settings.enabled, total_bombs=settings.total_bombs)
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    return {
+        "success": True,
+        "message": f"Quiz {'enabled' if settings.enabled else 'disabled'} with {settings.total_bombs} total bombs.",
+    }
+
+
+@app.get("/api/quiz/questions")
+async def get_quiz_questions(
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_quiz_questions
+
+    questions = await get_quiz_questions(db, uuid.UUID(game_id))
+    return {"questions": questions}
+
+
+class SaveQuestionsRequest(BaseModel):
+    questions: list[dict] = []
+
+
+@app.post("/api/quiz/questions")
+async def save_quiz_questions(
+    body: SaveQuestionsRequest,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import save_quiz_questions
+
+    game_uuid = uuid.UUID(game_id)
+    result = await save_quiz_questions(db, game_uuid, body.questions)
+    return {"success": True, "questions": result, "message": f"Saved {len(result)} question(s)."}
+
+
 @app.post("/api/quick/reset-game")
 async def reset_game(
     db: AsyncSession = Depends(get_api_db),
@@ -2398,6 +2522,8 @@ async def get_game_status(
         "trickle_interval_minutes": game.trickle_interval_minutes if game else 10,
         "max_bombs": game.max_bombs if game else 100,
         "paused_until": paused_until,
+        "quiz_enabled": game.quiz_enabled if game else False,
+        "quiz_total_bombs": game.quiz_total_bombs if game else 100,
     }
 
 

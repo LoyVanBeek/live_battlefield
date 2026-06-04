@@ -119,7 +119,10 @@
             "heading": "\ud83d\udd11 Code Inwisselen",
             "location_placeholder": "Locatie #",
             "value_placeholder": "ABCD",
-            "redeem": "Inwisselen"
+            "redeem": "Inwisselen",
+        "quiz_heading": "\ud83d\udcdd Quiz",
+        "quiz_loading": "Quiz laden...",
+        "quiz_done": "Alle vragen beantwoord!"
         },
         "save": "Opslaan",
         "cancel": "Annuleren"
@@ -140,7 +143,13 @@
         "minutes": "minuten",
         "max_bombs": "max bommen",
         "save": "Opslaan",
-        "coming_soon": "Binnenkort meer spelmodi..."
+        "quiz_title": "\ud83d\udcdd Quizmodus",
+        "quiz_desc": "Maak meerkeuzevragen. Spelers verdienen bommen door het juiste antwoord te geven.",
+        "quiz_total": "Totaal bombudget:",
+        "quiz_questions": "Vragen",
+        "quiz_add_q": "Vraag Toevoegen",
+        "quiz_add_a": "Antwoord Toevoegen",
+        "quiz_save": "Quizinstellingen Opslaan"
     },
     "notify": {
         "title": "\ud83d\udd14 Meldingen",

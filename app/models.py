@@ -328,6 +328,76 @@ async def update_game_pause(db: AsyncSession, game_id: uuid.UUID, paused_until: 
     return game
 
 
+async def update_quiz_settings(
+    db: AsyncSession, game_id: uuid.UUID, enabled: bool, total_bombs: int = 100
+) -> Optional[Game]:
+    game = await get_game(db, game_id)
+    if not game:
+        return None
+    game.quiz_enabled = enabled
+    game.quiz_total_bombs = total_bombs
+    await db.commit()
+    await db.refresh(game)
+    return game
+
+
+async def get_quiz_questions(db: AsyncSession, game_id: uuid.UUID) -> list:
+    from app.database import QuizQuestion, QuizAnswer
+    from sqlalchemy import select
+
+    questions = await db.execute(
+        select(QuizQuestion).where(QuizQuestion.game_id == game_id).order_by(QuizQuestion.order)
+    )
+    result = []
+    for q in questions.scalars().all():
+        answers = await db.execute(
+            select(QuizAnswer).where(QuizAnswer.question_id == q.id).order_by(QuizAnswer.id)
+        )
+        result.append({
+            "id": q.id,
+            "question_text": q.question_text,
+            "order": q.order,
+            "answers": [
+                {"id": a.id, "answer_text": a.answer_text, "bomb_value": a.bomb_value, "is_correct": a.is_correct}
+                for a in answers.scalars().all()
+            ],
+        })
+    return result
+
+
+async def save_quiz_questions(db: AsyncSession, game_id: uuid.UUID, questions_data: list[dict]) -> list:
+    from app.database import QuizQuestion, QuizAnswer
+    from sqlalchemy import delete
+
+    # Remove old questions
+    old_qs = await db.execute(select(QuizQuestion).where(QuizQuestion.game_id == game_id))
+    for q in old_qs.scalars().all():
+        await db.execute(delete(QuizAnswer).where(QuizAnswer.question_id == q.id))
+        await db.delete(q)
+    await db.commit()
+
+    result = []
+    for i, qd in enumerate(questions_data):
+        q = QuizQuestion(game_id=game_id, question_text=qd.get("question_text", ""), order=i)
+        db.add(q)
+        await db.flush()
+        answers = qd.get("answers", [])
+        for ad in answers:
+            a = QuizAnswer(
+                question_id=q.id,
+                answer_text=ad.get("answer_text", ""),
+                bomb_value=ad.get("bomb_value", 0),
+                is_correct=ad.get("is_correct", False),
+            )
+            db.add(a)
+            await db.flush()
+            ad["id"] = a.id
+        qd["id"] = q.id
+        result.append(qd)
+    await db.commit()
+    return result
+
+
 async def is_game_paused(db: AsyncSession, game_id: uuid.UUID) -> tuple[bool, datetime | None]:
     game = await get_game(db, game_id)
     if not game or not game.paused_until:

@@ -17,3 +17,4 @@ class EventType(str, Enum):
     GAME_ENDED = "game_ended"
     GAME_PAUSED = "game_paused"
     GAME_RESUMED = "game_resumed"
+    QUIZ_ANSWERED = "quiz_answered"
