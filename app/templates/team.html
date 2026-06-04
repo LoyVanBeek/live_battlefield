@@ -524,6 +524,9 @@
         let dripCountdownTimer = null;
         let quizEnabled = false;
         let quizQuestionsCache = null;
+        let selectedShipType = null;
+        let shipDirection = 'horizontal';
+        let shipPlaceMode = false;
 
         // Last rendered state for target team dropdown
         let lastTeamsData = null;
@@ -574,6 +577,24 @@
                     cell.className = 'board-cell';
                     cell.style.backgroundColor = '';
                     while (cell.firstChild) cell.removeChild(cell.firstChild);
+                    cell.style.cursor = '';
+                    cell.onclick = null;
+                    cell.onmouseenter = null;
+                    cell.onmouseleave = null;
+
+                    // Ship placement mode on private board during PREPARING
+                    if (includeShips && gameStatus === 'preparing') {
+                        cell.style.cursor = 'pointer';
+                        cell.onclick = function(rr, cc) {
+                            return function() {
+                                if (selectedShipType) {
+                                    placeShipAt(rr, cc);
+                                } else if (cellData && cellData.p) {
+                                    removeShipAt(rr, cc);
+                                }
+                            };
+                        }(r, c);
+                    }
 
                     const status = cellData.s;
                     const attackerColor = cellData.a || null;
@@ -899,24 +920,21 @@
                 shipHtml +=
                     '<div class="action-group">' +
                         '<h3>' + _('action.ship.heading') + '</h3>' +
-                        '<button class="btn btn-primary" onclick="placeAllShips()">' + _('action.ship.auto') + '</button>' +
-                        '<div class="action-inputs">' +
-                            '<input type="text" id="coord-input" placeholder="' + _('action.ship.coord_placeholder') + '">' +
-                            '<select id="ship-type">' +
-                                '<option value="airplane_carrier">' + _('action.ship.type_airplane') + '</option>' +
-                                '<option value="battleship">' + _('action.ship.type_battleship') + '</option>' +
-                                '<option value="torpedo_hunter">' + _('action.ship.type_torpedo') + '</option>' +
-                                '<option value="patrol_boat">' + _('action.ship.type_patrol') + '</option>' +
-                            '</select>' +
-                            '<select id="direction">' +
-                                '<option value="horizontal">' + _('action.ship.dir_horizontal') + '</option>' +
-                                '<option value="vertical">' + _('action.ship.dir_vertical') + '</option>' +
-                            '</select>' +
-                            '<button class="btn btn-primary" onclick="placeShip()">' + _('action.ship.place') + '</button>' +
+                        '<button class="btn btn-primary" onclick="placeAllShips()" style="margin-bottom:8px;">' + _('action.ship.auto') + '</button>' +
+                        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="ship-selector">' +
+                            '<button class="btn" data-ship="airplane_carrier" onclick="selectShipType(\'airplane_carrier\')" style="flex:1;min-width:100px;padding:8px;font-size:12px;background:#16213e;color:#eee;border:2px solid #333;">🛩️ ' + _('action.ship.type_airplane') + '</button>' +
+                            '<button class="btn" data-ship="battleship" onclick="selectShipType(\'battleship\')" style="flex:1;min-width:80px;padding:8px;font-size:12px;background:#16213e;color:#eee;border:2px solid #333;">🚢 ' + _('action.ship.type_battleship') + '</button>' +
+                            '<button class="btn" data-ship="torpedo_hunter" onclick="selectShipType(\'torpedo_hunter\')" style="flex:1;min-width:80px;padding:8px;font-size:12px;background:#16213e;color:#eee;border:2px solid #333;">🚤 ' + _('action.ship.type_torpedo') + '</button>' +
+                            '<button class="btn" data-ship="patrol_boat" onclick="selectShipType(\'patrol_boat\')" style="flex:1;min-width:80px;padding:8px;font-size:12px;background:#16213e;color:#eee;border:2px solid #333;">⛵ ' + _('action.ship.type_patrol') + '</button>' +
                         '</div>' +
-                        '<div class="action-inputs">' +
-                            '<input type="text" id="remove-coord" placeholder="' + _('action.ship.remove_placeholder') + '">' +
-                            '<button class="btn btn-danger" onclick="removeShip()">' + _('action.ship.remove') + '</button>' +
+                        '<div style="font-size:12px;color:#888;margin-bottom:6px;" id="ship-hint">' +
+                            (selectedShipType ? 'Click a cell on your board to place the ship. <a href="#" onclick="shipDirection=\'horizontal\'==shipDirection?\'vertical\':\'horizontal\';updateShipHint()" style="color:#00d9ff;">Rotate ↻</a> | <a href="#" onclick="selectShipType(null)" style="color:#f44336;">Cancel ✕</a>' : 'Select a ship above, then click your board.') +
+                        '</div>' +
+                        '<div class="action-inputs" style="margin-top:4px;opacity:0.6;">' +
+                            '<small style="color:#888;">' + _('action.ship.coord_placeholder') + ':</small>' +
+                            '<input type="text" id="coord-input" placeholder="' + _('action.ship.coord_placeholder') + '" style="width:60px;padding:4px;font-size:11px;">' +
+                            '<button class="btn btn-primary" onclick="placeShip()" style="padding:4px 8px;font-size:11px;">' + _('action.ship.place') + '</button>' +
+                            '<button class="btn btn-danger" onclick="removeShip()" style="padding:4px 8px;font-size:11px;">' + _('action.ship.remove') + '</button>' +
                         '</div>' +
                     '</div>';
             }
@@ -985,12 +1003,11 @@
 
         async function placeShip() {
             var coord = document.getElementById('coord-input').value || 'A1';
-            var shipType = document.getElementById('ship-type').value;
-            var direction = document.getElementById('direction').value;
+            var shipType = selectedShipType || 'battleship';
             var result = await apiCall('/api/execute', 'POST', {
                 team_color: TEAM_COLOR,
                 command: 'place',
-                args: { ship_type: shipType, coordinate: coord, direction: direction }
+                args: { ship_type: shipType, coordinate: coord, direction: shipDirection }
             });
             showToast(result.message, result.success ? 'success' : 'error');
         }
@@ -1009,6 +1026,58 @@
             }
 
             var result = await apiCall('/api/quick/remove_ship', 'POST', {
+                team_color: TEAM_COLOR, row: row, col: col
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+        }
+
+        // --- Click-to-place ships ---
+        function selectShipType(shipType) {
+            selectedShipType = shipType;
+            document.querySelectorAll('#ship-selector button').forEach(function(btn) {
+                if (btn.dataset.ship === shipType) {
+                    btn.style.borderColor = '#00d9ff';
+                    btn.style.background = '#0f3460';
+                } else {
+                    btn.style.borderColor = '#333';
+                    btn.style.background = '#16213e';
+                }
+            });
+            if (shipType === null) {
+                document.getElementById('ship-hint').innerHTML = 'Select a ship above, then click your board.';
+            } else {
+                document.getElementById('ship-hint').innerHTML =
+                    'Click a cell on your board to place. ' +
+                    '<a href="#" onclick="toggleShipDirection();return false;" style="color:#00d9ff;">↻ Rotate</a> | ' +
+                    '<a href="#" onclick="selectShipType(null);return false;" style="color:#f44336;">✕ Cancel</a>';
+            }
+        }
+
+        function toggleShipDirection() {
+            shipDirection = shipDirection === 'horizontal' ? 'vertical' : 'horizontal';
+            document.getElementById('ship-hint').innerHTML =
+                '<strong>' + shipDirection + '</strong>. Click a cell to place. ' +
+                '<a href="#" onclick="toggleShipDirection();return false;" style="color:#00d9ff;">↻ Rotate</a> | ' +
+                '<a href="#" onclick="selectShipType(null);return false;" style="color:#f44336;">✕ Cancel</a>';
+        }
+
+        async function placeShipAt(row, col) {
+            if (!selectedShipType) return;
+            if (gameStatus !== 'preparing') { showToast(_('error.game_not_started'), 'error'); return; }
+
+            const coord = COLS[col] + (row + 1);
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'place',
+                args: { ship_type: selectedShipType, coordinate: coord, direction: shipDirection }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+        }
+
+        async function removeShipAt(row, col) {
+            if (gameStatus !== 'preparing') { showToast(_('error.game_not_started'), 'error'); return; }
+            if (!confirm('Remove ship at ' + COLS[col] + (row + 1) + '?')) return;
+            const result = await apiCall('/api/quick/remove_ship', 'POST', {
                 team_color: TEAM_COLOR, row: row, col: col
             });
             showToast(result.message, result.success ? 'success' : 'error');
