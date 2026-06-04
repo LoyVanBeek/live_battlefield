@@ -2268,6 +2268,22 @@ async def get_quiz_questions(
     from app.models import get_quiz_questions
 
     questions = await get_quiz_questions(db, uuid.UUID(auth_info["game_id"]))
+
+    # If a team is asking, mark which questions they've already answered
+    color = auth_info.get("color")
+    if color:
+        from app.models import get_game_events
+        game_uuid = uuid.UUID(auth_info["game_id"])
+        all_events = await get_game_events(db, game_uuid)
+        answered_qids = set()
+        for ev in all_events:
+            if ev.event_type.value == "quiz_answered":
+                p = ev.payload
+                if p.get("color") == color:
+                    answered_qids.add(p.get("question_id"))
+        for q in questions:
+            q["answered"] = q["id"] in answered_qids
+
     return {"questions": questions}
 
 

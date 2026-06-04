@@ -1070,7 +1070,9 @@
         // --- Quiz ---
         async function loadQuizQuestions() {
             const data = await apiCall('/api/quiz/questions', 'GET');
-            if (data && data.questions) quizQuestionsCache = data.questions;
+            if (data && data.questions) {
+                quizQuestionsCache = data.questions;
+            }
             return quizQuestionsCache || [];
         }
 
@@ -1079,16 +1081,13 @@
             if (!content) return;
             if (!quizEnabled || gameStatus !== 'started') { content.innerHTML = ''; return; }
 
-            if (!quizQuestionsCache) await loadQuizQuestions();
+            await loadQuizQuestions();
             const questions = quizQuestionsCache || [];
             if (questions.length === 0) {
                 content.innerHTML = '<p style="color:#888;">' + _('action_quiz.loading') + '</p>';
                 return;
             }
-            const unanswered = questions.filter(q => {
-                const evts = (window._quizAnswered || []);
-                return !evts.includes(q.id);
-            });
+            const unanswered = questions.filter(q => !q.answered);
 
             if (unanswered.length === 0) {
                 content.innerHTML = '<p style="color:#4caf50;">✓ ' + _('action_quiz.done') + '</p>';
@@ -1107,8 +1106,6 @@
                 '</div>';
         }
 
-        window._quizAnswered = [];
-
         async function answerQuiz(questionId, answerId) {
             const result = await apiCall('/api/execute', 'POST', {
                 team_color: TEAM_COLOR,
@@ -1116,7 +1113,6 @@
                 args: { question_id: questionId, answer_id: answerId }
             });
             showToast(result.message, result.success ? 'success' : 'error');
-            window._quizAnswered.push(questionId);
             updateQuizSection();
         }
 
