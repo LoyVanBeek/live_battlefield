@@ -421,6 +421,9 @@
                 <label style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;font-size:14px;">
                     <input type="checkbox" id="notify-bombs-added" onchange="saveNotifyPrefs()" checked> {{ tr.notify.bombs_added }}
                 </label>
+                <label style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;font-size:14px;">
+                    <input type="checkbox" id="notify-game-ended" onchange="saveNotifyPrefs()" checked> {{ tr.notify.game_ended }}
+                </label>
             </div>
             <button class="btn btn-primary" onclick="toggleNotifyModal()" style="width:100%;padding:12px;margin-top:10px;">{{ tr.notify.close }}</button>
         </div>
@@ -1066,6 +1069,7 @@
                 document.getElementById('notify-game-started').checked = localStorage.getItem('notify_game_started') !== 'false';
                 document.getElementById('notify-was-hit').checked = localStorage.getItem('notify_was_hit') !== 'false';
                 document.getElementById('notify-bombs-added').checked = localStorage.getItem('notify_bombs_added') !== 'false';
+                document.getElementById('notify-game-ended').checked = localStorage.getItem('notify_game_ended') !== 'false';
             }
         }
 
@@ -1108,6 +1112,12 @@
             // Game resumed after pause
             if (localStorage.getItem('notify_game_started') !== 'false' && curS === 'started' && prevState.pu && prevState.pu.length > 0 && (!data.pu || data.pu.length === 0)) {
                 sendNotify(_('notify.title_game_resumed'), _('notify.game_started'));
+            }
+
+            // Game ended
+            if (localStorage.getItem('notify_game_ended') !== 'false' && prevS !== 'ended' && curS === 'ended') {
+                const winner = data.w || 'unknown';
+                sendNotify(_('notify.title_game_ended'), _('notify.game_ended', {winner: winner}));
             }
 
             // Bombs added by timer

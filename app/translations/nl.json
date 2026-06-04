@@ -151,6 +151,8 @@
         "close": "Sluiten",
         "title_game_started": "\ud83c\udfae Spel Gestart!",
         "title_game_resumed": "\u25b6\ufe0f Spel Hervat!",
+        "title_game_ended": "\ud83c\udfc1 Spel Afgelopen!",
+        "game_ended": "Spel afgelopen \u2014 {winner} wint",
         "title_bombs_added": "\ud83d\udca3 +{n} bommen",
         "title_hit": "\ud83d\udca5 Geraakt door {color}!"
     },
