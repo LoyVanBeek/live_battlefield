@@ -943,9 +943,9 @@
                     '</div>';
                 if (quizEnabled) {
                     html += '<div class="action-group" id="quiz-section">' +
-                        '<h3>📝 Quiz</h3>' +
+                        '<h3>' + _('action_quiz.heading') + '</h3>' +
                         '<div id="quiz-content">' +
-                            '<p style="color:#888;">' + _('action.quiz_loading') + '</p>' +
+                            '<p style="color:#888;">' + _('action_quiz.loading') + '</p>' +
                         '</div>' +
                     '</div>';
                 }
@@ -1079,14 +1079,19 @@
             if (!content) return;
             if (!quizEnabled || gameStatus !== 'started') { content.innerHTML = ''; return; }
 
-            const questions = await loadQuizQuestions();
+            if (!quizQuestionsCache) await loadQuizQuestions();
+            const questions = quizQuestionsCache || [];
+            if (questions.length === 0) {
+                content.innerHTML = '<p style="color:#888;">' + _('action_quiz.loading') + '</p>';
+                return;
+            }
             const unanswered = questions.filter(q => {
                 const evts = (window._quizAnswered || []);
                 return !evts.includes(q.id);
             });
 
             if (unanswered.length === 0) {
-                content.innerHTML = '<p style="color:#4caf50;">✓ ' + _('action.quiz_done') + '</p>';
+                content.innerHTML = '<p style="color:#4caf50;">✓ ' + _('action_quiz.done') + '</p>';
                 return;
             }
 

@@ -119,10 +119,12 @@
             "heading": "\ud83d\udd11 Redeem Code",
             "location_placeholder": "Location #",
             "value_placeholder": "ABCD",
-            "redeem": "Redeem",
-        "quiz_heading": "\ud83d\udcdd Quiz",
-        "quiz_loading": "Loading quiz...",
-        "quiz_done": "All questions answered!"
+            "redeem": "Redeem"
+        },
+    "action_quiz": {
+        "heading": "\ud83d\udcdd Quiz",
+        "loading": "Loading quiz...",
+        "done": "All questions answered!"
         },
         "save": "Save",
         "cancel": "Cancel"

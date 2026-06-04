@@ -119,10 +119,12 @@
             "heading": "\ud83d\udd11 Code Inwisselen",
             "location_placeholder": "Locatie #",
             "value_placeholder": "ABCD",
-            "redeem": "Inwisselen",
-        "quiz_heading": "\ud83d\udcdd Quiz",
-        "quiz_loading": "Quiz laden...",
-        "quiz_done": "Alle vragen beantwoord!"
+            "redeem": "Inwisselen"
+        },
+    "action_quiz": {
+        "heading": "\ud83d\udcdd Quiz",
+        "loading": "Quiz laden...",
+        "done": "Alle vragen beantwoord!"
         },
         "save": "Opslaan",
         "cancel": "Annuleren"
