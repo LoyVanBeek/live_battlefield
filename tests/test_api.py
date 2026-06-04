@@ -518,3 +518,164 @@ class TestBoardJson:
             assert data["error"] == "Team not found"
         finally:
             app.dependency_overrides.clear()
+
+
+class TestQuizMode:
+    """Tests for quiz mode"""
+
+    def test_start_game_fails_without_bomb_source(self):
+        from app.api.routes import app, verify_gm_token
+        from app.game.state import GameState, GameStatusField
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            state = GameState()
+            state.status = GameStatusField.PREPARING
+            state.teams["red"] = create_mock_team(name="Red", color="red")
+            state.teams["blue"] = create_mock_team(name="Blue", color="blue")
+
+            from app.game.ships import SHIP_COUNTS
+            for team in state.teams.values():
+                for ship_type, count in SHIP_COUNTS.items():
+                    for _ in range(count):
+                        team.placed_ship_types[ship_type] = team.placed_ship_types.get(ship_type, 0) + 1
+
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", return_value=[]):
+                    with patch("app.models.get_game_locations", return_value=[]):
+                        with patch("app.models.get_game") as mock_get_game:
+                            mock_game = MagicMock()
+                            mock_game.paused_until = None
+                            mock_game.quiz_enabled = False
+                            mock_game.trickle_enabled = False
+                            mock_game.paused_until = None
+                            mock_get_game.return_value = mock_game
+                            client = TestClient(app)
+                            response = client.post("/api/quick/start-game", json={})
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is False
+            assert "bomb source" in data["message"].lower()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_start_game_succeeds_with_quiz_enabled(self):
+        from app.api.routes import app, verify_gm_token
+        from app.game.state import GameState, GameStatusField
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            state = GameState()
+            state.status = GameStatusField.PREPARING
+            state.teams["red"] = create_mock_team(name="Red", color="red")
+            state.teams["blue"] = create_mock_team(name="Blue", color="blue")
+
+            from app.game.ships import SHIP_COUNTS
+            for team in state.teams.values():
+                for ship_type, count in SHIP_COUNTS.items():
+                    for _ in range(count):
+                        team.placed_ship_types[ship_type] = team.placed_ship_types.get(ship_type, 0) + 1
+
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", return_value=[]):
+                    with patch("app.models.get_game_locations", return_value=[]):
+                        with patch("app.models.get_game") as mock_get_game:
+                            mock_game = MagicMock()
+                            mock_game.paused_until = None
+                            mock_game.quiz_enabled = True
+                            mock_game.trickle_enabled = False
+                            mock_get_game.return_value = mock_game
+                            with patch("app.api.routes.save_event"):
+                                with patch("app.models.update_game_status"):
+                                    client = TestClient(app)
+                                    response = client.post("/api/quick/start-game", json={})
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_start_game_succeeds_with_trickle_enabled(self):
+        from app.api.routes import app, verify_gm_token
+        from app.game.state import GameState, GameStatusField
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            state = GameState()
+            state.status = GameStatusField.PREPARING
+            state.teams["red"] = create_mock_team(name="Red", color="red")
+            state.teams["blue"] = create_mock_team(name="Blue", color="blue")
+
+            from app.game.ships import SHIP_COUNTS
+            for team in state.teams.values():
+                for ship_type, count in SHIP_COUNTS.items():
+                    for _ in range(count):
+                        team.placed_ship_types[ship_type] = team.placed_ship_types.get(ship_type, 0) + 1
+
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", return_value=[]):
+                    with patch("app.models.get_game_locations", return_value=[]):
+                        with patch("app.models.get_game") as mock_get_game:
+                            mock_game = MagicMock()
+                            mock_game.paused_until = None
+                            mock_game.quiz_enabled = False
+                            mock_game.trickle_enabled = True
+                            mock_get_game.return_value = mock_game
+                            with patch("app.api.routes.save_event"):
+                                with patch("app.models.update_game_status"):
+                                    client = TestClient(app)
+                                    response = client.post("/api/quick/start-game", json={})
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_quiz_command_awards_bombs(self):
+        import uuid
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState, GameStatusField
+        from app.game.ships import SHIP_COUNTS
+        from unittest.mock import AsyncMock
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {"role": "team", "game_id": "00000000-0000-0000-0000-000000000000", "color": "red"}
+        try:
+            state = GameState()
+            state.status = GameStatusField.STARTED
+            state.teams["red"] = create_mock_team(name="Red", color="red", bombs=0)
+            state.teams["blue"] = create_mock_team(name="Blue", color="blue", bombs=0)
+
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", return_value=[]):
+                    with patch("app.api.routes.save_event") as mock_save:
+                        with patch("sqlalchemy.ext.asyncio.AsyncSession.execute") as mock_execute:
+                            # First execute returns the answer, second returns the question
+                            mock_question = MagicMock()
+                            mock_question.game_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
+                            mock_answer_row = MagicMock(bomb_value=5)
+                            mock_execute.side_effect = [
+                                MagicMock(scalar_one_or_none=MagicMock(return_value=mock_answer_row)),
+                                MagicMock(scalar_one_or_none=MagicMock(return_value=mock_question)),
+                            ]
+                            with patch("app.models.get_game") as mock_get_game:
+                                mock_game = MagicMock()
+                                mock_game.paused_until = None
+                                mock_game.max_bombs = 100
+                                mock_get_game.return_value = mock_game
+
+                                client = TestClient(app)
+                                response = client.post("/api/execute", json={
+                                    "team_color": "red",
+                                    "command": "quiz",
+                                    "args": {"question_id": 1, "answer_id": 1}
+                                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert data["message"] == "Correct! +5 bombs."
+        finally:
+            app.dependency_overrides.clear()

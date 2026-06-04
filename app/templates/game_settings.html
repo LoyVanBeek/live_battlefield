@@ -121,6 +121,16 @@
         <h1>{{ tr.settings.title }}</h1>
 
         <div class="modes-grid">
+            <!-- Locations -->
+            <div class="mode-card" id="card-locations">
+                <h3>{{ tr.settings_locations.title }}</h3>
+                <p class="description">{{ tr.settings_locations.desc }}</p>
+                <div class="mode-controls">
+                    <span id="loc-count" style="color:#aaa;font-size:14px;">0</span>
+                    <a href="/game-master/{{ gm_token }}/locations-secret" class="btn btn-primary" style="text-decoration:none;display:inline-block;">{{ tr.settings_locations.manage }}</a>
+                </div>
+            </div>
+
             <!-- Bomb Drip -->
             <div class="mode-card" id="card-bomb-drip">
                 <h3>{{ tr.settings.bomb_drip }}</h3>
@@ -233,6 +243,11 @@
             window.location.href = window.location.pathname + '?lang=' + lang;
         }
 
+        function updateLocCount(state) {
+            const el = document.getElementById('loc-count');
+            if (el) el.textContent = (state.locations ? state.locations.length : 0) + ' ' + _('gm.locations').replace('{n}', '');
+        }
+
         async function loadBombDrip() {
             const state = await apiCall('/api/state');
             if (!state) return;
@@ -241,6 +256,7 @@
             document.getElementById('drip-bombs').value = state.trickle_bombs_per_interval || 1;
             document.getElementById('drip-minutes').value = state.trickle_interval_minutes || 1;
             document.getElementById('drip-max').value = state.max_bombs || 100;
+            updateLocCount(state);
         }
 
         async function saveBombDrip() {

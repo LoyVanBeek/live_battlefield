@@ -135,7 +135,7 @@
         "cancel": "Cancel"
     },
     "settings": {
-        "title": "Game Settings",
+        "title": "\ud83c\udfae Game Modes & Settings",
         "back": "\u2190 Back to Game Master",
         "back_admin": "\u2190 Back to Admin Panel",
         "bomb_drip": "\ud83d\udca7 Bomb Drip",
@@ -154,6 +154,12 @@
         "quiz_save": "Save Quiz Settings",
         "quiz_export": "Export JSON",
         "quiz_import": "Import JSON"
+    },
+    "settings_locations": {
+        "title": "\ud83d\udccd Locations",
+        "desc": "Real-world locations with codes. Players visit them to earn bombs.",
+        "count": "{n} locations",
+        "manage": "Manage Locations \u2192"
     },
     "notify": {
         "title": "\ud83d\udd14 Notifications",

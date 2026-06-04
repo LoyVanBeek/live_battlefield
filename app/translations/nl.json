@@ -135,7 +135,7 @@
         "cancel": "Annuleren"
     },
     "settings": {
-        "title": "Spelinstellingen",
+        "title": "\ud83c\udfae Spelmodi & Instellingen",
         "back": "\u2190 Terug naar Spelleider",
         "back_admin": "\u2190 Terug naar Beheerderspaneel",
         "bomb_drip": "\ud83d\udca7 Druppel Bommen",
@@ -154,6 +154,12 @@
         "quiz_save": "Quizinstellingen Opslaan",
         "quiz_export": "Exporteer JSON",
         "quiz_import": "Importeer JSON"
+    },
+    "settings_locations": {
+        "title": "\ud83d\udccd Locaties",
+        "desc": "Echte locaties met codes. Spelers bezoeken ze om bommen te verdienen.",
+        "count": "{n} locaties",
+        "manage": "Beheer Locaties \u2192"
     },
     "notify": {
         "title": "\ud83d\udd14 Meldingen",
