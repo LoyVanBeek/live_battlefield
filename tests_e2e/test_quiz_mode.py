@@ -51,7 +51,7 @@ def seeded_game_with_quiz(app_url, admin_token):
                          ]},
                     ]})
 
-        yield {"gm_token": gm_token, "teams": teams}
+        yield {"gm_token": gm_token, "teams": teams, "team_urls": {c: f"/team/{teams[c]['token']}" for c in teams}}
 
 
 def test_quiz_full_flow(page, app_url, seeded_game_with_quiz):
@@ -59,6 +59,7 @@ def test_quiz_full_flow(page, app_url, seeded_game_with_quiz):
     data = seeded_game_with_quiz
     gm_token = data["gm_token"]
     teams = data["teams"]
+    team_urls = data["team_urls"]
 
     with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
         # 1. Start game
@@ -82,9 +83,9 @@ def test_quiz_full_flow(page, app_url, seeded_game_with_quiz):
                            params={"team_token": teams["red"]["token"]},
                            json={"team_color": "red", "command": "quiz",
                                  "args": {"question_id": q1["id"], "answer_id": correct_answer_id}})
-        data = resp.json()
-        assert data["success"] is True, f"Correct answer failed: {data}"
-        assert "Correct!" in data["message"], f"Unexpected message: {data['message']}"
+        result = resp.json()
+        assert result["success"] is True, f"Correct answer failed: {result}"
+        assert "Correct!" in result["message"], f"Unexpected message: {result['message']}"
 
         state = client.get("/api/state", params={"gm_token": gm_token}).json()
         red_after_correct = next(t["bombs"] for t in state["teams"] if t["color"] == "red")
@@ -97,9 +98,9 @@ def test_quiz_full_flow(page, app_url, seeded_game_with_quiz):
                            params={"team_token": teams["red"]["token"]},
                            json={"team_color": "red", "command": "quiz",
                                  "args": {"question_id": q2["id"], "answer_id": wrong_answer_id}})
-        data = resp.json()
-        assert data["success"] is False, f"Wrong answer should fail: {data}"
-        assert "Wrong" in data["message"], f"Unexpected message: {data['message']}"
+        result = resp.json()
+        assert result["success"] is False, f"Wrong answer should fail: {result}"
+        assert "Wrong" in result["message"], f"Unexpected message: {result['message']}"
 
         state = client.get("/api/state", params={"gm_token": gm_token}).json()
         red_after_wrong = next(t["bombs"] for t in state["teams"] if t["color"] == "red")
@@ -111,17 +112,17 @@ def test_quiz_full_flow(page, app_url, seeded_game_with_quiz):
                            params={"team_token": teams["red"]["token"]},
                            json={"team_color": "red", "command": "quiz",
                                  "args": {"question_id": q1["id"], "answer_id": correct_answer_id}})
-        data = resp.json()
-        assert data["success"] is False, f"Retry should fail: {data}"
-        assert "already answered" in data["message"].lower(), \
-            f"Unexpected retry message: {data['message']}"
+        result = resp.json()
+        assert result["success"] is False, f"Retry should fail: {result}"
+        assert "already answered" in result["message"].lower(), \
+            f"Unexpected retry message: {result['message']}"
 
-        # 7. Verify quiz section on team page shows completion
-        from tests_e2e.pages.team_page import TeamPage
-        tp = TeamPage(page, teams["red"]["token"], app_url)
-        tp.goto()
-        page.wait_for_function(
-            'document.getElementById("quiz-content") && '
-            'document.getElementById("quiz-content").textContent.includes("answered")',
-            timeout=10000
-        )
+    # 7. Verify quiz section on team page shows completion
+    from tests_e2e.pages.team_page import TeamPage
+    tp = TeamPage(page, team_urls["red"], app_url)
+    tp.goto()
+    page.wait_for_function(
+        'document.getElementById("quiz-content") && '
+        'document.getElementById("quiz-content").textContent.includes("answered")',
+        timeout=10000
+    )
