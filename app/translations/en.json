@@ -238,7 +238,7 @@
         "enter_code": "Enter code!",
         "game_not_started": "Game is not started!",
         "cannot_bomb_self": "Cannot bomb yourself!",
-        "no_bombs": "No bombs left! Redeem codes to get more!",
+        "no_bombs": "No bombs left! Answer quiz questions or redeem codes to get more!",
         "game_paused": "Game is paused! No actions allowed until the game resumes.",
         "fetch_prefix": "Error: "
     },

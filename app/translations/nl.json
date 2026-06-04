@@ -238,7 +238,7 @@
         "enter_code": "Voer code in!",
         "game_not_started": "Spel is niet gestart!",
         "cannot_bomb_self": "Je kunt jezelf niet bombarderen!",
-        "no_bombs": "Geen bommen over! Wis codes in om meer te krijgen!",
+        "no_bombs": "Geen bommen over! Beantwoord quizvragen of wis codes in om meer te krijgen!",
         "game_paused": "Spel is gepauzeerd! Geen acties toegestaan tot het spel hervat.",
         "fetch_prefix": "Fout: "
     },
