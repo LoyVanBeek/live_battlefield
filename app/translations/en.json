@@ -142,6 +142,20 @@
         "save": "Save",
         "coming_soon": "More game modes coming soon..."
     },
+    "notify": {
+        "title": "\ud83d\udd14 Notifications",
+        "enable": "Enable desktop notifications",
+        "game_started": "\ud83c\udfae Game started",
+        "was_hit": "\ud83d\udca5 I was hit by a bomb",
+        "bombs_added": "\ud83d\udca3 Bombs added by timer",
+        "close": "Close",
+        "title_game_started": "\ud83c\udfae Game Started!",
+        "title_game_resumed": "\u25b6\ufe0f Game Resumed!",
+        "title_game_ended": "\ud83c\udfc1 Game Ended!",
+        "game_ended": "Game ended \u2014 {winner} wins",
+        "title_bombs_added": "\ud83d\udca3 +{n} bombs",
+        "title_hit": "\ud83d\udca5 Hit by {color}!"
+    },
     "help": {
         "title": "\u2753 How to Play",
         "close": "Close"
