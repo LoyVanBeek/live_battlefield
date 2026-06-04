@@ -2257,11 +2257,11 @@ async def set_quiz_settings(
 @app.get("/api/quiz/questions")
 async def get_quiz_questions(
     db: AsyncSession = Depends(get_api_db),
-    game_id: str = Depends(verify_gm_token),
+    auth_info: dict = Depends(verify_team_or_gm),
 ):
     from app.models import get_quiz_questions
 
-    questions = await get_quiz_questions(db, uuid.UUID(game_id))
+    questions = await get_quiz_questions(db, uuid.UUID(auth_info["game_id"]))
     return {"questions": questions}
 
 
