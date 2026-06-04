@@ -2443,10 +2443,12 @@ async def start_game(
             "message": f"Cannot start game - not all teams have placed all ships: {', '.join(teams_without_ships)}",
         }
 
-    if len(locations) == 0:
+    game = await get_game(db, game_uuid)
+    has_bomb_source = len(locations) > 0 or (game and game.quiz_enabled) or (game and game.trickle_enabled)
+    if not has_bomb_source:
         return {
             "success": False,
-            "message": "Cannot start game - no locations defined!",
+            "message": "Cannot start game - no bomb sources! Add locations, enable Quiz mode, or enable Bomb Drip.",
         }
 
     event = GameStartedEvent()

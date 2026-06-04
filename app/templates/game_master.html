@@ -679,9 +679,10 @@
                 
                 // Check preconditions
                 const hasLocations = status.locations_placed > 0;
+                const hasBombSource = hasLocations || status.quiz_enabled || status.trickle_enabled;
                 const hasEnoughTeams = status.total_teams >= 2;
                 const allShipsPlaced = status.teams_with_all_ships === status.total_teams;
-                const canStart = hasLocations && hasEnoughTeams && allShipsPlaced;
+                const canStart = hasBombSource && hasEnoughTeams && allShipsPlaced;
                 
                 btnStart.disabled = !canStart;
                 if (!canStart) {
@@ -689,8 +690,8 @@
                         btnStart.title = `Need at least 2 teams (currently ${status.total_teams})`;
                     } else if (!allShipsPlaced) {
                         btnStart.title = `Not all teams have placed ships (${status.teams_with_all_ships}/${status.total_teams})`;
-                    } else if (!hasLocations) {
-                        btnStart.title = `Need at least 1 location (currently ${status.locations_placed})`;
+                    } else if (!hasBombSource) {
+                        btnStart.title = `Need locations, quiz mode, or bomb drip (currently ${status.locations_placed} locations)`;
                     }
                 } else {
                     btnStart.title = 'Start the game';
