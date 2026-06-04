@@ -156,11 +156,9 @@
                         <label>{{ tr.settings.quiz_total }} <input type="number" id="quiz-total" value="100" min="1" style="width:60px;"></label>
                     </div>
                     <div id="quiz-questions-area" style="display:none;margin-top:15px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                            <strong>{{ tr.settings.quiz_questions }}</strong>
-                            <button class="btn btn-primary" onclick="addQuestion()" style="font-size:12px;padding:5px 10px;">+ {{ tr.settings.quiz_add_q }}</button>
-                        </div>
+                        <div style="margin-bottom:8px;"><strong>{{ tr.settings.quiz_questions }}</strong></div>
                         <div id="quiz-questions-list"></div>
+                        <button class="btn btn-primary" onclick="addQuestion()" style="font-size:12px;padding:5px 10px;margin-top:8px;">+ {{ tr.settings.quiz_add_q }}</button>
                         <button class="btn btn-primary" onclick="saveQuiz()" style="margin-top:10px;">{{ tr.settings.quiz_save }}</button>
                     </div>
                 </div>
