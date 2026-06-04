@@ -85,3 +85,35 @@ class GameMasterPage:
 
     def nav_locations_link(self):
         return self.page.locator("a[href*='/locations-secret']")
+
+    def available_team_card(self, color: str):
+        return self.page.locator(f"#team-card-available-{color}")
+
+    def join_team_inline(self, color: str, name: str):
+        """Click available team card, fill name, click Join."""
+        card = self.available_team_card(color)
+        card.click()
+        self.page.wait_for_timeout(300)
+        name_input = self.page.locator(f"#join-name-{color}")
+        name_input.fill(name)
+        name_input.press("Enter")
+        self.page.wait_for_timeout(500)
+
+    def auto_place_all_button(self):
+        return self.page.locator("#btn-auto-place-all")
+
+    def auto_place_all_ships(self):
+        self.page.once("dialog", lambda dialog: dialog.accept())
+        self.auto_place_all_button().click()
+        self.page.wait_for_timeout(2000)
+
+    def get_team_token_from_card(self, color: str):
+        """Extract team_token from the Play as {color} link href."""
+        card = self.team_card(color)
+        link = card.locator("a.team-play-link")
+        href = link.get_attribute("href")
+        # href is like /team/abc-def-xyz
+        return href.replace("/team/", "")
+
+    def settings_link(self):
+        return self.page.locator("a[href*='/game-settings']")

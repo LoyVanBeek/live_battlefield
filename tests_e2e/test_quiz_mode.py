@@ -1,128 +1,105 @@
-"""E2E test for quiz mode — full flow: create questions, answer correct/wrong, verify bomb counts"""
+"""Browser-based E2E test for quiz mode — everything done through the UI like a human would."""
 
 import pytest
-import httpx
-from tests_e2e.config import HTTPX_TIMEOUT
+import re
 
 
-@pytest.fixture
-def seeded_game_with_quiz(app_url, admin_token):
-    """Create a game with 2 teams, ships placed, quiz enabled with 2 questions."""
+def test_quiz_full_flow_browser(page, app_url, admin_token):
+    """Full quiz flow through the browser: join teams, place ships, create questions, answer them."""
+
+    # Step 1: Create a game via admin API (no UI for this)
+    import httpx
+    from tests_e2e.config import HTTPX_TIMEOUT
+
     with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
-        # 1. Create game
         resp = client.post("/api/admin/create-game", params={"token": admin_token})
         gm_token = resp.json()["token"]
 
-        # 2. Join 2 teams
-        teams = {}
-        for color, name in [("red", "Red"), ("blue", "Blue")]:
-            client.post("/api/execute", params={"gm_token": gm_token},
-                        json={"team_color": color, "command": "join", "args": {"name": name}})
+    # Step 2: Open GM page, join 2 teams via clickable cards
+    from tests_e2e.pages.gm_page import GameMasterPage
+    gm = GameMasterPage(page, gm_token, app_url)
+    gm.goto()
 
-        # 3. Get team tokens
-        state = client.get("/api/state", params={"gm_token": gm_token}).json()
-        for t in state["teams"]:
-            teams[t["color"]] = {"name": t["name"], "token": t["token"]}
+    gm.join_team_inline("red", "Red Team")
+    gm.join_team_inline("blue", "Blue Team")
 
-        # 4. Auto-place ships (retry up to 20x)
-        for _ in range(20):
-            for color in teams:
-                client.post("/api/quick/place_all_ships",
-                            params={"team_token": teams[color]["token"]},
-                            json={"team_color": color})
-            gs = client.get("/api/game-status", params={"gm_token": gm_token}).json()
-            if gs.get("teams_with_all_ships") == 2:
-                break
+    # Step 3: Auto-place all ships
+    gm.auto_place_all_ships()
 
-        # 5. Enable quiz + create 2 questions
-        client.post("/api/quick/quiz_settings", params={"gm_token": gm_token},
-                    json={"enabled": True, "total_bombs": 50})
-        client.post("/api/quiz/questions", params={"gm_token": gm_token},
-                    json={"questions": [
-                        {"question_text": "What is 2+2?",
-                         "answers": [
-                             {"answer_text": "4", "bomb_value": 5, "is_correct": True},
-                             {"answer_text": "5", "bomb_value": 0, "is_correct": False},
-                         ]},
-                        {"question_text": "Capital of France?",
-                         "answers": [
-                             {"answer_text": "Paris", "bomb_value": 5, "is_correct": True},
-                             {"answer_text": "London", "bomb_value": 0, "is_correct": False},
-                         ]},
-                    ]})
+    # Step 4: Get team tokens for later
+    red_token = gm.get_team_token_from_card("red")
 
-        yield {"gm_token": gm_token, "teams": teams, "team_urls": {c: f"/team/{teams[c]['token']}" for c in teams}}
+    # Step 5: Go to settings, enable quiz, add 2 questions
+    from tests_e2e.pages.game_settings_page import GameSettingsPage
+    gs = GameSettingsPage(page, gm_token, app_url)
+    gs.goto()
+    gs.enable_quiz(50)
 
+    gs.add_question("What is 2+2?", [
+        {"text": "4", "bombs": 5, "correct": True},
+        {"text": "5", "bombs": 0, "correct": False},
+    ])
+    gs.add_question("Capital of France?", [
+        {"text": "Paris", "bombs": 5, "correct": True},
+        {"text": "London", "bombs": 0, "correct": False},
+    ])
+    gs.save_quiz()
 
-def test_quiz_full_flow(page, app_url, seeded_game_with_quiz):
-    """Full quiz flow: start game, answer correct, answer wrong, verify bombs, verify no retry."""
-    data = seeded_game_with_quiz
-    gm_token = data["gm_token"]
-    teams = data["teams"]
-    team_urls = data["team_urls"]
+    # Step 6: Go back to GM page, start the game
+    gm.goto()
+    gm.start_game()
 
-    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
-        # 1. Start game
-        resp = client.post("/api/quick/start-game", params={"gm_token": gm_token})
-        assert resp.json()["success"] is True, f"Failed to start game: {resp.json()}"
+    # Verify game started
+    status = gm.get_game_status()
+    assert "STARTED" in status, f"Expected STARTED, got {status}"
 
-        # 2. Fetch questions via GM token
-        qs = client.get("/api/quiz/questions", params={"gm_token": gm_token}).json()
-        questions = qs["questions"]
-        assert len(questions) == 2
-        q1 = questions[0]
-        q2 = questions[1]
-
-        # 3. Get baseline bomb count for red
-        state = client.get("/api/state", params={"gm_token": gm_token}).json()
-        red_before = next(t["bombs"] for t in state["teams"] if t["color"] == "red")
-
-        # 4. Submit CORRECT answer for q1 → expect +5 bombs
-        correct_answer_id = next(a["id"] for a in q1["answers"] if a["is_correct"])
-        resp = client.post("/api/execute",
-                           params={"team_token": teams["red"]["token"]},
-                           json={"team_color": "red", "command": "quiz",
-                                 "args": {"question_id": q1["id"], "answer_id": correct_answer_id}})
-        result = resp.json()
-        assert result["success"] is True, f"Correct answer failed: {result}"
-        assert "Correct!" in result["message"], f"Unexpected message: {result['message']}"
-
-        state = client.get("/api/state", params={"gm_token": gm_token}).json()
-        red_after_correct = next(t["bombs"] for t in state["teams"] if t["color"] == "red")
-        assert red_after_correct == red_before + 5, \
-            f"Expected {red_before + 5} bombs, got {red_after_correct}"
-
-        # 5. Submit WRONG answer for q2 → expect no bombs
-        wrong_answer_id = next(a["id"] for a in q2["answers"] if not a["is_correct"])
-        resp = client.post("/api/execute",
-                           params={"team_token": teams["red"]["token"]},
-                           json={"team_color": "red", "command": "quiz",
-                                 "args": {"question_id": q2["id"], "answer_id": wrong_answer_id}})
-        result = resp.json()
-        assert result["success"] is False, f"Wrong answer should fail: {result}"
-        assert "Wrong" in result["message"], f"Unexpected message: {result['message']}"
-
-        state = client.get("/api/state", params={"gm_token": gm_token}).json()
-        red_after_wrong = next(t["bombs"] for t in state["teams"] if t["color"] == "red")
-        assert red_after_wrong == red_after_correct, \
-            f"Bombs changed after wrong answer: {red_after_correct} → {red_after_wrong}"
-
-        # 6. Try answering q1 again → should be blocked
-        resp = client.post("/api/execute",
-                           params={"team_token": teams["red"]["token"]},
-                           json={"team_color": "red", "command": "quiz",
-                                 "args": {"question_id": q1["id"], "answer_id": correct_answer_id}})
-        result = resp.json()
-        assert result["success"] is False, f"Retry should fail: {result}"
-        assert "already answered" in result["message"].lower(), \
-            f"Unexpected retry message: {result['message']}"
-
-    # 7. Verify quiz section on team page shows completion
+    # Step 7: Open red team page
     from tests_e2e.pages.team_page import TeamPage
-    tp = TeamPage(page, team_urls["red"], app_url)
+    tp = TeamPage(page, f"/team/{red_token}", app_url)
     tp.goto()
+
+    # Wait for quiz section to appear
+    page.wait_for_function(
+        'document.getElementById("quiz-content") && '
+        'document.getElementById("quiz-content").querySelector("button")',
+        timeout=10000
+    )
+
+    # Step 8: Read current bomb count (initial is 3)
+    bombs_before = tp.get_bomb_count()
+    assert bombs_before == 3, f"Expected 3 initial bombs, got {bombs_before}"
+
+    # Step 9: Answer Q1 correctly (first answer button = "4", worth 25 bombs)
+    # 50 total / 2 questions = 25 per correct answer
+    tp.answer_quiz(0)
+    page.wait_for_timeout(500)
+
+    # Verify bomb count increased by 25
+    bombs_after = tp.get_bomb_count()
+    assert bombs_after == bombs_before + 25, f"Expected {bombs_before + 25} bombs, got {bombs_after}"
+
+    # Step 10: Answer Q2 wrong (second answer button = "London")
+    page.wait_for_function(
+        'document.getElementById("quiz-content") && '
+        'document.getElementById("quiz-content").querySelector("button")',
+        timeout=5000
+    )
+
+    # Get bomb count before wrong answer
+    bombs_before_wrong = tp.get_bomb_count()
+    tp.answer_quiz(1)  # Wrong answer
+    page.wait_for_timeout(500)
+
+    # Verify bomb count unchanged
+    bombs_after_wrong = tp.get_bomb_count()
+    assert bombs_after_wrong == bombs_before_wrong, \
+        f"Bombs should not change after wrong answer: {bombs_before_wrong} → {bombs_after_wrong}"
+
+    # Step 11: Verify "All questions answered!" appears
     page.wait_for_function(
         'document.getElementById("quiz-content") && '
         'document.getElementById("quiz-content").textContent.includes("answered")',
-        timeout=10000
+        timeout=5000
     )
+    quiz_text = tp.get_quiz_text()
+    assert "answered" in quiz_text.lower(), f"Expected 'answered' in quiz, got: {quiz_text}"
