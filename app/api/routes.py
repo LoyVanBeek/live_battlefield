@@ -1635,8 +1635,12 @@ async def execute_command(
         bombs_earned = max(bombs_earned, 0)
 
         team.bombs += bombs_earned
-        result["success"] = True
-        result["message"] = f"Answer submitted! +{bombs_earned} bombs."
+        if bombs_earned > 0:
+            result["success"] = True
+            result["message"] = f"Correct! +{bombs_earned} bombs."
+        else:
+            result["success"] = False
+            result["message"] = "Wrong answer! No bombs earned."
 
     else:
         result["message"] = f"Unknown command: {cmd.command}"
@@ -1667,15 +1671,17 @@ async def execute_command(
                 bombs_earned=bomb_value,
             )
             await save_event(db, event, game_uuid)
-        elif cmd.command == "quiz":
-            from app.events.models import QuizAnsweredEvent
-            event = QuizAnsweredEvent(
-                color=cmd.team_color,
-                question_id=question_id,
-                answer_id=answer_id,
-                bombs_earned=bombs_earned,
-            )
-            await save_event(db, event, game_uuid)
+
+    # Save quiz answered event regardless of success (to prevent retries)
+    if cmd.command == "quiz":
+        from app.events.models import QuizAnsweredEvent
+        event = QuizAnsweredEvent(
+            color=cmd.team_color,
+            question_id=question_id,
+            answer_id=answer_id,
+            bombs_earned=bombs_earned,
+        )
+        await save_event(db, event, game_uuid)
 
     return result
 
