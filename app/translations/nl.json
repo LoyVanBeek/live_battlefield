@@ -151,7 +151,9 @@
         "quiz_questions": "Vragen",
         "quiz_add_q": "Vraag Toevoegen",
         "quiz_add_a": "Antwoord Toevoegen",
-        "quiz_save": "Quizinstellingen Opslaan"
+        "quiz_save": "Quizinstellingen Opslaan",
+        "quiz_export": "Exporteer JSON",
+        "quiz_import": "Importeer JSON"
     },
     "notify": {
         "title": "\ud83d\udd14 Meldingen",

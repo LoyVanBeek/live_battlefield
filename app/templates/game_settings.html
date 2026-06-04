@@ -160,6 +160,11 @@
                         <div id="quiz-questions-list"></div>
                         <button class="btn btn-primary" onclick="addQuestion()" style="font-size:12px;padding:5px 10px;margin-top:8px;">+ {{ tr.settings.quiz_add_q }}</button>
                         <button class="btn btn-primary" onclick="saveQuiz()" style="margin-top:10px;">{{ tr.settings.quiz_save }}</button>
+                        <div style="display:flex;gap:8px;margin-top:8px;">
+                            <button class="btn btn-primary" onclick="exportQuiz()" style="font-size:12px;padding:5px 10px;">⬇ {{ tr.settings.quiz_export }}</button>
+                            <button class="btn btn-primary" onclick="document.getElementById('quiz-import-input').click()" style="font-size:12px;padding:5px 10px;">⬆ {{ tr.settings.quiz_import }}</button>
+                            <input type="file" id="quiz-import-input" accept=".json" style="display:none" onchange="importQuiz(event)">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -345,6 +350,43 @@
                 }
             }
             showToast((result && result.message) || 'Quiz settings saved!', 'success');
+        }
+
+        function exportQuiz() {
+            const data = JSON.stringify(quizQuestions, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'quiz_questions.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Exported ' + quizQuestions.length + ' question(s)!', 'success');
+        }
+
+        function importQuiz(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (!Array.isArray(imported)) throw new Error('Not an array');
+                    imported.forEach((q, i) => {
+                        if (!q.question_text || !Array.isArray(q.answers)) throw new Error('Invalid question at index ' + i);
+                        q.answers.forEach(a => {
+                            if (!a.answer_text) throw new Error('Invalid answer in question ' + i);
+                        });
+                    });
+                    quizQuestions = imported;
+                    renderQuizQuestions();
+                    showToast('Imported ' + quizQuestions.length + ' question(s)!', 'success');
+                } catch (err) {
+                    showToast('Import failed: ' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
         }
 
         loadBombDrip();

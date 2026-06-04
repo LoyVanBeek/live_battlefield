@@ -151,7 +151,9 @@
         "quiz_questions": "Questions",
         "quiz_add_q": "Add Question",
         "quiz_add_a": "Add Answer",
-        "quiz_save": "Save Quiz Settings"
+        "quiz_save": "Save Quiz Settings",
+        "quiz_export": "Export JSON",
+        "quiz_import": "Import JSON"
     },
     "notify": {
         "title": "\ud83d\udd14 Notifications",
