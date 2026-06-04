@@ -121,13 +121,13 @@
             "value_placeholder": "ABCD",
             "redeem": "Redeem"
         },
+        "save": "Save",
+        "cancel": "Cancel"
+    },
     "action_quiz": {
         "heading": "\ud83d\udcdd Quiz",
         "loading": "Loading quiz...",
         "done": "All questions answered!"
-        },
-        "save": "Save",
-        "cancel": "Cancel"
     },
     "bomb_confirm": {
         "title": "\ud83d\udca5 Bomb {target}?",

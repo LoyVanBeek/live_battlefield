@@ -121,13 +121,13 @@
             "value_placeholder": "ABCD",
             "redeem": "Inwisselen"
         },
+        "save": "Opslaan",
+        "cancel": "Annuleren"
+    },
     "action_quiz": {
         "heading": "\ud83d\udcdd Quiz",
         "loading": "Quiz laden...",
         "done": "Alle vragen beantwoord!"
-        },
-        "save": "Opslaan",
-        "cancel": "Annuleren"
     },
     "bomb_confirm": {
         "title": "\ud83d\udca5 {target} bombarderen?",
