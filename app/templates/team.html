@@ -596,9 +596,9 @@
                                 }
                             };
                         }(r, c, cellData);
-                        cell.onmouseenter = function(rr, cc) {
+                        cell.onmouseenter = function(rr, cc, gd) {
                             return function() { showPreview(rr, cc); };
-                        }(r, c);
+                        }(r, c, gridData);
                         cell.onmouseleave = function() { clearPreview(); };
                     }
 
@@ -1057,11 +1057,11 @@
             if (!cells.length) return;
             const valid = isValidPlacement(row, col, selectedShipType, shipDirection);
             const color = valid ? 'rgba(76, 175, 80, 0.4)' : 'rgba(244, 67, 54, 0.4)';
+            const grid = document.querySelector('#private-board .board-grid');
+            if (!grid) { console.warn('Preview: grid not found'); return; }
             cells.forEach(function(pos) {
                 const r = pos[0], c = pos[1];
                 if (r < 0 || r > 9 || c < 0 || c > 9) return;
-                const grid = document.querySelector('#private-board .board-grid');
-                if (!grid) return;
                 const idx = 1 + 10 + r * 11 + 1 + c;
                 const cell = grid.children[idx];
                 if (!cell) return;
@@ -1099,6 +1099,28 @@
                 '<strong>' + shipDirection + '</strong>. Click a cell to place. ' +
                 '<a href="#" onclick="toggleShipDirection();return false;" style="color:#00d9ff;">↻ Rotate</a> | ' +
                 '<a href="#" onclick="selectShipType(null);return false;" style="color:#f44336;">✕ Cancel</a>';
+        }
+
+        function getShipCells(row, col, shipType, direction) {
+            const sizes = { 'airplane_carrier': 6, 'battleship': 4, 'torpedo_hunter': 3, 'patrol_boat': 2 };
+            const size = sizes[shipType] || 1;
+            const cells = [];
+            for (let i = 0; i < size; i++) {
+                if (direction === 'horizontal') cells.push([row, col + i]);
+                else cells.push([row + i, col]);
+            }
+            return cells;
+        }
+
+        function isValidPlacement(row, col, shipType, direction, gridData) {
+            const cells = getShipCells(row, col, shipType, direction);
+            for (const pos of cells) {
+                const r = pos[0], c = pos[1];
+                if (r < 0 || r > 9 || c < 0 || c > 9) return false;
+            }
+            // We can't check overlap/touching without fetching gridData,
+            // so just check bounds on hover. The API will reject invalid placements.
+            return true;
         }
 
         async function placeShipAt(row, col) {
