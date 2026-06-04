@@ -527,6 +527,7 @@
         let selectedShipType = null;
         let shipDirection = 'horizontal';
         let shipPlaceMode = false;
+        let previewCells = [];
 
         // Last rendered state for target team dropdown
         let lastTeamsData = null;
@@ -585,15 +586,20 @@
                     // Ship placement mode on private board during PREPARING
                     if (includeShips && gameStatus === 'preparing') {
                         cell.style.cursor = 'pointer';
-                        cell.onclick = function(rr, cc) {
+                        cell.onclick = function(rr, cc, cd) {
                             return function() {
+                                clearPreview();
                                 if (selectedShipType) {
                                     placeShipAt(rr, cc);
-                                } else if (cellData && cellData.p) {
+                                } else if (cd && cd.p) {
                                     removeShipAt(rr, cc);
                                 }
                             };
+                        }(r, c, cellData);
+                        cell.onmouseenter = function(rr, cc) {
+                            return function() { showPreview(rr, cc); };
                         }(r, c);
+                        cell.onmouseleave = function() { clearPreview(); };
                     }
 
                     const status = cellData.s;
@@ -1031,8 +1037,42 @@
             showToast(result.message, result.success ? 'success' : 'error');
         }
 
+        // --- Preview helpers ---
+        let savedCellStyles = [];
+
+        function clearPreview() {
+            savedCellStyles.forEach(function(s) {
+                if (s.cell) {
+                    s.cell.style.backgroundColor = s.bg;
+                    s.cell.style.opacity = '';
+                }
+            });
+            savedCellStyles = [];
+        }
+
+        function showPreview(row, col) {
+            clearPreview();
+            if (!selectedShipType) return;
+            const cells = getShipCells(row, col, selectedShipType, shipDirection);
+            if (!cells.length) return;
+            const valid = isValidPlacement(row, col, selectedShipType, shipDirection);
+            const color = valid ? 'rgba(76, 175, 80, 0.4)' : 'rgba(244, 67, 54, 0.4)';
+            cells.forEach(function(pos) {
+                const r = pos[0], c = pos[1];
+                if (r < 0 || r > 9 || c < 0 || c > 9) return;
+                const grid = document.querySelector('#private-board .board-grid');
+                if (!grid) return;
+                const idx = 1 + 10 + r * 11 + 1 + c;
+                const cell = grid.children[idx];
+                if (!cell) return;
+                savedCellStyles.push({ cell: cell, bg: cell.style.backgroundColor });
+                cell.style.backgroundColor = color;
+            });
+        }
+
         // --- Click-to-place ships ---
         function selectShipType(shipType) {
+            clearPreview();
             selectedShipType = shipType;
             document.querySelectorAll('#ship-selector button').forEach(function(btn) {
                 if (btn.dataset.ship === shipType) {
