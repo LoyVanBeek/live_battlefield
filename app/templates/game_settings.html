@@ -38,8 +38,8 @@
         .btn-primary { background: #00d9ff; color: #1a1a2e; }
         .btn-primary:hover { background: #00b8d4; }
         .modes-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            display: flex;
+            flex-direction: column;
             gap: 20px;
         }
         .mode-card {
@@ -121,6 +121,16 @@
         <h1>{{ tr.settings.title }}</h1>
 
         <div class="modes-grid">
+            <!-- Locations -->
+            <div class="mode-card" id="card-locations">
+                <h3>{{ tr.settings_locations.title }}</h3>
+                <p class="description">{{ tr.settings_locations.desc }}</p>
+                <div class="mode-controls">
+                    <span id="loc-count" style="color:#aaa;font-size:14px;">0</span>
+                    <a href="/game-master/{{ gm_token }}/locations-secret" class="btn btn-primary" style="text-decoration:none;display:inline-block;">{{ tr.settings_locations.manage }}</a>
+                </div>
+            </div>
+
             <!-- Bomb Drip -->
             <div class="mode-card" id="card-bomb-drip">
                 <h3>{{ tr.settings.bomb_drip }}</h3>
@@ -146,10 +156,27 @@
                 </div>
             </div>
 
-            <!-- Placeholder for future modes -->
-            <div class="coming-soon">
-                <p style="font-size: 24px; margin-bottom: 10px;">➕</p>
-                <p>{{ tr.settings.coming_soon }}</p>
+            <!-- Quiz Mode -->
+            <div class="mode-card" id="card-quiz">
+                <h3>{{ tr.settings.quiz_title }}</h3>
+                <p class="description">{{ tr.settings.quiz_desc }}</p>
+                <div class="mode-controls" style="flex-direction:column;align-items:stretch;">
+                    <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;">
+                        <label><input type="checkbox" id="quiz-enabled"> {{ tr.settings.enable }}</label>
+                        <label>{{ tr.settings.quiz_total }} <input type="number" id="quiz-total" value="100" min="1" style="width:60px;"></label>
+                    </div>
+                    <div id="quiz-questions-area" style="display:none;margin-top:15px;">
+                        <div style="margin-bottom:8px;"><strong>{{ tr.settings.quiz_questions }}</strong></div>
+                        <div id="quiz-questions-list"></div>
+                        <button class="btn btn-primary" onclick="addQuestion()" style="font-size:12px;padding:5px 10px;margin-top:8px;">+ {{ tr.settings.quiz_add_q }}</button>
+                        <button class="btn btn-primary" onclick="saveQuiz()" style="margin-top:10px;">{{ tr.settings.quiz_save }}</button>
+                        <div style="display:flex;gap:8px;margin-top:8px;">
+                            <button class="btn btn-primary" onclick="exportQuiz()" style="font-size:12px;padding:5px 10px;">⬇ {{ tr.settings.quiz_export }}</button>
+                            <button class="btn btn-primary" onclick="document.getElementById('quiz-import-input').click()" style="font-size:12px;padding:5px 10px;">⬆ {{ tr.settings.quiz_import }}</button>
+                            <input type="file" id="quiz-import-input" accept=".json" style="display:none" onchange="importQuiz(event)">
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -216,6 +243,11 @@
             window.location.href = window.location.pathname + '?lang=' + lang;
         }
 
+        function updateLocCount(state) {
+            const el = document.getElementById('loc-count');
+            if (el) el.textContent = (state.locations ? state.locations.length : 0) + ' ' + _('gm.locations').replace('{n}', '');
+        }
+
         async function loadBombDrip() {
             const state = await apiCall('/api/state');
             if (!state) return;
@@ -224,6 +256,7 @@
             document.getElementById('drip-bombs').value = state.trickle_bombs_per_interval || 1;
             document.getElementById('drip-minutes').value = state.trickle_interval_minutes || 1;
             document.getElementById('drip-max').value = state.max_bombs || 100;
+            updateLocCount(state);
         }
 
         async function saveBombDrip() {
@@ -241,7 +274,139 @@
             showToast(result.message, result.success ? 'success' : 'error');
         }
 
+        // --- Quiz ---
+        let quizQuestions = [];
+
+        function renderQuizQuestions() {
+            const list = document.getElementById('quiz-questions-list');
+            list.innerHTML = quizQuestions.map((q, qi) => `
+                <div style="background:#0f3460;border-radius:6px;padding:12px;margin-bottom:10px;">
+                    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+                        <span style="color:#888;font-size:12px;">Q${qi + 1}</span>
+                        <input type="text" value="${q.question_text.replace(/"/g,'&quot;')}" onchange="quizQuestions[${qi}].question_text=this.value" placeholder="Question text" style="flex:1;padding:6px;font-size:13px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
+                        <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="removeQuestion(${qi})">✕</button>
+                    </div>
+                    ${q.answers.map((a, ai) => `
+                        <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;padding-left:20px;">
+                            <input type="radio" name="correct-${qi}" ${a.is_correct?'checked':''} onchange="quizQuestions[${qi}].answers.forEach((x,i)=>{x.is_correct=i===${ai}})">
+                            <input type="text" value="${a.answer_text.replace(/"/g,'&quot;')}" onchange="quizQuestions[${qi}].answers[${ai}].answer_text=this.value" placeholder="Answer" style="flex:1;padding:5px;font-size:12px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
+                            <input type="number" value="${a.bomb_value}" onchange="quizQuestions[${qi}].answers[${ai}].bomb_value=parseInt(this.value)||0" style="width:50px;padding:5px;font-size:12px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;" title="Bombs">
+                            <span style="font-size:11px;color:#888;">💣</span>
+                            <button class="btn btn-danger" style="padding:2px 6px;font-size:10px;" onclick="quizQuestions[${qi}].answers.splice(${ai},1);renderQuizQuestions()">✕</button>
+                        </div>
+                    `).join('')}
+                    <button class="btn btn-primary" style="padding:4px 10px;font-size:11px;margin-left:20px;margin-top:4px;" onclick="addAnswer(${qi})">+ {{ tr.settings.quiz_add_a }}</button>
+                </div>
+            `).join('');
+        }
+
+        function addQuestion() {
+            const total = parseInt(document.getElementById('quiz-total').value) || 100;
+            const perQ = quizQuestions.length > 0 ? Math.floor(total / (quizQuestions.length + 1)) : total;
+            quizQuestions.push({ question_text: '', answers: [{ answer_text: '', bomb_value: perQ, is_correct: true }] });
+            renderQuizQuestions();
+        }
+
+        function addAnswer(qi) {
+            quizQuestions[qi].answers.push({ answer_text: '', bomb_value: 0, is_correct: false });
+            renderQuizQuestions();
+        }
+
+        function removeQuestion(qi) {
+            quizQuestions.splice(qi, 1);
+            renderQuizQuestions();
+        }
+
+        async function loadQuiz() {
+            const state = await apiCall('/api/state');
+            if (!state) return;
+            document.getElementById('quiz-enabled').checked = state.quiz_enabled || false;
+            document.getElementById('quiz-total').value = state.quiz_total_bombs || 100;
+            document.getElementById('quiz-questions-area').style.display = state.quiz_enabled ? 'block' : 'none';
+
+            const data = await apiCall('/api/quiz/questions');
+            if (data && data.questions) {
+                quizQuestions = data.questions;
+                renderQuizQuestions();
+            }
+        }
+
+        document.getElementById('quiz-enabled').addEventListener('change', function() {
+            document.getElementById('quiz-questions-area').style.display = this.checked ? 'block' : 'none';
+        });
+
+        async function saveQuiz() {
+            const enabled = document.getElementById('quiz-enabled').checked;
+            const total = parseInt(document.getElementById('quiz-total').value) || 100;
+
+            let result = await apiCall('/api/quick/quiz_settings', 'POST', { enabled: enabled, total_bombs: total });
+            if (!result || !result.success) {
+                showToast(result ? result.message : 'Error', 'error');
+                return;
+            }
+
+            if (enabled && quizQuestions.length > 0) {
+                // Auto-distribute bombs
+                const perQ = Math.floor(total / quizQuestions.length);
+                quizQuestions.forEach(q => {
+                    const correct = q.answers.find(a => a.is_correct);
+                    q.answers.forEach(a => {
+                        if (a.is_correct || !correct) {
+                            a.bomb_value = perQ;
+                        } else if (a.bomb_value === undefined || a.bomb_value === 0) {
+                            a.bomb_value = 0;
+                        }
+                    });
+                });
+
+                result = await apiCall('/api/quiz/questions', 'POST', { questions: quizQuestions });
+                if (result && result.success) {
+                    quizQuestions = result.questions || quizQuestions;
+                    renderQuizQuestions();
+                }
+            }
+            showToast((result && result.message) || 'Quiz settings saved!', 'success');
+        }
+
+        function exportQuiz() {
+            const data = JSON.stringify(quizQuestions, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'quiz_questions.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Exported ' + quizQuestions.length + ' question(s)!', 'success');
+        }
+
+        function importQuiz(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (!Array.isArray(imported)) throw new Error('Not an array');
+                    imported.forEach((q, i) => {
+                        if (!q.question_text || !Array.isArray(q.answers)) throw new Error('Invalid question at index ' + i);
+                        q.answers.forEach(a => {
+                            if (!a.answer_text) throw new Error('Invalid answer in question ' + i);
+                        });
+                    });
+                    quizQuestions = imported;
+                    renderQuizQuestions();
+                    showToast('Imported ' + quizQuestions.length + ' question(s)!', 'success');
+                } catch (err) {
+                    showToast('Import failed: ' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
         loadBombDrip();
+        loadQuiz();
     </script>
 </body>
 </html>

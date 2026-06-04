@@ -561,6 +561,40 @@ class GamePausedEvent:
 
 
 @dataclass
+class QuizAnsweredEvent:
+    event_type: EventType = EventType.QUIZ_ANSWERED
+    color: str = ""
+    question_id: int = 0
+    answer_id: int = 0
+    bombs_earned: int = 0
+    success: bool = True
+
+    def apply(self, state: "GameState") -> tuple["GameState", "QuizAnsweredEvent"]:
+        color = self.color
+        if color not in state.teams:
+            return state, replace(self, success=False)
+
+        team = state.teams[color]
+        new_team = team.with_bombs(team.bombs + self.bombs_earned)
+        new_teams = {**state.teams, color: new_team}
+        return replace(state, teams=new_teams), replace(self, success=True)
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.QUIZ_ANSWERED,
+            payload={
+                "color": self.color,
+                "question_id": self.question_id,
+                "answer_id": self.answer_id,
+                "bombs_earned": self.bombs_earned,
+                "success": self.success,
+            },
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
+@dataclass
 class GameResumedEvent:
     event_type: EventType = EventType.GAME_RESUMED
 
@@ -592,4 +626,5 @@ AnyEvent = Union[
     "GameEndedEvent",
     "GamePausedEvent",
     "GameResumedEvent",
+    "QuizAnsweredEvent",
 ]

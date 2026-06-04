@@ -357,6 +357,9 @@
             </div>
         </div>
 
+        <!-- Start reason -->
+        <div id="start-reason" style="color:#ff9800;font-size:13px;margin-top:8px;display:none;"></div>
+
         <!-- Pause Banner -->
         <div class="pause-banner" id="pause-banner">
             <span>{{ tr.gm.banner_paused }}</span>
@@ -679,21 +682,24 @@
                 
                 // Check preconditions
                 const hasLocations = status.locations_placed > 0;
+                const hasBombSource = hasLocations || status.quiz_enabled || status.trickle_enabled;
                 const hasEnoughTeams = status.total_teams >= 2;
                 const allShipsPlaced = status.teams_with_all_ships === status.total_teams;
-                const canStart = hasLocations && hasEnoughTeams && allShipsPlaced;
+                const canStart = hasBombSource && hasEnoughTeams && allShipsPlaced;
                 
                 btnStart.disabled = !canStart;
-                if (!canStart) {
+                const reasonEl = document.getElementById('start-reason');
+                if (!canStart && gameStatus === 'waiting' && reasonEl) {
+                    reasonEl.style.display = 'block';
                     if (!hasEnoughTeams) {
-                        btnStart.title = `Need at least 2 teams (currently ${status.total_teams})`;
+                        reasonEl.textContent = `⚠️ Need at least 2 teams to start (currently ${status.total_teams})`;
                     } else if (!allShipsPlaced) {
-                        btnStart.title = `Not all teams have placed ships (${status.teams_with_all_ships}/${status.total_teams})`;
-                    } else if (!hasLocations) {
-                        btnStart.title = `Need at least 1 location (currently ${status.locations_placed})`;
+                        reasonEl.textContent = `⚠️ Not all teams have placed all ships (${status.teams_with_all_ships}/${status.total_teams})`;
+                    } else if (!hasBombSource) {
+                        reasonEl.textContent = `⚠️ No bomb sources — add Locations, enable Quiz mode, or enable Bomb Drip`;
                     }
-                } else {
-                    btnStart.title = 'Start the game';
+                } else if (reasonEl) {
+                    reasonEl.style.display = 'none';
                 }
                 btnEnd.disabled = true;
             }

@@ -124,13 +124,18 @@
         "save": "Save",
         "cancel": "Cancel"
     },
+    "action_quiz": {
+        "heading": "\ud83d\udcdd Quiz",
+        "loading": "Loading quiz...",
+        "done": "All questions answered!"
+    },
     "bomb_confirm": {
         "title": "\ud83d\udca5 Bomb {target}?",
         "button": "\ud83d\udca5 Throw Bomb!",
         "cancel": "Cancel"
     },
     "settings": {
-        "title": "Game Settings",
+        "title": "\ud83c\udfae Game Modes & Settings",
         "back": "\u2190 Back to Game Master",
         "back_admin": "\u2190 Back to Admin Panel",
         "bomb_drip": "\ud83d\udca7 Bomb Drip",
@@ -140,7 +145,21 @@
         "minutes": "minutes",
         "max_bombs": "max bombs",
         "save": "Save",
-        "coming_soon": "More game modes coming soon..."
+        "quiz_title": "\ud83d\udcdd Quiz Mode",
+        "quiz_desc": "Create multiple-choice questions. Players earn bombs for submitting the correct answer.",
+        "quiz_total": "Total bomb budget:",
+        "quiz_questions": "Questions",
+        "quiz_add_q": "Add Question",
+        "quiz_add_a": "Add Answer",
+        "quiz_save": "Save Quiz Settings",
+        "quiz_export": "Export JSON",
+        "quiz_import": "Import JSON"
+    },
+    "settings_locations": {
+        "title": "\ud83d\udccd Locations",
+        "desc": "Real-world locations with codes. Players visit them to earn bombs.",
+        "count": "{n} locations",
+        "manage": "Manage Locations \u2192"
     },
     "notify": {
         "title": "\ud83d\udd14 Notifications",
@@ -227,7 +246,7 @@
         "enter_code": "Enter code!",
         "game_not_started": "Game is not started!",
         "cannot_bomb_self": "Cannot bomb yourself!",
-        "no_bombs": "No bombs left! Redeem codes to get more!",
+        "no_bombs": "No bombs left! Answer quiz questions or redeem codes to get more!",
         "game_paused": "Game is paused! No actions allowed until the game resumes.",
         "fetch_prefix": "Error: "
     },

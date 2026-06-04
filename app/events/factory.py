@@ -18,6 +18,7 @@ from app.events.models import (
     GameEndedEvent,
     GamePausedEvent,
     GameResumedEvent,
+    QuizAnsweredEvent,
 )
 
 
@@ -78,6 +79,9 @@ def create_event(db_event: GameEvent) -> Optional[AnyEvent]:
 
     elif event_type_value == "game_resumed":
         return GameResumedEvent(**payload_dict)
+
+    elif event_type_value == "quiz_answered":
+        return QuizAnsweredEvent(**payload_dict)
 
     return None
 

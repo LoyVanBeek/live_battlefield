@@ -522,6 +522,8 @@
         let trickleBombsPerInterval = 1;
         let lastTrickleAt = null;
         let dripCountdownTimer = null;
+        let quizEnabled = false;
+        let quizQuestionsCache = null;
 
         // Last rendered state for target team dropdown
         let lastTeamsData = null;
@@ -700,6 +702,9 @@
 
             // Pause state
             pausedUntil = data.pu ? new Date(data.pu) : null;
+
+            // Quiz
+            quizEnabled = data.qe || false;
 
             // Game status badge (inline in header)
             var badgeEl = document.getElementById('game-status-badge');
@@ -936,6 +941,14 @@
                             '<button class="btn btn-primary" onclick="redeemCode()">' + _('action.code.redeem') + '</button>' +
                         '</div>' +
                     '</div>';
+                if (quizEnabled) {
+                    html += '<div class="action-group" id="quiz-section">' +
+                        '<h3>' + _('action_quiz.heading') + '</h3>' +
+                        '<div id="quiz-content">' +
+                            '<p style="color:#888;">' + _('action_quiz.loading') + '</p>' +
+                        '</div>' +
+                    '</div>';
+                }
             }
 
             actionsEl.innerHTML = html;
@@ -945,6 +958,9 @@
 
             if (gameStatus === 'started' && lastTeamsData) {
                 renderTargetTeams(lastTeamsData);
+            }
+            if (gameStatus === 'started') {
+                updateQuizSection();
             }
         }
 
@@ -1049,6 +1065,55 @@
                 args: { location_number: parseInt(locNum), code: code }
             });
             showToast(result.message, result.success ? 'success' : 'error');
+        }
+
+        // --- Quiz ---
+        async function loadQuizQuestions() {
+            const data = await apiCall('/api/quiz/questions', 'GET');
+            if (data && data.questions) {
+                quizQuestionsCache = data.questions;
+            }
+            return quizQuestionsCache || [];
+        }
+
+        async function updateQuizSection() {
+            const content = document.getElementById('quiz-content');
+            if (!content) return;
+            if (!quizEnabled || gameStatus !== 'started') { content.innerHTML = ''; return; }
+
+            await loadQuizQuestions();
+            const questions = quizQuestionsCache || [];
+            if (questions.length === 0) {
+                content.innerHTML = '<p style="color:#888;">' + _('action_quiz.loading') + '</p>';
+                return;
+            }
+            const unanswered = questions.filter(q => !q.answered);
+
+            if (unanswered.length === 0) {
+                content.innerHTML = '<p style="color:#4caf50;">✓ ' + _('action_quiz.done') + '</p>';
+                return;
+            }
+
+            const q = unanswered[0];
+            content.innerHTML =
+                '<p style="margin-bottom:8px;font-weight:bold;">' + q.question_text + '</p>' +
+                '<div style="display:flex;flex-direction:column;gap:6px;">' +
+                q.answers.map(a =>
+                    '<button class="btn btn-primary" style="text-align:left;padding:8px 12px;" onclick="answerQuiz(' + q.id + ',' + a.id + ')">' +
+                        a.answer_text +
+                    '</button>'
+                ).join('') +
+                '</div>';
+        }
+
+        async function answerQuiz(questionId, answerId) {
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'quiz',
+                args: { question_id: questionId, answer_id: answerId }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            updateQuizSection();
         }
 
         function switchLanguage(lang) {

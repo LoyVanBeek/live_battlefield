@@ -61,3 +61,24 @@ class TeamPage:
         self.page.locator("#bomb-confirm.active").wait_for(timeout=5000)
         self.page.locator("#bomb-confirm .btn-primary").click()
         self.page.wait_for_timeout(1500)
+
+    def bomb_count(self):
+        return self.page.locator("#bomb-count")
+
+    def get_bomb_count(self):
+        return int(self.bomb_count().text_content())
+
+    def quiz_content(self):
+        return self.page.locator("#quiz-content")
+
+    def get_quiz_text(self):
+        return self.quiz_content().text_content()
+
+    def answer_quiz(self, answer_index: int):
+        """Click the nth answer button in the quiz section."""
+        buttons = self.quiz_content().locator("button")
+        buttons.nth(answer_index).click()
+        self.page.wait_for_timeout(500)
+
+    def is_quiz_done(self):
+        return self.quiz_content().text_content().lower().includes("answered")

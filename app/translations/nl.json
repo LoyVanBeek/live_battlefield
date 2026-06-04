@@ -124,13 +124,18 @@
         "save": "Opslaan",
         "cancel": "Annuleren"
     },
+    "action_quiz": {
+        "heading": "\ud83d\udcdd Quiz",
+        "loading": "Quiz laden...",
+        "done": "Alle vragen beantwoord!"
+    },
     "bomb_confirm": {
         "title": "\ud83d\udca5 {target} bombarderen?",
         "button": "\ud83d\udca5 Gooi Bom!",
         "cancel": "Annuleren"
     },
     "settings": {
-        "title": "Spelinstellingen",
+        "title": "\ud83c\udfae Spelmodi & Instellingen",
         "back": "\u2190 Terug naar Spelleider",
         "back_admin": "\u2190 Terug naar Beheerderspaneel",
         "bomb_drip": "\ud83d\udca7 Druppel Bommen",
@@ -140,7 +145,21 @@
         "minutes": "minuten",
         "max_bombs": "max bommen",
         "save": "Opslaan",
-        "coming_soon": "Binnenkort meer spelmodi..."
+        "quiz_title": "\ud83d\udcdd Quizmodus",
+        "quiz_desc": "Maak meerkeuzevragen. Spelers verdienen bommen door het juiste antwoord te geven.",
+        "quiz_total": "Totaal bombudget:",
+        "quiz_questions": "Vragen",
+        "quiz_add_q": "Vraag Toevoegen",
+        "quiz_add_a": "Antwoord Toevoegen",
+        "quiz_save": "Quizinstellingen Opslaan",
+        "quiz_export": "Exporteer JSON",
+        "quiz_import": "Importeer JSON"
+    },
+    "settings_locations": {
+        "title": "\ud83d\udccd Locaties",
+        "desc": "Echte locaties met codes. Spelers bezoeken ze om bommen te verdienen.",
+        "count": "{n} locaties",
+        "manage": "Beheer Locaties \u2192"
     },
     "notify": {
         "title": "\ud83d\udd14 Meldingen",
@@ -227,7 +246,7 @@
         "enter_code": "Voer code in!",
         "game_not_started": "Spel is niet gestart!",
         "cannot_bomb_self": "Je kunt jezelf niet bombarderen!",
-        "no_bombs": "Geen bommen over! Wis codes in om meer te krijgen!",
+        "no_bombs": "Geen bommen over! Beantwoord quizvragen of wis codes in om meer te krijgen!",
         "game_paused": "Spel is gepauzeerd! Geen acties toegestaan tot het spel hervat.",
         "fetch_prefix": "Fout: "
     },

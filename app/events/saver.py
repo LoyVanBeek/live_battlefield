@@ -20,6 +20,7 @@ from app.events.models import (
     GameEndedEvent,
     GamePausedEvent,
     GameResumedEvent,
+    QuizAnsweredEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ async def save_event(
         GameEndedEvent,
         GamePausedEvent,
         GameResumedEvent,
+        QuizAnsweredEvent,
     ],
     game_id: uuid.UUID,
 ) -> GameEvent:
