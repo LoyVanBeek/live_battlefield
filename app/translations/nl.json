@@ -106,7 +106,11 @@
             "dir_vertical": "verticaal",
             "place": "Plaats Schip",
             "remove_placeholder": "A1 (verwijder)",
-            "remove": "Verwijder Schip"
+            "remove": "Verwijder Schip",
+            "ships_placed": "schepen geplaatst",
+            "rotate": "Draaien",
+            "click_board_place": "Klik op je bord om te plaatsen.",
+            "click_ship_hint": "Klik op een schip hierboven, klik dan op je bord."
         },
         "bomb": {
             "heading": "\ud83d\udca5 Bombardeer Vijand",

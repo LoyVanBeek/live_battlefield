@@ -528,6 +528,7 @@
         let shipDirection = 'horizontal';
         let shipPlaceMode = false;
         let previewCells = [];
+        let placedShipCount = 0;
 
         // Last rendered state for target team dropdown
         let lastTeamsData = null;
@@ -757,6 +758,7 @@
             document.getElementById('rename-btn').style.display = gameStatus === 'preparing' ? '' : 'none';
             currentBombCount = myTeam.b;
             updateBombCountDisplay(myTeam.b);
+            placedShipCount = myTeam.sp || 0;
             document.getElementById('ship-count').textContent = myTeam.sp;
             document.getElementById('sunk-count').textContent = myTeam.sk;
 
@@ -923,24 +925,32 @@
             var shipHtml = '';
 
             if (gameStatus === 'preparing') {
+                const shipInfo = [
+                    { type: 'airplane_carrier', size: 6, count: 1, label: _('action.ship.type_airplane') },
+                    { type: 'battleship', size: 4, count: 2, label: _('action.ship.type_battleship') },
+                    { type: 'torpedo_hunter', size: 3, count: 3, label: _('action.ship.type_torpedo') },
+                    { type: 'patrol_boat', size: 2, count: 4, label: _('action.ship.type_patrol') },
+                ];
+                const shipColor = TEAM_COLORS_RGB[TEAM_COLOR] || 'rgb(128,128,128)';
                 shipHtml +=
                     '<div class="action-group">' +
                         '<h3>' + _('action.ship.heading') + '</h3>' +
-                        '<button class="btn btn-primary" onclick="placeAllShips()" style="margin-bottom:8px;">' + _('action.ship.auto') + '</button>' +
-                        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="ship-selector">' +
-                            '<button class="btn" data-ship="airplane_carrier" onclick="selectShipType(\'airplane_carrier\')" style="flex:1;min-width:100px;padding:8px;font-size:12px;background:#16213e;color:#eee;border:2px solid #333;">🛩️ ' + _('action.ship.type_airplane') + '</button>' +
-                            '<button class="btn" data-ship="battleship" onclick="selectShipType(\'battleship\')" style="flex:1;min-width:80px;padding:8px;font-size:12px;background:#16213e;color:#eee;border:2px solid #333;">🚢 ' + _('action.ship.type_battleship') + '</button>' +
-                            '<button class="btn" data-ship="torpedo_hunter" onclick="selectShipType(\'torpedo_hunter\')" style="flex:1;min-width:80px;padding:8px;font-size:12px;background:#16213e;color:#eee;border:2px solid #333;">🚤 ' + _('action.ship.type_torpedo') + '</button>' +
-                            '<button class="btn" data-ship="patrol_boat" onclick="selectShipType(\'patrol_boat\')" style="flex:1;min-width:80px;padding:8px;font-size:12px;background:#16213e;color:#eee;border:2px solid #333;">⛵ ' + _('action.ship.type_patrol') + '</button>' +
+                        '<button class="btn btn-primary" onclick="placeAllShips()" style="margin-bottom:10px;font-size:12px;padding:6px 12px;">' + _('action.ship.auto') + '</button>' +
+                        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;" id="ship-inventory">' +
+                            shipInfo.map(function(s) {
+                                var cellsHtml = '';
+                                for (var i = 0; i < s.size; i++) {
+                                    cellsHtml += '<div style="width:12px;height:12px;border:1px solid rgba(255,255,255,0.3);background:' + shipColor.replace('rgb', 'rgba').replace(')', ',0.7)') + ';border-radius:1px;"></div>';
+                                }
+                                return '<div class="ship-inv-item" data-ship="' + s.type + '" data-count="' + s.count + '" onclick="selectShipType(\'' + s.type + '\')" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;border:2px solid #333;background:#16213e;cursor:pointer;">' +
+                                    '<div style="display:flex;gap:1px;">' + cellsHtml + '</div>' +
+                                    '<span style="font-size:11px;color:#aaa;">' + s.label.split('(')[0].trim() + ' <span class="ship-remaining" style="color:#fff;">' + s.count + '</span></span>' +
+                                '</div>';
+                            }).join('') +
                         '</div>' +
-                        '<div style="font-size:12px;color:#888;margin-bottom:6px;" id="ship-hint">' +
-                            (selectedShipType ? 'Click a cell on your board to place the ship. <a href="#" onclick="shipDirection=\'horizontal\'==shipDirection?\'vertical\':\'horizontal\';updateShipHint()" style="color:#00d9ff;">Rotate ↻</a> | <a href="#" onclick="selectShipType(null)" style="color:#f44336;">Cancel ✕</a>' : 'Select a ship above, then click your board.') +
-                        '</div>' +
-                        '<div class="action-inputs" style="margin-top:4px;opacity:0.6;">' +
-                            '<small style="color:#888;">' + _('action.ship.coord_placeholder') + ':</small>' +
-                            '<input type="text" id="coord-input" placeholder="' + _('action.ship.coord_placeholder') + '" style="width:60px;padding:4px;font-size:11px;">' +
-                            '<button class="btn btn-primary" onclick="placeShip()" style="padding:4px 8px;font-size:11px;">' + _('action.ship.place') + '</button>' +
-                            '<button class="btn btn-danger" onclick="removeShip()" style="padding:4px 8px;font-size:11px;">' + _('action.ship.remove') + '</button>' +
+                        '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#888;margin-bottom:6px;" id="ship-hint">' +
+                            '<span id="ship-status">' + (10 - placedShipCount) + '/10 ' + _('action.ship.ships_placed') + '</span> &middot; ' +
+                            (selectedShipType ? '<span>' + _('action.ship.click_board_place') + ' <a href="#" onclick="toggleShipDirection();return false;" style="color:#00d9ff;">↻ ' + _('action.ship.rotate') + '</a> <a href="#" onclick="selectShipType(null);return false;" style="color:#f44336;">✕</a></span>' : '<span>' + _('action.ship.click_ship_hint') + '</span>') +
                         '</div>' +
                     '</div>';
             }
@@ -1074,13 +1084,13 @@
         function selectShipType(shipType) {
             clearPreview();
             selectedShipType = shipType;
-            document.querySelectorAll('#ship-selector button').forEach(function(btn) {
-                if (btn.dataset.ship === shipType) {
-                    btn.style.borderColor = '#00d9ff';
-                    btn.style.background = '#0f3460';
+            document.querySelectorAll('#ship-inventory .ship-inv-item').forEach(function(item) {
+                if (item.dataset.ship === shipType) {
+                    item.style.borderColor = '#00d9ff';
+                    item.style.background = '#0f3460';
                 } else {
-                    btn.style.borderColor = '#333';
-                    btn.style.background = '#16213e';
+                    item.style.borderColor = '#333';
+                    item.style.background = '#16213e';
                 }
             });
             if (shipType === null) {
