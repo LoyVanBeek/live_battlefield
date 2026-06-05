@@ -106,7 +106,11 @@
             "dir_vertical": "vertical",
             "place": "Place Ship",
             "remove_placeholder": "A1 (remove)",
-            "remove": "Remove Ship"
+            "remove": "Remove Ship",
+            "ships_placed": "ships placed",
+            "rotate": "Rotate",
+            "click_board_place": "Click your board to place.",
+            "click_ship_hint": "Click a ship above, then click your board."
         },
         "bomb": {
             "heading": "\ud83d\udca5 Bomb Enemy",
