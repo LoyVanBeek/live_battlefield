@@ -1200,24 +1200,29 @@ if (idx === 0) container.innerHTML = '<span style="color:#4caf50;font-size:13px;
             showToast(result.message, result.success ? 'success' : 'error');
         }
 
-        async function clearAllShips() {
+async function clearAllShips() {
             if (gameStatus !== 'preparing') { showToast(_('error.game_not_started'), 'error'); return; }
             if (!confirm('Remove ALL ships from your board?')) return;
-            const data = await apiCall('/api/board/' + TEAM_COLOR + '/private.json');
-            if (!data || !data.grid) return;
+            const state = await apiCall('/api/team-state');
+            if (!state || !state.t || !state.t.g) return;
+            var grid = state.t.g;
             var removed = 0;
             for (var r = 0; r < 10; r++) {
                 for (var c = 0; c < 10; c++) {
-                    if (data.grid[r][c] && data.grid[r][c].has_ship) {
-                        // Anchor cell: no ship to the left AND no ship above
-                        var leftHasShip = c > 0 && data.grid[r][c - 1] && data.grid[r][c - 1].has_ship;
-                        var aboveHasShip = r > 0 && data.grid[r - 1][c] && data.grid[r - 1][c].has_ship;
+                    if (grid[r][c] && grid[r][c].p) {
+                        var leftHasShip = c > 0 && grid[r][c - 1] && grid[r][c - 1].p;
+                        var aboveHasShip = r > 0 && grid[r - 1][c] && grid[r - 1][c].p;
                         if (!leftHasShip && !aboveHasShip) {
                             var result = await apiCall('/api/quick/remove_ship', 'POST', {
                                 team_color: TEAM_COLOR, row: r, col: c
                             });
                             if (result.success) removed++;
                         }
+                    }
+                }
+            }
+            showToast('Removed ' + removed + ' ship(s)!', 'success');
+        }
                     }
                 }
             }
