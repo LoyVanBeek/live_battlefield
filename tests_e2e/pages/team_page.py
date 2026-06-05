@@ -82,3 +82,46 @@ class TeamPage:
 
     def is_quiz_done(self):
         return self.quiz_content().text_content().lower().includes("answered")
+
+    # --- Ship Editor ---
+
+    def private_board_cell(self, row: int, col: int):
+        return self.page.locator("#private-board .board-cell").nth(row * 10 + col + 12)
+
+    def ship_inventory(self):
+        return self.page.locator(".ship-inv-item")
+
+    def ship_inventory_count(self):
+        return self.ship_inventory().count()
+
+    def select_ship_in_inventory(self, index: int = 0):
+        self.ship_inventory().nth(index).click()
+        self.page.wait_for_timeout(300)
+
+    def place_ship_on_board(self, row: int, col: int):
+        self.private_board_cell(row, col).click()
+        self.page.wait_for_timeout(500)
+
+    def clear_all_ships_btn(self):
+        return self.page.locator("button", has_text="Clear All")
+
+    def clear_all_ships(self):
+        self.page.once("dialog", lambda dialog: dialog.accept())
+        self.clear_all_ships_btn().click()
+        self.page.wait_for_timeout(1000)
+
+    def rotate_btn(self):
+        return self.page.locator("#ship-hint a", has_text="horizontal").or_(
+            self.page.locator("#ship-hint a", has_text="vertical")
+        )
+
+    def click_rotate(self):
+        self.rotate_btn().click()
+        self.page.wait_for_timeout(300)
+
+    def get_ship_hint_text(self):
+        return self.page.locator("#ship-hint").text_content()
+
+    def get_ship_placed_count(self):
+        text = self.page.locator("#ship-count").text_content()
+        return int(text) if text and text != "-" else 0
