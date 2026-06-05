@@ -1110,10 +1110,9 @@
             if (idx === 0) container.innerHTML = '<span style="color:#4caf50;font-size:13px;">✓ All ships placed!</span>';
         }
 
-        function toggleShipDirection() {
+function toggleShipDirection() {
             shipDirection = shipDirection === 'horizontal' ? 'vertical' : 'horizontal';
             renderShipInventory();
-            // Re-highlight previously selected item
             if (_selectedInvEl) {
                 _selectedInvEl.style.borderColor = '#00d9ff';
                 _selectedInvEl.style.background = '#0f3460';
@@ -1122,14 +1121,17 @@
         }
 
         function updateShipHint() {
-            var el = document.getElementById('ship-hint');
-            if (!el) return;
-            var dir = shipDirection;
-            el.innerHTML = '<span id="ship-status">' + (10 - placedShipCount) + '/10 ' + _('action.ship.ships_placed') + '</span> &middot; ' +
-                (selectedShipType
-                    ? '<span>' + _('action.ship.click_board_place') + ' <a href="#" onclick="toggleShipDirection();return false;" style="color:#00d9ff;">↻ <strong>' + dir + '</strong></a> <a href="#" onclick="selectShipType(null);return false;" style="color:#f44336;">✕</a></span>'
-                    : '<span>' + _('action.ship.click_ship_hint') + '</span>');
-        }
+                var el = document.getElementById('ship-hint');
+                if (!el) return;
+                var dir = shipDirection;
+                var statusText = (10 - placedShipCount) + '/10 ' + _('action.ship.ships_placed');
+                var dirIcon = dir === 'horizontal' ? '↔' : '↕';
+                el.innerHTML = '<span style="color:#888;">' + statusText + '</span> &middot; ' +
+                    '<a href="#" onclick="toggleShipDirection();return false;" style="color:#00d9ff;text-decoration:none;font-weight:bold;" title="Toggle direction">' + dirIcon + ' ' + dir + '</a>' +
+                    (selectedShipType
+                        ? ' &middot; <span style="color:#888;">' + _('action.ship.click_board_place') + '</span> <a href="#" onclick="selectShipType(null);return false;" style="color:#f44336;">✕</a>'
+                        : ' &middot; <span style="color:#888;">' + _('action.ship.click_ship_hint') + '</span>');
+            }
 
         // --- Click-to-place ships ---
         function selectShipType(shipType, el) {
