@@ -530,6 +530,7 @@
         let previewCells = [];
         let placedShipCount = 0;
         let placedShipTypes = {};
+        let _selectedInvEl = null;
 
         // Last rendered state for target team dropdown
         let lastTeamsData = null;
@@ -927,40 +928,18 @@
             var shipHtml = '';
 
             if (gameStatus === 'preparing') {
-                const shipInfo = [
-                    { type: 'airplane_carrier', size: 6, count: 1, label: _('action.ship.type_airplane').split('(')[0].trim() },
-                    { type: 'battleship', size: 4, count: 2, label: _('action.ship.type_battleship').split('(')[0].trim() },
-                    { type: 'torpedo_hunter', size: 3, count: 3, label: _('action.ship.type_torpedo').split('(')[0].trim() },
-                    { type: 'patrol_boat', size: 2, count: 4, label: _('action.ship.type_patrol').split('(')[0].trim() },
-                ];
-                const shipColor = TEAM_COLORS_RGB[TEAM_COLOR] || 'rgb(128,128,128)';
-                const remaining = placedShipTypes || {};
-                var invHtml = '';
-                shipInfo.forEach(function(s) {
-                    var placed = remaining[s.type] || 0;
-                    var left = s.count - placed;
-                    for (var j = 0; j < left; j++) {
-                        var cellsHtml = '';
-                        for (var i = 0; i < s.size; i++) {
-                            cellsHtml += '<div style="width:12px;height:12px;border:1px solid rgba(255,255,255,0.3);background:' + shipColor.replace('rgb', 'rgba').replace(')', ',0.7)') + ';border-radius:1px;"></div>';
-                        }
-                        invHtml += '<div class="ship-inv-item" data-ship="' + s.type + '" onclick="selectShipType(\'' + s.type + '\')" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;border:2px solid #333;background:#16213e;cursor:pointer;">' +
-                            '<div style="display:flex;gap:1px;">' + cellsHtml + '</div>' +
-                            '<span style="font-size:11px;color:#aaa;">' + s.label + '</span>' +
-                        '</div>';
-                    }
-                });
-                if (!invHtml) invHtml = '<span style="color:#4caf50;font-size:13px;">✓ All ships placed!</span>';
                 shipHtml +=
                     '<div class="action-group">' +
                         '<h3>' + _('action.ship.heading') + '</h3>' +
                         '<button class="btn btn-primary" onclick="placeAllShips()" style="margin-bottom:10px;font-size:12px;padding:6px 12px;">' + _('action.ship.auto') + '</button>' +
-                        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="ship-inventory">' + invHtml + '</div>' +
+                        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="ship-inventory"></div>' +
                         '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#888;margin-bottom:6px;" id="ship-hint">' +
                             '<span id="ship-status">' + (10 - placedShipCount) + '/10 ' + _('action.ship.ships_placed') + '</span> &middot; ' +
-                            (selectedShipType ? '<span>' + _('action.ship.click_board_place') + ' <a href="#" onclick="toggleShipDirection();return false;" style="color:#00d9ff;">↻ ' + _('action.ship.rotate') + '</a> <a href="#" onclick="selectShipType(null);return false;" style="color:#f44336;">✕</a></span>' : '<span>' + _('action.ship.click_ship_hint') + '</span>') +
+                            '<span>' + _('action.ship.click_ship_hint') + '</span>' +
                         '</div>' +
                     '</div>';
+                // Defer to fill in the inventory
+                setTimeout(renderShipInventory, 50);
             }
 
             if (gameStatus === 'started') {
@@ -1086,29 +1065,86 @@
                 savedCellStyles.push({ cell: cell, bg: cell.style.backgroundColor });
                 cell.style.backgroundColor = color;
             });
+} 
+
+        function renderShipInventory() {
+            const container = document.getElementById('ship-inventory');
+            if (!container) return;
+            const shipInfo = [
+                { type: 'airplane_carrier', size: 6, count: 1, label: 'Airplane Carrier' },
+                { type: 'battleship', size: 4, count: 2, label: 'Battleship' },
+                { type: 'torpedo_hunter', size: 3, count: 3, label: 'Torpedo Hunter' },
+                { type: 'patrol_boat', size: 2, count: 4, label: 'Patrol Boat' },
+            ];
+            const remaining = placedShipTypes || {};
+            var idx = 0;
+            container.innerHTML = '';
+            shipInfo.forEach(function(s) {
+                var placed = remaining[s.type] || 0;
+                var left = s.count - placed;
+                for (var j = 0; j < left; j++) {
+                    var div = document.createElement('div');
+                    div.className = 'ship-inv-item';
+                    div.style.cssText = 'display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;border:2px solid #333;background:#16213e;cursor:pointer;';
+                    div.dataset.idx = idx;
+                    var cellsDiv = document.createElement('div');
+                    cellsDiv.style.cssText = 'display:flex;flex-direction:' + (shipDirection === 'vertical' ? 'column' : 'row') + ';gap:1px;';
+                    var shipColor = TEAM_COLORS_RGB[TEAM_COLOR] || 'rgb(128,128,128)';
+                    for (var i = 0; i < s.size; i++) {
+                        var cell = document.createElement('div');
+                        cell.style.cssText = 'width:12px;height:12px;border:1px solid rgba(255,255,255,0.3);background:' + shipColor.replace('rgb', 'rgba').replace(')', ',0.7)') + ';border-radius:1px;';
+                        cellsDiv.appendChild(cell);
+                    }
+                    div.appendChild(cellsDiv);
+                    var label = document.createElement('span');
+                    label.style.cssText = 'font-size:11px;color:#aaa;';
+                    label.textContent = s.label;
+                    div.appendChild(label);
+                    div.onclick = function(el, type) {
+                        return function() { selectShipType(type, el); };
+                    }(div, s.type);
+                    container.appendChild(div);
+                    idx++;
+                }
+            });
+            if (idx === 0) container.innerHTML = '<span style="color:#4caf50;font-size:13px;">✓ All ships placed!</span>';
+        }
+
+        function toggleShipDirection() {
+            shipDirection = shipDirection === 'horizontal' ? 'vertical' : 'horizontal';
+            renderShipInventory();
+            // Re-highlight previously selected item
+            if (_selectedInvEl) {
+                _selectedInvEl.style.borderColor = '#00d9ff';
+                _selectedInvEl.style.background = '#0f3460';
+            }
+            updateShipHint();
+        }
+
+        function updateShipHint() {
+            var el = document.getElementById('ship-hint');
+            if (!el) return;
+            var dir = shipDirection;
+            el.innerHTML = '<span id="ship-status">' + (10 - placedShipCount) + '/10 ' + _('action.ship.ships_placed') + '</span> &middot; ' +
+                (selectedShipType
+                    ? '<span>' + _('action.ship.click_board_place') + ' <a href="#" onclick="toggleShipDirection();return false;" style="color:#00d9ff;">↻ <strong>' + dir + '</strong></a> <a href="#" onclick="selectShipType(null);return false;" style="color:#f44336;">✕</a></span>'
+                    : '<span>' + _('action.ship.click_ship_hint') + '</span>');
         }
 
         // --- Click-to-place ships ---
-        function selectShipType(shipType) {
+        function selectShipType(shipType, el) {
             clearPreview();
-            selectedShipType = shipType;
-            document.querySelectorAll('#ship-inventory .ship-inv-item').forEach(function(item) {
-                if (item.dataset.ship === shipType) {
-                    item.style.borderColor = '#00d9ff';
-                    item.style.background = '#0f3460';
-                } else {
-                    item.style.borderColor = '#333';
-                    item.style.background = '#16213e';
-                }
-            });
-            if (shipType === null) {
-                document.getElementById('ship-hint').innerHTML = 'Select a ship above, then click your board.';
-            } else {
-                document.getElementById('ship-hint').innerHTML =
-                    'Click a cell on your board to place. ' +
-                    '<a href="#" onclick="toggleShipDirection();return false;" style="color:#00d9ff;">↻ Rotate</a> | ' +
-                    '<a href="#" onclick="selectShipType(null);return false;" style="color:#f44336;">✕ Cancel</a>';
+            if (_selectedInvEl) {
+                _selectedInvEl.style.borderColor = '#333';
+                _selectedInvEl.style.background = '#16213e';
             }
+            selectedShipType = shipType;
+            _selectedInvEl = el || null;
+            if (el) {
+                el.style.borderColor = '#00d9ff';
+                el.style.background = '#0f3460';
+            }
+            updateShipHint();
         }
 
         function toggleShipDirection() {
