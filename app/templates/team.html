@@ -358,6 +358,7 @@
                     </div>
                 </div>
                 <span class="team-status-badge waiting" id="game-status-badge">{{ tr.status.loading }}</span>
+                <span id="schedule-countdown" style="color:#ff9800;font-size:14px;font-weight:bold;display:none;"></span>
             </div>
             <div class="team-stats">
                 <span>💣 <span id="bomb-count">-</span>/<span id="bomb-max">-</span> <span id="drip-countdown" class="drip-countdown"></span></span>
@@ -524,6 +525,7 @@
         let dripCountdownTimer = null;
         let quizEnabled = false;
         let quizQuestionsCache = null;
+        let scheduledStartAt = null;
         let selectedShipType = null;
         let shipDirection = 'horizontal';
         let shipPlaceMode = false;
@@ -732,6 +734,9 @@
 
             // Pause state
             pausedUntil = data.pu ? new Date(data.pu) : null;
+
+            // Scheduled start
+            scheduledStartAt = data.ss && data.s !== 'started' ? new Date(data.ss) : null;
 
             // Quiz
             quizEnabled = data.qe || false;
@@ -1525,6 +1530,24 @@ async function clearAllShips() {
         dripCountdownTimer = setInterval(updateDripCountdown, 1000);
         // Pause countdown: tick every second
         setInterval(updatePauseBanner, 1000);
+        // Scheduled start countdown
+        setInterval(function() {
+            var el = document.getElementById('schedule-countdown');
+            if (!el) return;
+            if (!scheduledStartAt || gameStatus === 'started') {
+                el.style.display = 'none';
+                return;
+            }
+            var remaining = Math.max(0, scheduledStartAt - new Date());
+            if (remaining <= 0) {
+                el.style.display = 'none';
+                return;
+            }
+            el.style.display = 'inline';
+            var mins = Math.floor(remaining / 60000);
+            var secs = Math.floor((remaining % 60000) / 1000);
+            el.textContent = '⏰ ' + mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }, 1000);
 
         // Fetch initial state directly (so page renders even without SSE)
         apiCall('/api/team-state').then(function (data) {

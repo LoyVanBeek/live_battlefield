@@ -158,6 +158,7 @@ async def verify_team_or_gm(
 async def lifespan(app: FastAPI):
     stop_event = asyncio.Event()
     trickle_task = None
+    scheduler_task = None
     try:
         async with api_session_maker() as db:
             from app.models import get_or_create_admin
@@ -165,7 +166,9 @@ async def lifespan(app: FastAPI):
             logger.info("Admin panel: /admin/%s", sa.token)
 
         from app.services.trickle import trickle_loop
+        from app.services.game_scheduler import scheduler_loop
         trickle_task = asyncio.create_task(trickle_loop(stop_event))
+        scheduler_task = asyncio.create_task(scheduler_loop(stop_event))
     except Exception:
         logger.warning("Could not check super admin token on startup")
 
@@ -176,6 +179,12 @@ async def lifespan(app: FastAPI):
         trickle_task.cancel()
         try:
             await trickle_task
+        except asyncio.CancelledError:
+            pass
+    if scheduler_task:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
         except asyncio.CancelledError:
             pass
 
@@ -309,6 +318,7 @@ async def get_public_state(
         "status": game.status.value if game else "PREPARING",
         "teams": teams,
         "paused_until": paused_until,
+        "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at else "",
     }
 
 
@@ -826,6 +836,7 @@ async def get_join_state(
         "game_name": game.name or "Battlefield",
         "status": state.status.value,
         "available_colors": [c for c in TEAM_COLORS if c not in state.teams],
+        "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at and game.scheduled_start_at > datetime.now(timezone.utc) else "",
     }
 
 
@@ -1023,6 +1034,7 @@ async def get_game_state(
         "paused_until": paused_until,
         "quiz_enabled": game.quiz_enabled if game else False,
         "quiz_total_bombs": game.quiz_total_bombs if game else 100,
+        "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at else "",
     }
 
 
@@ -2241,6 +2253,49 @@ async def resume_game(
     return {"success": True, "message": "Game resumed! Players can now act."}
 
 
+class ScheduleStartRequest(BaseModel):
+    scheduled_start_at: Optional[str] = None
+    clear: bool = False
+
+
+@app.post("/api/quick/schedule-start")
+async def schedule_start(
+    body: ScheduleStartRequest,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_game
+
+    game_uuid = uuid.UUID(game_id)
+    game = await get_game(db, game_uuid)
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    if body.clear:
+        game.scheduled_start_at = None
+        await db.commit()
+        logger.info("Scheduled start cleared for game %s", game_id)
+        return {"success": True, "message": "Scheduled start cleared."}
+
+    if body.scheduled_start_at:
+        try:
+            dt = datetime.fromisoformat(body.scheduled_start_at)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            game.scheduled_start_at = dt
+            await db.commit()
+            logger.info("Game %s scheduled to start at %s", game_id, dt.isoformat())
+            return {
+                "success": True,
+                "message": f"Game scheduled to start at {dt.strftime('%Y-%m-%d %H:%M:%S UTC')}.",
+                "scheduled_start_at": dt.isoformat(),
+            }
+        except ValueError:
+            return {"success": False, "message": "Invalid datetime format. Use ISO format (e.g. 2024-12-31T23:59:00)."}
+
+    return {"success": False, "message": "Provide scheduled_start_at or set clear=true."}
+
+
 @app.post("/api/quick/quiz_settings")
 async def set_quiz_settings(
     settings: QuizSettings,
@@ -2548,6 +2603,7 @@ async def get_game_status(
         "paused_until": paused_until,
         "quiz_enabled": game.quiz_enabled if game else False,
         "quiz_total_bombs": game.quiz_total_bombs if game else 100,
+        "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at else "",
     }
 
 

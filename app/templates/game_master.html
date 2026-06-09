@@ -354,6 +354,10 @@
                 </select>
                 <button class="btn btn-warning" onclick="pauseGame()" id="btn-pause">{{ tr.gm.pause }}</button>
                 <button class="btn btn-success" onclick="resumeGame()" id="btn-resume" style="display:none">{{ tr.gm.resume }}</button>
+                <span id="schedule-countdown" style="color:#ff9800;font-size:13px;display:none;"></span>
+                <input type="datetime-local" id="schedule-start-input" style="padding:6px;font-size:12px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
+                <button class="btn btn-primary" style="font-size:12px;padding:6px 10px;" onclick="scheduleGameStart()">{{ tr.gm.schedule }}</button>
+                <button class="btn btn-danger" style="font-size:12px;padding:6px 10px;display:none;" id="btn-clear-schedule" onclick="clearSchedule()">{{ tr.gm.clear }}</button>
             </div>
         </div>
 
@@ -1223,6 +1227,79 @@
                 countdownEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
             }
         }
+
+        // --- Scheduled start ---
+        let scheduledStartAt = null;
+        let scheduleCountdownInterval = null;
+
+        function updateScheduleCountdown() {
+            const el = document.getElementById('schedule-countdown');
+            const btnClear = document.getElementById('btn-clear-schedule');
+            if (!scheduledStartAt) {
+                if (el) el.style.display = 'none';
+                if (btnClear) btnClear.style.display = 'none';
+                return;
+            }
+            const now = new Date();
+            const remaining = Math.max(0, scheduledStartAt - now);
+            if (remaining <= 0) {
+                el.style.display = 'none';
+                btnClear.style.display = 'none';
+                return;
+            }
+            el.style.display = 'inline';
+            btnClear.style.display = 'inline';
+            const mins = Math.floor(remaining / 60000);
+            const secs = Math.floor((remaining % 60000) / 1000);
+            el.textContent = '⏰ ' + mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }
+
+        async function scheduleGameStart() {
+            const input = document.getElementById('schedule-start-input');
+            const val = input.value;
+            if (!val) { showToast('Select a date and time!', 'error'); return; }
+            // Convert local datetime-local to ISO
+            const d = new Date(val);
+            if (isNaN(d.getTime())) { showToast('Invalid date/time!', 'error'); return; }
+            const iso = d.toISOString();
+            const result = await apiCall('/api/quick/schedule-start', 'POST', {
+                scheduled_start_at: iso
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success && result.scheduled_start_at) {
+                scheduledStartAt = new Date(result.scheduled_start_at);
+                updateScheduleCountdown();
+            }
+        }
+
+        async function clearSchedule() {
+            const result = await apiCall('/api/quick/schedule-start', 'POST', { clear: true });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success) {
+                scheduledStartAt = null;
+                updateScheduleCountdown();
+            }
+        }
+
+        scheduleCountdownInterval = setInterval(updateScheduleCountdown, 1000);
+
+        // Hook into loadGameStatus to read scheduled_start_at
+        const origLoadGameStatus = loadGameStatus;
+        loadGameStatus = async function() {
+            await origLoadGameStatus();
+            const status = await apiCall('/api/game-status');
+            if (status && status.scheduled_start_at) {
+                const d = new Date(status.scheduled_start_at);
+                if (d > new Date()) {
+                    scheduledStartAt = d;
+                } else {
+                    scheduledStartAt = null;
+                }
+            } else {
+                scheduledStartAt = null;
+            }
+            updateScheduleCountdown();
+        };
 
         async function pauseGame() {
             const duration = parseInt(document.getElementById('pause-duration').value);

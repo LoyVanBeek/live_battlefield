@@ -50,6 +50,8 @@
         "end_game": "End Game",
         "pause": "\u23f8\ufe0f Pause",
         "resume": "\u25b6\ufe0f Resume",
+        "schedule": "\u23f0 Schedule",
+        "clear": "\u274c Clear",
         "pause_indefinite": "\u221e Indefinite",
         "pause_min": "{n}m",
         "pause_hour": "1h",

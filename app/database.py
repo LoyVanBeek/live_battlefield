@@ -160,6 +160,7 @@ class Game(Base):
     paused_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     quiz_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
     quiz_total_bombs: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class TeamToken(Base):
