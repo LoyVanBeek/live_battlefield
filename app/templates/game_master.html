@@ -1283,24 +1283,6 @@
 
         scheduleCountdownInterval = setInterval(updateScheduleCountdown, 1000);
 
-        // Hook into loadGameStatus to read scheduled_start_at
-        const origLoadGameStatus = loadGameStatus;
-        loadGameStatus = async function() {
-            await origLoadGameStatus();
-            const status = await apiCall('/api/game-status');
-            if (status && status.scheduled_start_at) {
-                const d = new Date(status.scheduled_start_at);
-                if (d > new Date()) {
-                    scheduledStartAt = d;
-                } else {
-                    scheduledStartAt = null;
-                }
-            } else {
-                scheduledStartAt = null;
-            }
-            updateScheduleCountdown();
-        };
-
         async function pauseGame() {
             const duration = parseInt(document.getElementById('pause-duration').value);
             const result = await apiCall('/api/quick/pause-game', 'POST', { duration_minutes: duration });
@@ -1332,7 +1314,14 @@
             } else {
                 pausedUntil = null;
             }
+            if (status && status.scheduled_start_at) {
+                const d = new Date(status.scheduled_start_at);
+                scheduledStartAt = d > new Date() ? d : null;
+            } else {
+                scheduledStartAt = null;
+            }
             updatePauseBanner();
+            updateScheduleCountdown();
         };
 
         // Start pause countdown timer
