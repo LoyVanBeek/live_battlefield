@@ -51,7 +51,7 @@
         "pause": "\u23f8\ufe0f Pauzeer",
         "resume": "\u25b6\ufe0f Hervat",
         "schedule": "\u23f0 Inplannen",
-        "clear": "\u274c Wissen",
+        "clear_schedule": "\u274c Wissen",
         "pause_indefinite": "\u221e Onbepaald",
         "pause_min": "{n}m",
         "pause_hour": "1u",
