@@ -359,6 +359,7 @@
                 </div>
                 <span class="team-status-badge waiting" id="game-status-badge">{{ tr.status.loading }}</span>
                 <span id="schedule-countdown" style="color:#ff9800;font-size:14px;font-weight:bold;display:none;"></span>
+                <span id="schedule-start-time" style="color:#aaa;font-size:12px;display:none;"></span>
             </div>
             <div class="team-stats">
                 <span>💣 <span id="bomb-count">-</span>/<span id="bomb-max">-</span> <span id="drip-countdown" class="drip-countdown"></span></span>
@@ -1533,20 +1534,25 @@ async function clearAllShips() {
         // Scheduled start countdown
         setInterval(function() {
             var el = document.getElementById('schedule-countdown');
-            if (!el) return;
-            if (!scheduledStartAt || gameStatus === 'started') {
+            var timeEl = document.getElementById('schedule-start-time');
+            if (!el || !timeEl) return;
+            if (!scheduledStartAt || gameStatus === 'started' || gameStatus === 'ended') {
                 el.style.display = 'none';
+                timeEl.style.display = 'none';
                 return;
             }
             var remaining = Math.max(0, scheduledStartAt - new Date());
             if (remaining <= 0) {
                 el.style.display = 'none';
+                timeEl.style.display = 'none';
                 return;
             }
             el.style.display = 'inline';
             var mins = Math.floor(remaining / 60000);
             var secs = Math.floor((remaining % 60000) / 1000);
             el.textContent = '⏰ ' + mins + ':' + (secs < 10 ? '0' : '') + secs;
+            timeEl.style.display = 'inline';
+            timeEl.textContent = ' — starts at ' + scheduledStartAt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
         }, 1000);
 
         // Fetch initial state directly (so page renders even without SSE)
