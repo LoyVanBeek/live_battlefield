@@ -356,12 +356,12 @@
                 <button class="btn btn-success" onclick="resumeGame()" id="btn-resume" style="display:none">{{ tr.gm.resume }}</button>
                 <span id="schedule-countdown" style="color:#ff9800;font-size:13px;display:none;"></span>
                 <span style="display:inline-flex;gap:4px;align-items:center;">
-                    <input type="datetime-local" id="schedule-start-input" style="padding:6px;font-size:12px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
+                    <input type="datetime-local" id="schedule-start-input" style="padding:6px;font-size:12px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;" oninput="document.getElementById('btn-schedule').style.opacity=this.value?'1':'0.4'">
                     <button class="btn btn-primary" style="font-size:11px;padding:4px 6px;" onclick="setSchedulePreset(10)" title="10 minutes">10m</button>
                     <button class="btn btn-primary" style="font-size:11px;padding:4px 6px;" onclick="setSchedulePreset(60)" title="1 hour">1h</button>
                     <button class="btn btn-primary" style="font-size:11px;padding:4px 6px;" onclick="setSchedulePreset(180)" title="3 hours">3h</button>
                 </span>
-                <button class="btn btn-primary" style="font-size:12px;padding:6px 10px;" onclick="scheduleGameStart()">{{ tr.gm.schedule }}</button>
+                <button class="btn btn-primary" id="btn-schedule" style="font-size:12px;padding:6px 10px;opacity:0.4;" onclick="scheduleGameStart()">{{ tr.gm.schedule }}</button>
                 <button class="btn btn-danger" style="font-size:12px;padding:6px 10px;display:none;" id="btn-clear-schedule" onclick="clearSchedule()">{{ tr.gm.clear_schedule }}</button>
             </div>
         </div>
@@ -1269,6 +1269,8 @@
             const pad = function(n) { return (n < 10 ? '0' : '') + n; };
             input.value = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
                 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+            // Button starts lit since input has a value
+            document.getElementById('btn-schedule').style.opacity = '1';
         }
 
         function setSchedulePreset(minutesFromNow) {
