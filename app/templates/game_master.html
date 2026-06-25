@@ -355,13 +355,13 @@
                 <button class="btn btn-warning" onclick="pauseGame()" id="btn-pause">{{ tr.gm.pause }}</button>
                 <button class="btn btn-success" onclick="resumeGame()" id="btn-resume" style="display:none">{{ tr.gm.resume }}</button>
                 <span id="schedule-countdown" style="color:#ff9800;font-size:13px;display:none;"></span>
-                <span style="display:inline-flex;gap:4px;align-items:center;">
+                <span id="schedule-controls" style="display:inline-flex;gap:4px;align-items:center;">
                     <input type="datetime-local" id="schedule-start-input" style="padding:6px;font-size:12px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;" oninput="document.getElementById('btn-schedule').style.opacity=this.value?'1':'0.4'">
                     <button class="btn btn-primary" style="font-size:11px;padding:4px 6px;" onclick="setSchedulePreset(10)" title="10 minutes">10m</button>
                     <button class="btn btn-primary" style="font-size:11px;padding:4px 6px;" onclick="setSchedulePreset(60)" title="1 hour">1h</button>
                     <button class="btn btn-primary" style="font-size:11px;padding:4px 6px;" onclick="setSchedulePreset(180)" title="3 hours">3h</button>
+                    <button class="btn btn-primary" id="btn-schedule" style="font-size:12px;padding:6px 10px;opacity:0.4;" onclick="scheduleGameStart()">{{ tr.gm.schedule }}</button>
                 </span>
-                <button class="btn btn-primary" id="btn-schedule" style="font-size:12px;padding:6px 10px;opacity:0.4;" onclick="scheduleGameStart()">{{ tr.gm.schedule }}</button>
                 <button class="btn btn-danger" style="font-size:12px;padding:6px 10px;display:none;" id="btn-clear-schedule" onclick="clearSchedule()">{{ tr.gm.clear_schedule }}</button>
             </div>
         </div>
@@ -1248,8 +1248,9 @@
             const now = new Date();
             const remaining = Math.max(0, scheduledStartAt - now);
             if (remaining <= 0) {
-                el.style.display = 'none';
-                btnClear.style.display = 'none';
+                if (el) el.textContent = '⏰ Starting...';
+                if (el) el.style.display = 'inline';
+                if (btnClear) btnClear.style.display = 'none';
                 return;
             }
             el.style.display = 'inline';
@@ -1351,6 +1352,12 @@
                 scheduledStartAt = d > new Date() ? d : null;
             } else {
                 scheduledStartAt = null;
+            }
+            // Toggle schedule controls based on game status
+            if (status && (status.status === 'started' || status.status === 'ended')) {
+                document.getElementById('schedule-controls').style.display = 'none';
+                document.getElementById('btn-clear-schedule').style.display = 'none';
+                document.getElementById('schedule-countdown').style.display = 'none';
             }
             updatePauseBanner();
             updateScheduleCountdown();

@@ -13,7 +13,7 @@ from app.events.saver import save_event
 
 logger = logging.getLogger(__name__)
 
-CHECK_INTERVAL = 15
+CHECK_INTERVAL = 5
 
 
 async def _check_and_start_games() -> None:
