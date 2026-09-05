@@ -1242,7 +1242,7 @@ async function clearAllShips() {
                 command: 'bomb',
                 args: { target: target, coordinate: coord }
             });
-            showToast(result.message, result.success ? 'success' : 'error');
+            showToast(result.message, result.hit ? 'success' : 'error');
         }
 
         async function confirmBomb() {
@@ -1259,7 +1259,7 @@ async function clearAllShips() {
                 command: 'bomb',
                 args: { target: target, coordinate: coord }
             });
-            showToast(result.message, result.success ? 'success' : 'error');
+            showToast(result.message, result.hit ? 'success' : 'error');
         }
 
         function closeBombConfirm() {

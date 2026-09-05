@@ -1477,6 +1477,7 @@ async def execute_command(
             msg = f"MISS at {coord}!"
 
         result["success"] = True
+        result["hit"] = bomb_result == BombResult.HIT
         result["message"] = (
             f"Bombed {target_color} at {coord}: {msg}. Bombs left: {team.bombs}"
         )
