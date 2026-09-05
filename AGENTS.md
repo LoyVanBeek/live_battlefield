@@ -60,16 +60,17 @@ E2E tests use Playwright to drive a headless Chromium against a dedicated test s
 ### Quick start
 ```bash
 # Build and start the test infrastructure (fresh DB each time)
-docker compose up -d test-postgres test-app
+# NOTE: the test services live in docker-compose.e2e.yml, not docker-compose.yml
+docker compose -f docker-compose.e2e.yml up -d --build test-postgres test-app
 
-# Wait for app to be ready, then run tests
-docker compose run --rm test-e2e
+# Wait for app to be ready (http://localhost:8001), then run tests
+docker compose -f docker-compose.e2e.yml run --rm test-e2e
 
 # Or run a specific test file
-docker compose run --rm test-e2e pytest tests_e2e/test_gm_page.py -v --video=on-fail
+docker compose -f docker-compose.e2e.yml run --rm test-e2e pytest tests_e2e/test_gm_page.py -v --video=on-fail
 
 # Clean up everything (deletes test DB volume)
-docker compose down -v
+docker compose -f docker-compose.e2e.yml down -v
 ```
 
 ### What it tests
