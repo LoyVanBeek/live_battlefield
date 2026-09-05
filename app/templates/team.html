@@ -268,6 +268,7 @@
             grid-template-rows: 30px repeat(10, 30px);
             background: white;
             border: 2px solid #333;
+            position: relative;
             /* Fixed dimensions to prevent layout shifts */
             width: 332px;  /* 2px border + 12 header + 10*30 cells */
             height: 332px;
@@ -293,6 +294,15 @@
         }
         .board-cell.ship.sunk {
             /* background set inline by JS with team color */
+        }
+        .sunk-line {
+            position: absolute;
+            height: 4px;
+            background: rgba(139, 0, 0, 0.85);
+            border-radius: 2px;
+            pointer-events: none;
+            transform-origin: center;
+            z-index: 5;
         }
 
         .board-replay-gif {
@@ -541,6 +551,67 @@
         // Cache for board grids to avoid rebuilding
         const boardGridCache = new Map();
 
+        // Draws one corner-to-corner slash over each fully sunk ship.
+        // Runs of adjacent sunk cells map 1:1 to ships (no-touching rule).
+        function drawSunkShipLines(grid, cellSelector, thickness) {
+            grid.querySelectorAll('.sunk-line').forEach(function(el) { el.remove(); });
+            const byPos = new Map();
+            grid.querySelectorAll(cellSelector).forEach(function(cell) {
+                if (cell.classList.contains('sunk')) {
+                    byPos.set(cell.dataset.row + ',' + cell.dataset.col, cell);
+                }
+            });
+            if (!byPos.size) return;
+            const key = function(r, c) { return r + ',' + c; };
+            const used = new Set();
+            const runs = [];
+            for (let r = 0; r < 10; r++) {          // horizontal runs
+                for (let c = 0; c < 10; c++) {
+                    if (!byPos.has(key(r, c)) || used.has(key(r, c))) continue;
+                    let end = c;
+                    while (byPos.has(key(r, end + 1)) && !used.has(key(r, end + 1))) end++;
+                    if (end > c) {
+                        for (let cc = c; cc <= end; cc++) used.add(key(r, cc));
+                        runs.push({ r1: r, c1: c, r2: r, c2: end });
+                    }
+                }
+            }
+            for (let c = 0; c < 10; c++) {          // vertical runs on unused cells
+                for (let r = 0; r < 10; r++) {
+                    if (!byPos.has(key(r, c)) || used.has(key(r, c))) continue;
+                    let end = r;
+                    while (byPos.has(key(end + 1, c)) && !used.has(key(end + 1, c))) end++;
+                    if (end > r) {
+                        for (let rr = r; rr <= end; rr++) used.add(key(rr, c));
+                        runs.push({ r1: r, c1: c, r2: end, c2: c });
+                    }
+                }
+            }
+            byPos.forEach(function(cell, k) {       // leftover single cells
+                if (!used.has(k)) {
+                    const parts = k.split(',');
+                    runs.push({ r1: +parts[0], c1: +parts[1], r2: +parts[0], c2: +parts[1] });
+                }
+            });
+            runs.forEach(function(run) {
+                const first = byPos.get(key(run.r1, run.c1));
+                const last = byPos.get(key(run.r2, run.c2));
+                const left = first.offsetLeft;
+                const top = first.offsetTop;
+                const w = last.offsetLeft + last.offsetWidth - left;
+                const h = last.offsetTop + last.offsetHeight - top;
+                const cx = left + w / 2;
+                const cy = top + h / 2;
+                const len = Math.sqrt(w * w + h * h) + 6;
+                const angle = Math.atan2(h, w) * 180 / Math.PI;
+                const line = document.createElement('div');
+                line.className = 'sunk-line';
+                line.style.cssText = 'left:' + (cx - len / 2) + 'px;top:' + (cy - thickness / 2) +
+                    'px;width:' + len + 'px;transform:rotate(' + angle + 'deg);';
+                grid.appendChild(line);
+            });
+        }
+
         function renderGrid(containerId, gridData, includeShips, boardColor) {
             const container = document.getElementById(containerId);
             let grid = boardGridCache.get(containerId);
@@ -629,6 +700,10 @@
                         cell.appendChild(createDot(attackerColor));
                     }
                 }
+            }
+
+            if (includeShips) {
+                drawSunkShipLines(grid, '.board-cell', 4);
             }
         }
 
