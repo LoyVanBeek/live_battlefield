@@ -158,7 +158,6 @@ async def verify_team_or_gm(
 async def lifespan(app: FastAPI):
     stop_event = asyncio.Event()
     trickle_task = None
-    scheduler_task = None
     try:
         async with api_session_maker() as db:
             from app.models import get_or_create_admin
@@ -166,9 +165,9 @@ async def lifespan(app: FastAPI):
             logger.info("Admin panel: /admin/%s", sa.token)
 
         from app.services.trickle import trickle_loop
-        from app.services.game_scheduler import scheduler_loop
+        from app.services.game_scheduler import resume_scheduled_starts
         trickle_task = asyncio.create_task(trickle_loop(stop_event))
-        scheduler_task = asyncio.create_task(scheduler_loop(stop_event))
+        await resume_scheduled_starts()
     except Exception:
         logger.warning("Could not check super admin token on startup")
 
@@ -181,12 +180,8 @@ async def lifespan(app: FastAPI):
             await trickle_task
         except asyncio.CancelledError:
             pass
-    if scheduler_task:
-        scheduler_task.cancel()
-        try:
-            await scheduler_task
-        except asyncio.CancelledError:
-            pass
+    from app.services.game_scheduler import shutdown_schedules
+    await shutdown_schedules()
 
 
 app = FastAPI(title="Live Battlefield API", lifespan=lifespan)
@@ -2271,9 +2266,12 @@ async def schedule_start(
     if not game:
         return {"success": False, "message": "Game not found!"}
 
+    from app.services.game_scheduler import cancel_scheduled_start, schedule_game_start
+
     if body.clear:
         game.scheduled_start_at = None
         await db.commit()
+        cancel_scheduled_start(game_id)
         logger.info("Scheduled start cleared for game %s", game_id)
         return {"success": True, "message": "Scheduled start cleared."}
 
@@ -2284,6 +2282,7 @@ async def schedule_start(
                 dt = dt.replace(tzinfo=timezone.utc)
             game.scheduled_start_at = dt
             await db.commit()
+            schedule_game_start(game_id, dt)
             logger.info("Game %s scheduled to start at %s", game_id, dt.isoformat())
             return {
                 "success": True,
