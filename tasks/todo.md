@@ -60,3 +60,27 @@
 - Probe re-run on rebuilt test-app: 13/13 (108px horizontal bar in 4-cell run, 78px vertical bar in 3-cell run, still centered).
 - Note: first probe run hit stale test-app image (forgot --build) — rebuilt and re-verified.
 - Deployed: dev image rebuilt, app restarted, new code confirmed in container.
+
+---
+
+# v4: translate bomb-flow toasts (hit/miss/sunk + error guards)
+
+## Plan (approved — scope "Both": result toasts AND guard toasts)
+1. Backend (`routes.py`): add structured fields to bomb success (`hit`, `sunk`, `ship_type`, `target_name`, `coord`, `bombs_left`, optional `winner`) and `error_key` to guard returns (game_not_started, game_paused, team_doesnt_exist, target_doesnt_exist, no_bombs, invalid_coord, target_destroyed, already_bombed). Keep `result["message"]` for backward compat (Telegram bot, other consumers). `_check_game_paused` gains `error_key` + `minutes`.
+2. Frontend (`team.html`): `bombToastText(r)` helper composes message via `_()` using structured fields / `error_key`; falls back to `r.message`. Both bomb call sites (throwBomb, confirmBomb) use it. Toast color logic unchanged (`result.hit ? 'success' : 'error'`).
+3. Translations: new `toast.*` block + `error.{game_paused_resumes, already_bombed, target_destroyed, team_doesnt_exist, target_doesnt_exist}` in en.json + nl.json.
+4. Verify: `uv run ty check app`, `uv run pytest tests/`, Playwright probe `?lang=nl`, E2E subset.
+5. Deploy: `docker compose build app && up -d app`.
+6. Review section in tasks/todo.md.
+
+## Tasks
+- [x] Backend: structured fields + error_key in routes.py bomb branch; `_check_game_paused` gains error_key/minutes
+- [x] Frontend: `bombToastText` helper + 2 call sites in team.html
+- [x] Translations: toast block + error keys in en.json + nl.json
+- [x] Tests: tests/test_bomb_response.py (hit/sunk/target_name/coord/bombs_left fields, already_bombed error_key)
+- [x] Verify: ty check + unit tests pass (140 passed)
+- [ ] Playwright probe (`?lang=nl`) for Dutch toast text
+- [ ] E2E subset re-run
+- [ ] Deploy + review section
+
+## Review (v4)
