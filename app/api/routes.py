@@ -240,7 +240,12 @@ async def _check_game_paused(db: AsyncSession, game_id: str) -> dict | None:
     if paused and paused_until is not None:
         remaining_seconds = int((paused_until - datetime.now(timezone.utc)).total_seconds())
         remaining_minutes = max(1, remaining_seconds // 60)
-        return {"success": False, "message": f"Game is paused! Resumes in ~{remaining_minutes} minute(s)."}
+        return {
+            "success": False,
+            "message": f"Game is paused! Resumes in ~{remaining_minutes} minute(s).",
+            "error_key": "game_paused",
+            "minutes": remaining_minutes,
+        }
     return None
 
 
@@ -1336,7 +1341,7 @@ async def execute_command(
             msg = f"Game has ended! {winner.name} ({winner.color}) wins!"
         return {"success": False, "message": msg}
 
-    result = {"success": False, "message": ""}
+    result: dict[str, Any] = {"success": False, "message": ""}
 
     if cmd.command == "join":
         if state.status != GameStatusField.PREPARING:
@@ -1427,6 +1432,7 @@ async def execute_command(
     elif cmd.command == "bomb":
         if state.status != GameStatusField.STARTED:
             result["message"] = "Cannot bomb - game hasn't started yet!"
+            result["error_key"] = "game_not_started"
             return result
 
         paused_check = await _check_game_paused(db, game_id)
@@ -1435,6 +1441,7 @@ async def execute_command(
 
         if cmd.team_color not in state.teams:
             result["message"] = f"Team {cmd.team_color} doesn't exist!"
+            result["error_key"] = "team_doesnt_exist"
             return result
 
         team = state.teams[cmd.team_color]
@@ -1443,10 +1450,13 @@ async def execute_command(
 
         if target_color not in state.teams:
             result["message"] = f"Target team {target_color} doesn't exist!"
+            result["error_key"] = "target_doesnt_exist"
+            result["color"] = target_color
             return result
 
         if team.bombs <= 0:
             result["message"] = "No bombs left!"
+            result["error_key"] = "no_bombs"
             return result
 
         from app.game.ships import parse_coordinate
@@ -1455,15 +1465,20 @@ async def execute_command(
             row, col = parse_coordinate(coord)
         except ValueError as e:
             result["message"] = str(e)
+            result["error_key"] = "invalid_coord"
             return result
 
         target = state.teams[target_color]
         if target.is_destroyed():
             result["message"] = f"Team {target_color} is already destroyed!"
+            result["error_key"] = "target_destroyed"
+            result["color"] = target_color
             return result
 
         if (row, col) in target.bombed_cells:
             result["message"] = f"{coord} already bombed!"
+            result["error_key"] = "already_bombed"
+            result["coord"] = coord
             return result
 
         team.bombs -= 1
@@ -1478,6 +1493,12 @@ async def execute_command(
 
         result["success"] = True
         result["hit"] = bomb_result == BombResult.HIT
+        result["sunk"] = bool(ship and ship.is_sunk())
+        if ship:
+            result["ship_type"] = ship.ship_type
+        result["target_name"] = target.name
+        result["coord"] = coord
+        result["bombs_left"] = team.bombs
         result["message"] = (
             f"Bombed {target_color} at {coord}: {msg}. Bombs left: {team.bombs}"
         )
@@ -1523,6 +1544,7 @@ async def execute_command(
             await save_event(db, end_event, game_uuid)
             await update_game_status(db, game_uuid, GameStatus.ENDED)
             state.status = GameStatusField.ENDED
+            result["winner"] = winner.name
             result["message"] += f" 🏆 {winner.name} ({winner.color}) wins!"
 
     elif cmd.command == "removeai":
