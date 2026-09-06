@@ -84,3 +84,14 @@
 - [ ] Deploy + review section
 
 ## Review (v4)
+- Commits: `4f85421` backend structured fields + error_key, `aeaffa5` frontend bombToastText + translations, `4cef587` tests, `c9254a1` fix param substitution in guard toasts.
+- `uv run ty check app`: pass. `uv run pytest tests/`: 140 passed (3 new in tests/test_bomb_response.py).
+- Playwright probe (test-app, `?lang=nl`, real UI bomb clicks): 4/4 —
+  - NL miss: "Bombardeerde Blue Team op A1: MIS op A1!. Bommen over: 52"
+  - NL hit: "Bombardeerde Blue Team op C1: RAAK op C1!. Bommen over: 51"
+  - NL already-bombed guard: "C1 al gebombardeerd!" (caught missing `{coord}` param — fixed in `c9254a1`)
+  - EN sanity (fresh context, `?lang=en`): "C1 already bombed!"
+- E2E subset (test_team_page, test_complete_game): 4 passed.
+- Deployed: `docker compose build app && up -d app`; container serves bombToastText (verified in-image). Test stack torn down.
+- Design: `result.message` kept for Telegram bot + other consumers; client falls back to it when `error_key`/structured fields missing (or translation key missing).
+- Note: lang selection is cookie-based (server sets `lang` cookie on first visit) — default Accept-Language probing only applies before a cookie exists.
