@@ -297,11 +297,9 @@
         }
         .sunk-line {
             position: absolute;
-            height: 4px;
             background: rgba(139, 0, 0, 0.85);
             border-radius: 2px;
             pointer-events: none;
-            transform-origin: center;
             z-index: 5;
         }
 
@@ -551,7 +549,7 @@
         // Cache for board grids to avoid rebuilding
         const boardGridCache = new Map();
 
-        // Draws one corner-to-corner slash over each fully sunk ship.
+        // Draws one straight strikethrough along each fully sunk ship's axis.
         // Runs of adjacent sunk cells map 1:1 to ships (no-touching rule).
         function drawSunkShipLines(grid, cellSelector, thickness) {
             grid.querySelectorAll('.sunk-line').forEach(function(el) { el.remove(); });
@@ -602,12 +600,13 @@
                 const h = last.offsetTop + last.offsetHeight - top;
                 const cx = left + w / 2;
                 const cy = top + h / 2;
-                const len = Math.sqrt(w * w + h * h) + 6;
-                const angle = Math.atan2(h, w) * 180 / Math.PI;
+                const horizontal = run.r1 === run.r2;
+                const len = (horizontal ? w : h) + 6;
                 const line = document.createElement('div');
                 line.className = 'sunk-line';
-                line.style.cssText = 'left:' + (cx - len / 2) + 'px;top:' + (cy - thickness / 2) +
-                    'px;width:' + len + 'px;transform:rotate(' + angle + 'deg);';
+                line.style.cssText = horizontal
+                    ? 'left:' + (cx - len / 2) + 'px;top:' + (cy - thickness / 2) + 'px;width:' + len + 'px;height:' + thickness + 'px;'
+                    : 'left:' + (cx - thickness / 2) + 'px;top:' + (cy - len / 2) + 'px;width:' + thickness + 'px;height:' + len + 'px;';
                 grid.appendChild(line);
             });
         }
