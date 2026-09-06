@@ -601,7 +601,7 @@
                 const cx = left + w / 2;
                 const cy = top + h / 2;
                 const horizontal = run.r1 === run.r2;
-                const len = (horizontal ? w : h) + 6;
+                const len = (horizontal ? w : h) - 12;
                 const line = document.createElement('div');
                 line.className = 'sunk-line';
                 line.style.cssText = horizontal
