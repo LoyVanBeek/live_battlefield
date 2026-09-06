@@ -60,11 +60,15 @@ def _serialize_grid(team, include_ships: bool) -> list[list[dict]]:
         for col in range(BOARD_SIZE):
             cell: dict = {}
 
+            ship = team.get_ship_at(row, col) if team.private_board[row][col] else None
             if include_ships and team.private_board[row][col]:
                 cell["p"] = 1
-                ship = team.get_ship_at(row, col)
                 if ship and ship.is_sunk():
                     cell["k"] = 1
+            elif not include_ships and ship and ship.is_sunk():
+                # Sunk ships are public: reveal their cells (with sunk flag) to everyone
+                cell["p"] = 1
+                cell["k"] = 1
 
             entry = team.public_board[row][col]
             if entry:

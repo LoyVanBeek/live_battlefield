@@ -681,7 +681,8 @@
                     const status = cellData.s;
                     const attackerColor = cellData.a || null;
 
-                    if (includeShips && cellData.p) {
+                    // Own board: all ships. Public boards: only sunk ships (revealed).
+                    if (cellData.p && (includeShips || cellData.k)) {
                         cell.classList.add('ship');
                         if (cellData.k) {
                             cell.classList.add('sunk');
@@ -701,9 +702,7 @@
                 }
             }
 
-            if (includeShips) {
-                drawSunkShipLines(grid, '.board-cell', 4);
-            }
+            drawSunkShipLines(grid, '.board-cell', 4);
         }
 
         async function apiCall(url, method = 'GET', body = null) {
