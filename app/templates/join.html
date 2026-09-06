@@ -142,6 +142,7 @@
         <h1>{{ tr.join.heading }}</h1>
         <div class="game-name" id="game-name">{{ game_name }}</div>
         <div class="game-status" id="game-status"></div>
+        <div id="schedule-countdown" style="color:#ff9800;font-size:16px;font-weight:bold;margin-bottom:15px;display:none;"></div>
 
         <div id="join-form">
             <div class="form-group">
@@ -246,6 +247,22 @@
 
                 document.getElementById('game-name').textContent = data.game_name;
 
+                // Scheduled start countdown
+                var schedEl = document.getElementById('schedule-countdown');
+                if (data.scheduled_start_at) {
+                    var startDt = new Date(data.scheduled_start_at);
+                    if (startDt > new Date()) {
+                        schedEl.style.display = 'block';
+                        window._schedStart = startDt;
+                    } else {
+                        schedEl.style.display = 'none';
+                        window._schedStart = null;
+                    }
+                } else {
+                    schedEl.style.display = 'none';
+                    window._schedStart = null;
+                }
+
                 const select = document.getElementById('team-color');
                 select.innerHTML = '<option value="">' + _('join.select_color') + '</option>';
                 if (data.available_colors && data.available_colors.length > 0) {
@@ -307,6 +324,18 @@
         document.getElementById('team-color').addEventListener('keydown', function(e) {
             if (e.key === 'Enter') { e.preventDefault(); joinGame(); }
         });
+
+        // Scheduled start countdown
+        setInterval(function() {
+            var el = document.getElementById('schedule-countdown');
+            if (!el || !window._schedStart) { if (el) el.style.display = 'none'; return; }
+            var remaining = Math.max(0, window._schedStart - new Date());
+            if (remaining <= 0) { el.style.display = 'none'; return; }
+            el.style.display = 'block';
+            var mins = Math.floor(remaining / 60000);
+            var secs = Math.floor((remaining % 60000) / 1000);
+            el.textContent = '⏰ Game starts in ' + mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }, 1000);
 
         loadJoinState();
     </script>

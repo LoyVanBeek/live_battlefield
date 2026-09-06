@@ -212,6 +212,7 @@
             background: white;
             border: 1px solid #333;
             margin: 6px 0;
+            position: relative;
             /* Fixed dimensions to prevent layout shifts */
             width: 156px;  /* 2px border + 11*14 cells */
             height: 156px;
@@ -237,6 +238,13 @@
         }
         .team-board-cell.ship.sunk {
             /* background set inline by JS with team color */
+        }
+        .sunk-line {
+            position: absolute;
+            background: rgba(139, 0, 0, 0.85);
+            border-radius: 1.5px;
+            pointer-events: none;
+            z-index: 5;
         }
         .team-play-link {
             display: block;
@@ -354,6 +362,15 @@
                 </select>
                 <button class="btn btn-warning" onclick="pauseGame()" id="btn-pause">{{ tr.gm.pause }}</button>
                 <button class="btn btn-success" onclick="resumeGame()" id="btn-resume" style="display:none">{{ tr.gm.resume }}</button>
+                <span id="schedule-countdown" style="color:#ff9800;font-size:13px;display:none;"></span>
+                <span id="schedule-controls" style="display:inline-flex;gap:4px;align-items:center;">
+                    <input type="datetime-local" id="schedule-start-input" style="padding:6px;font-size:12px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;" oninput="document.getElementById('btn-schedule').style.opacity=this.value?'1':'0.4'">
+                    <button class="btn btn-primary" style="font-size:11px;padding:4px 6px;" onclick="setSchedulePreset(10)" title="10 minutes">10m</button>
+                    <button class="btn btn-primary" style="font-size:11px;padding:4px 6px;" onclick="setSchedulePreset(60)" title="1 hour">1h</button>
+                    <button class="btn btn-primary" style="font-size:11px;padding:4px 6px;" onclick="setSchedulePreset(180)" title="3 hours">3h</button>
+                    <button class="btn btn-primary" id="btn-schedule" style="font-size:12px;padding:6px 10px;opacity:0.4;" onclick="scheduleGameStart()">{{ tr.gm.schedule }}</button>
+                </span>
+                <button class="btn btn-danger" style="font-size:12px;padding:6px 10px;display:none;" id="btn-clear-schedule" onclick="clearSchedule()">{{ tr.gm.clear_schedule }}</button>
             </div>
         </div>
 
@@ -503,6 +520,68 @@
             }
         }
 
+        // Draws one straight strikethrough along each fully sunk ship's axis.
+        // Runs of adjacent sunk cells map 1:1 to ships (no-touching rule).
+        function drawSunkShipLines(grid, cellSelector, thickness) {
+            grid.querySelectorAll('.sunk-line').forEach(function(el) { el.remove(); });
+            const byPos = new Map();
+            grid.querySelectorAll(cellSelector).forEach(function(cell) {
+                if (cell.classList.contains('sunk')) {
+                    byPos.set(cell.dataset.row + ',' + cell.dataset.col, cell);
+                }
+            });
+            if (!byPos.size) return;
+            const key = function(r, c) { return r + ',' + c; };
+            const used = new Set();
+            const runs = [];
+            for (let r = 0; r < 10; r++) {          // horizontal runs
+                for (let c = 0; c < 10; c++) {
+                    if (!byPos.has(key(r, c)) || used.has(key(r, c))) continue;
+                    let end = c;
+                    while (byPos.has(key(r, end + 1)) && !used.has(key(r, end + 1))) end++;
+                    if (end > c) {
+                        for (let cc = c; cc <= end; cc++) used.add(key(r, cc));
+                        runs.push({ r1: r, c1: c, r2: r, c2: end });
+                    }
+                }
+            }
+            for (let c = 0; c < 10; c++) {          // vertical runs on unused cells
+                for (let r = 0; r < 10; r++) {
+                    if (!byPos.has(key(r, c)) || used.has(key(r, c))) continue;
+                    let end = r;
+                    while (byPos.has(key(end + 1, c)) && !used.has(key(end + 1, c))) end++;
+                    if (end > r) {
+                        for (let rr = r; rr <= end; rr++) used.add(key(rr, c));
+                        runs.push({ r1: r, c1: c, r2: end, c2: c });
+                    }
+                }
+            }
+            byPos.forEach(function(cell, k) {       // leftover single cells
+                if (!used.has(k)) {
+                    const parts = k.split(',');
+                    runs.push({ r1: +parts[0], c1: +parts[1], r2: +parts[0], c2: +parts[1] });
+                }
+            });
+            runs.forEach(function(run) {
+                const first = byPos.get(key(run.r1, run.c1));
+                const last = byPos.get(key(run.r2, run.c2));
+                const left = first.offsetLeft;
+                const top = first.offsetTop;
+                const w = last.offsetLeft + last.offsetWidth - left;
+                const h = last.offsetTop + last.offsetHeight - top;
+                const cx = left + w / 2;
+                const cy = top + h / 2;
+                const horizontal = run.r1 === run.r2;
+                const len = (horizontal ? w : h) - 12;
+                const line = document.createElement('div');
+                line.className = 'sunk-line';
+                line.style.cssText = horizontal
+                    ? 'left:' + (cx - len / 2) + 'px;top:' + (cy - thickness / 2) + 'px;width:' + len + 'px;height:' + thickness + 'px;'
+                    : 'left:' + (cx - thickness / 2) + 'px;top:' + (cy - len / 2) + 'px;width:' + thickness + 'px;height:' + len + 'px;';
+                grid.appendChild(line);
+            });
+        }
+
         function updateBoardFromData(containerId, data, includeShips) {
             const container = document.getElementById(containerId);
             if (!container) {
@@ -594,6 +673,10 @@
                         cell.appendChild(createDot(cellData.attacker_color || 'gray'));
                     }
                 }
+            }
+
+            if (includeShips) {
+                drawSunkShipLines(grid, '.team-board-cell', 3);
             }
         }
 
@@ -1224,6 +1307,89 @@
             }
         }
 
+        // --- Scheduled start ---
+        let scheduledStartAt = null;
+        let scheduleCountdownInterval = null;
+
+        function updateScheduleCountdown() {
+            const el = document.getElementById('schedule-countdown');
+            const btnClear = document.getElementById('btn-clear-schedule');
+            if (!scheduledStartAt) {
+                if (el) el.style.display = 'none';
+                if (btnClear) btnClear.style.display = 'none';
+                return;
+            }
+            const now = new Date();
+            const remaining = Math.max(0, scheduledStartAt - now);
+            if (remaining <= 0) {
+                if (el) el.textContent = '⏰ Starting...';
+                if (el) el.style.display = 'inline';
+                if (btnClear) btnClear.style.display = 'none';
+                return;
+            }
+            el.style.display = 'inline';
+            btnClear.style.display = 'inline';
+            const mins = Math.floor(remaining / 60000);
+            const secs = Math.floor((remaining % 60000) / 1000);
+            el.textContent = '⏰ ' + mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }
+
+        function initScheduleInput() {
+            const input = document.getElementById('schedule-start-input');
+            if (!input) return;
+            // Default: now rounded to next 5 minutes
+            const now = new Date();
+            now.setMinutes(Math.ceil(now.getMinutes() / 5) * 5, 0, 0);
+            // Format for datetime-local: YYYY-MM-DDTHH:MM
+            const pad = function(n) { return (n < 10 ? '0' : '') + n; };
+            input.value = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
+                'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+            // Button starts lit since input has a value
+            document.getElementById('btn-schedule').style.opacity = '1';
+        }
+
+        function setSchedulePreset(minutesFromNow) {
+            const input = document.getElementById('schedule-start-input');
+            if (!input) return;
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + minutesFromNow);
+            now.setSeconds(0, 0);
+            const pad = function(n) { return (n < 10 ? '0' : '') + n; };
+            input.value = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
+                'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+            // Auto-submit
+            scheduleGameStart();
+        }
+
+        async function scheduleGameStart() {
+            const input = document.getElementById('schedule-start-input');
+            const val = input.value;
+            if (!val) { showToast('Select a date and time!', 'error'); return; }
+            // Convert local datetime-local to ISO
+            const d = new Date(val);
+            if (isNaN(d.getTime())) { showToast('Invalid date/time!', 'error'); return; }
+            const iso = d.toISOString();
+            const result = await apiCall('/api/quick/schedule-start', 'POST', {
+                scheduled_start_at: iso
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success && result.scheduled_start_at) {
+                scheduledStartAt = new Date(result.scheduled_start_at);
+                updateScheduleCountdown();
+            }
+        }
+
+        async function clearSchedule() {
+            const result = await apiCall('/api/quick/schedule-start', 'POST', { clear: true });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success) {
+                scheduledStartAt = null;
+                updateScheduleCountdown();
+            }
+        }
+
+        scheduleCountdownInterval = setInterval(updateScheduleCountdown, 1000);
+
         async function pauseGame() {
             const duration = parseInt(document.getElementById('pause-duration').value);
             const result = await apiCall('/api/quick/pause-game', 'POST', { duration_minutes: duration });
@@ -1255,13 +1421,27 @@
             } else {
                 pausedUntil = null;
             }
+            if (status && status.scheduled_start_at) {
+                const d = new Date(status.scheduled_start_at);
+                scheduledStartAt = d > new Date() ? d : null;
+            } else {
+                scheduledStartAt = null;
+            }
+            // Toggle schedule controls based on game status
+            if (status && (status.status === 'started' || status.status === 'ended')) {
+                document.getElementById('schedule-controls').style.display = 'none';
+                document.getElementById('btn-clear-schedule').style.display = 'none';
+                document.getElementById('schedule-countdown').style.display = 'none';
+            }
             updatePauseBanner();
+            updateScheduleCountdown();
         };
 
         // Start pause countdown timer
         pauseTimerInterval = setInterval(updatePauseBanner, 1000);
 
         // Initial load
+        initScheduleInput();
         loadGameStatus();
         loadPublicBoards();
         loadTeams();

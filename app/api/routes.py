@@ -165,7 +165,9 @@ async def lifespan(app: FastAPI):
             logger.info("Admin panel: /admin/%s", sa.token)
 
         from app.services.trickle import trickle_loop
+        from app.services.game_scheduler import resume_scheduled_starts
         trickle_task = asyncio.create_task(trickle_loop(stop_event))
+        await resume_scheduled_starts()
     except Exception:
         logger.warning("Could not check super admin token on startup")
 
@@ -178,6 +180,8 @@ async def lifespan(app: FastAPI):
             await trickle_task
         except asyncio.CancelledError:
             pass
+    from app.services.game_scheduler import shutdown_schedules
+    await shutdown_schedules()
 
 
 app = FastAPI(title="Live Battlefield API", lifespan=lifespan)
@@ -236,7 +240,12 @@ async def _check_game_paused(db: AsyncSession, game_id: str) -> dict | None:
     if paused and paused_until is not None:
         remaining_seconds = int((paused_until - datetime.now(timezone.utc)).total_seconds())
         remaining_minutes = max(1, remaining_seconds // 60)
-        return {"success": False, "message": f"Game is paused! Resumes in ~{remaining_minutes} minute(s)."}
+        return {
+            "success": False,
+            "message": f"Game is paused! Resumes in ~{remaining_minutes} minute(s).",
+            "error_key": "game_paused",
+            "minutes": remaining_minutes,
+        }
     return None
 
 
@@ -309,6 +318,7 @@ async def get_public_state(
         "status": game.status.value if game else "PREPARING",
         "teams": teams,
         "paused_until": paused_until,
+        "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at else "",
     }
 
 
@@ -826,6 +836,7 @@ async def get_join_state(
         "game_name": game.name or "Battlefield",
         "status": state.status.value,
         "available_colors": [c for c in TEAM_COLORS if c not in state.teams],
+        "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at and game.scheduled_start_at > datetime.now(timezone.utc) else "",
     }
 
 
@@ -1023,6 +1034,7 @@ async def get_game_state(
         "paused_until": paused_until,
         "quiz_enabled": game.quiz_enabled if game else False,
         "quiz_total_bombs": game.quiz_total_bombs if game else 100,
+        "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at else "",
     }
 
 
@@ -1329,7 +1341,7 @@ async def execute_command(
             msg = f"Game has ended! {winner.name} ({winner.color}) wins!"
         return {"success": False, "message": msg}
 
-    result = {"success": False, "message": ""}
+    result: dict[str, Any] = {"success": False, "message": ""}
 
     if cmd.command == "join":
         if state.status != GameStatusField.PREPARING:
@@ -1420,6 +1432,7 @@ async def execute_command(
     elif cmd.command == "bomb":
         if state.status != GameStatusField.STARTED:
             result["message"] = "Cannot bomb - game hasn't started yet!"
+            result["error_key"] = "game_not_started"
             return result
 
         paused_check = await _check_game_paused(db, game_id)
@@ -1428,6 +1441,8 @@ async def execute_command(
 
         if cmd.team_color not in state.teams:
             result["message"] = f"Team {cmd.team_color} doesn't exist!"
+            result["error_key"] = "team_doesnt_exist"
+            result["color"] = cmd.team_color
             return result
 
         team = state.teams[cmd.team_color]
@@ -1436,10 +1451,13 @@ async def execute_command(
 
         if target_color not in state.teams:
             result["message"] = f"Target team {target_color} doesn't exist!"
+            result["error_key"] = "target_doesnt_exist"
+            result["color"] = target_color
             return result
 
         if team.bombs <= 0:
             result["message"] = "No bombs left!"
+            result["error_key"] = "no_bombs"
             return result
 
         from app.game.ships import parse_coordinate
@@ -1448,15 +1466,20 @@ async def execute_command(
             row, col = parse_coordinate(coord)
         except ValueError as e:
             result["message"] = str(e)
+            result["error_key"] = "invalid_coord"
             return result
 
         target = state.teams[target_color]
         if target.is_destroyed():
             result["message"] = f"Team {target_color} is already destroyed!"
+            result["error_key"] = "target_destroyed"
+            result["color"] = target_color
             return result
 
         if (row, col) in target.bombed_cells:
             result["message"] = f"{coord} already bombed!"
+            result["error_key"] = "already_bombed"
+            result["coord"] = coord
             return result
 
         team.bombs -= 1
@@ -1470,6 +1493,13 @@ async def execute_command(
             msg = f"MISS at {coord}!"
 
         result["success"] = True
+        result["hit"] = bomb_result == BombResult.HIT
+        result["sunk"] = bool(ship and ship.is_sunk())
+        if ship:
+            result["ship_type"] = ship.ship_type
+        result["target_name"] = target.name
+        result["coord"] = coord
+        result["bombs_left"] = team.bombs
         result["message"] = (
             f"Bombed {target_color} at {coord}: {msg}. Bombs left: {team.bombs}"
         )
@@ -1515,6 +1545,7 @@ async def execute_command(
             await save_event(db, end_event, game_uuid)
             await update_game_status(db, game_uuid, GameStatus.ENDED)
             state.status = GameStatusField.ENDED
+            result["winner"] = winner.name
             result["message"] += f" 🏆 {winner.name} ({winner.color}) wins!"
 
     elif cmd.command == "removeai":
@@ -2241,6 +2272,53 @@ async def resume_game(
     return {"success": True, "message": "Game resumed! Players can now act."}
 
 
+class ScheduleStartRequest(BaseModel):
+    scheduled_start_at: Optional[str] = None
+    clear: bool = False
+
+
+@app.post("/api/quick/schedule-start")
+async def schedule_start(
+    body: ScheduleStartRequest,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_game
+
+    game_uuid = uuid.UUID(game_id)
+    game = await get_game(db, game_uuid)
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    from app.services.game_scheduler import cancel_scheduled_start, schedule_game_start
+
+    if body.clear:
+        game.scheduled_start_at = None
+        await db.commit()
+        cancel_scheduled_start(game_id)
+        logger.info("Scheduled start cleared for game %s", game_id)
+        return {"success": True, "message": "Scheduled start cleared."}
+
+    if body.scheduled_start_at:
+        try:
+            dt = datetime.fromisoformat(body.scheduled_start_at)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            game.scheduled_start_at = dt
+            await db.commit()
+            schedule_game_start(game_id, dt)
+            logger.info("Game %s scheduled to start at %s", game_id, dt.isoformat())
+            return {
+                "success": True,
+                "message": f"Game scheduled to start at {dt.strftime('%Y-%m-%d %H:%M:%S UTC')}.",
+                "scheduled_start_at": dt.isoformat(),
+            }
+        except ValueError:
+            return {"success": False, "message": "Invalid datetime format. Use ISO format (e.g. 2024-12-31T23:59:00)."}
+
+    return {"success": False, "message": "Provide scheduled_start_at or set clear=true."}
+
+
 @app.post("/api/quick/quiz_settings")
 async def set_quiz_settings(
     settings: QuizSettings,
@@ -2548,6 +2626,7 @@ async def get_game_status(
         "paused_until": paused_until,
         "quiz_enabled": game.quiz_enabled if game else False,
         "quiz_total_bombs": game.quiz_total_bombs if game else 100,
+        "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at else "",
     }
 
 

@@ -50,6 +50,8 @@
         "end_game": "Eindig Spel",
         "pause": "\u23f8\ufe0f Pauzeer",
         "resume": "\u25b6\ufe0f Hervat",
+        "schedule": "\u23f0 Inplannen",
+        "clear_schedule": "\u274c Wissen",
         "pause_indefinite": "\u221e Onbepaald",
         "pause_min": "{n}m",
         "pause_hour": "1u",
@@ -137,6 +139,13 @@
         "title": "\ud83d\udca5 {target} bombarderen?",
         "button": "\ud83d\udca5 Gooi Bom!",
         "cancel": "Annuleren"
+    },
+    "toast": {
+        "bombed": "{target} gebombardeerd: {result}. {n} bommen over",
+        "hit": "RAAK op {coord}",
+        "miss": "MIS op {coord}",
+        "sunk": "{ship} gezonken!",
+        "wins": "{name} wint!"
     },
     "settings": {
         "title": "\ud83c\udfae Spelmodi & Instellingen",
@@ -252,6 +261,11 @@
         "cannot_bomb_self": "Je kunt jezelf niet bombarderen!",
         "no_bombs": "Geen bommen over! Beantwoord quizvragen of wis codes in om meer te krijgen!",
         "game_paused": "Spel is gepauzeerd! Geen acties toegestaan tot het spel hervat.",
+        "game_paused_resumes": "Hervat in ~{n} min(u)(ten).",
+        "already_bombed": "{coord} al gebombardeerd!",
+        "target_destroyed": "Team {color} is al vernietigd!",
+        "team_doesnt_exist": "Team {color} bestaat niet!",
+        "target_doesnt_exist": "Doelwit team {color} bestaat niet!",
         "fetch_prefix": "Fout: "
     },
     "lang": {

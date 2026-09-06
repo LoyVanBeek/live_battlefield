@@ -50,6 +50,8 @@
         "end_game": "End Game",
         "pause": "\u23f8\ufe0f Pause",
         "resume": "\u25b6\ufe0f Resume",
+        "schedule": "\u23f0 Schedule",
+        "clear_schedule": "\u274c Clear",
         "pause_indefinite": "\u221e Indefinite",
         "pause_min": "{n}m",
         "pause_hour": "1h",
@@ -137,6 +139,13 @@
         "title": "\ud83d\udca5 Bomb {target}?",
         "button": "\ud83d\udca5 Throw Bomb!",
         "cancel": "Cancel"
+    },
+    "toast": {
+        "bombed": "Bombed {target}: {result}. Bombs left: {n}",
+        "hit": "HIT at {coord}!",
+        "miss": "MISS at {coord}!",
+        "sunk": "Sunk {ship}!",
+        "wins": "{name} wins!"
     },
     "settings": {
         "title": "\ud83c\udfae Game Modes & Settings",
@@ -252,6 +261,11 @@
         "cannot_bomb_self": "Cannot bomb yourself!",
         "no_bombs": "No bombs left! Answer quiz questions or redeem codes to get more!",
         "game_paused": "Game is paused! No actions allowed until the game resumes.",
+        "game_paused_resumes": "Resumes in ~{n} minute(s).",
+        "already_bombed": "{coord} already bombed!",
+        "target_destroyed": "Team {color} is already destroyed!",
+        "team_doesnt_exist": "Team {color} doesn't exist!",
+        "target_doesnt_exist": "Target team {color} doesn't exist!",
         "fetch_prefix": "Error: "
     },
     "lang": {

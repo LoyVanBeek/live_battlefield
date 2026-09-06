@@ -30,6 +30,7 @@ async def get_team_view(team_token: str, db: AsyncSession) -> dict:
         result["tl"] = game.last_trickle_at.isoformat() if game.last_trickle_at else ""
         result["mb"] = game.max_bombs
         result["qe"] = game.quiz_enabled
+        result["ss"] = game.scheduled_start_at.isoformat() if game.scheduled_start_at else ""
         from datetime import datetime, timezone
         result["pu"] = game.paused_until.isoformat() if game.paused_until and game.paused_until > datetime.now(timezone.utc) else ""
     winner = state.get_winner()
@@ -59,11 +60,15 @@ def _serialize_grid(team, include_ships: bool) -> list[list[dict]]:
         for col in range(BOARD_SIZE):
             cell: dict = {}
 
+            ship = team.get_ship_at(row, col) if team.private_board[row][col] else None
             if include_ships and team.private_board[row][col]:
                 cell["p"] = 1
-                ship = team.get_ship_at(row, col)
                 if ship and ship.is_sunk():
                     cell["k"] = 1
+            elif not include_ships and ship and ship.is_sunk():
+                # Sunk ships are public: reveal their cells (with sunk flag) to everyone
+                cell["p"] = 1
+                cell["k"] = 1
 
             entry = team.public_board[row][col]
             if entry:
