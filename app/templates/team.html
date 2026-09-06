@@ -1313,7 +1313,12 @@ async function clearAllShips() {
             }
             if (r.error_key) {
                 var key = 'error.' + r.error_key;
-                var t = _(key);
+                var params = {};
+                if (r.error_key === 'already_bombed') params = {coord: r.coord};
+                else if (r.error_key === 'target_destroyed' || r.error_key === 'team_doesnt_exist'
+                         || r.error_key === 'target_doesnt_exist') params = {color: r.color};
+                else if (r.error_key === 'game_paused') params = {n: r.minutes};
+                var t = _(key, params);
                 if (t !== key) {
                     if (r.error_key === 'game_paused') {
                         return t + ' ' + _('error.game_paused_resumes', {n: r.minutes});

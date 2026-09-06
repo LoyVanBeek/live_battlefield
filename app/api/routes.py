@@ -1442,6 +1442,7 @@ async def execute_command(
         if cmd.team_color not in state.teams:
             result["message"] = f"Team {cmd.team_color} doesn't exist!"
             result["error_key"] = "team_doesnt_exist"
+            result["color"] = cmd.team_color
             return result
 
         team = state.teams[cmd.team_color]
