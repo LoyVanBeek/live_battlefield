@@ -141,7 +141,7 @@
         "cancel": "Cancel"
     },
     "toast": {
-        "bombed": "Bombed {target} at {coord}: {result}. Bombs left: {n}",
+        "bombed": "Bombed {target}: {result}. Bombs left: {n}",
         "hit": "HIT at {coord}!",
         "miss": "MISS at {coord}!",
         "sunk": "Sunk {ship}!",

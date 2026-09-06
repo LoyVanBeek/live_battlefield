@@ -141,7 +141,7 @@
         "cancel": "Annuleren"
     },
     "toast": {
-        "bombed": "Bombardeerde {target} op {coord}: {result}. Bommen over: {n}",
+        "bombed": "Bombardeerde {target}: {result} Bommen over: {n}",
         "hit": "RAAK op {coord}!",
         "miss": "MIS op {coord}!",
         "sunk": "{ship} gezonken!",
