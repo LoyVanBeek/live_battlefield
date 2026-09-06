@@ -1303,6 +1303,27 @@ async function clearAllShips() {
             showToast('Removed ' + removed + ' ship(s)!', 'success');
         }
 
+        function bombToastText(r) {
+            if (r.coord !== undefined && r.target_name !== undefined) {
+                var res = r.hit ? _('toast.hit', {coord: r.coord}) : _('toast.miss', {coord: r.coord});
+                if (r.sunk) res += ' ' + _('toast.sunk', {ship: r.ship_type});
+                var msg = _('toast.bombed', {target: r.target_name, coord: r.coord, result: res, n: r.bombs_left});
+                if (r.winner) msg += ' ' + _('toast.wins', {name: r.winner});
+                return msg;
+            }
+            if (r.error_key) {
+                var key = 'error.' + r.error_key;
+                var t = _(key);
+                if (t !== key) {
+                    if (r.error_key === 'game_paused') {
+                        return t + ' ' + _('error.game_paused_resumes', {n: r.minutes});
+                    }
+                    return t;
+                }
+            }
+            return r.message || '';
+        }
+
         async function throwBomb() {
             var target = document.getElementById('target-team').value;
             var coord = document.getElementById('bomb-coord').value;
@@ -1315,7 +1336,7 @@ async function clearAllShips() {
                 command: 'bomb',
                 args: { target: target, coordinate: coord }
             });
-            showToast(result.message, result.hit ? 'success' : 'error');
+            showToast(bombToastText(result), result.hit ? 'success' : 'error');
         }
 
         async function confirmBomb() {
@@ -1332,7 +1353,7 @@ async function clearAllShips() {
                 command: 'bomb',
                 args: { target: target, coordinate: coord }
             });
-            showToast(result.message, result.hit ? 'success' : 'error');
+            showToast(bombToastText(result), result.hit ? 'success' : 'error');
         }
 
         function closeBombConfirm() {

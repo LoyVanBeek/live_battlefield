@@ -140,6 +140,13 @@
         "button": "\ud83d\udca5 Gooi Bom!",
         "cancel": "Annuleren"
     },
+    "toast": {
+        "bombed": "Bombardeerde {target} op {coord}: {result}. Bommen over: {n}",
+        "hit": "RAAK op {coord}!",
+        "miss": "MIS op {coord}!",
+        "sunk": "{ship} gezonken!",
+        "wins": "{name} wint!"
+    },
     "settings": {
         "title": "\ud83c\udfae Spelmodi & Instellingen",
         "back": "\u2190 Terug naar Spelleider",
@@ -254,6 +261,11 @@
         "cannot_bomb_self": "Je kunt jezelf niet bombarderen!",
         "no_bombs": "Geen bommen over! Beantwoord quizvragen of wis codes in om meer te krijgen!",
         "game_paused": "Spel is gepauzeerd! Geen acties toegestaan tot het spel hervat.",
+        "game_paused_resumes": "Hervat in ~{n} min(u)(ten).",
+        "already_bombed": "{coord} al gebombardeerd!",
+        "target_destroyed": "Team {color} is al vernietigd!",
+        "team_doesnt_exist": "Team {color} bestaat niet!",
+        "target_doesnt_exist": "Doelwit team {color} bestaat niet!",
         "fetch_prefix": "Fout: "
     },
     "lang": {

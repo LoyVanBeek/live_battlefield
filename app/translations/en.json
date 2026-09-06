@@ -140,6 +140,13 @@
         "button": "\ud83d\udca5 Throw Bomb!",
         "cancel": "Cancel"
     },
+    "toast": {
+        "bombed": "Bombed {target} at {coord}: {result}. Bombs left: {n}",
+        "hit": "HIT at {coord}!",
+        "miss": "MISS at {coord}!",
+        "sunk": "Sunk {ship}!",
+        "wins": "{name} wins!"
+    },
     "settings": {
         "title": "\ud83c\udfae Game Modes & Settings",
         "back": "\u2190 Back to Game Master",
@@ -254,6 +261,11 @@
         "cannot_bomb_self": "Cannot bomb yourself!",
         "no_bombs": "No bombs left! Answer quiz questions or redeem codes to get more!",
         "game_paused": "Game is paused! No actions allowed until the game resumes.",
+        "game_paused_resumes": "Resumes in ~{n} minute(s).",
+        "already_bombed": "{coord} already bombed!",
+        "target_destroyed": "Team {color} is already destroyed!",
+        "team_doesnt_exist": "Team {color} doesn't exist!",
+        "target_doesnt_exist": "Target team {color} doesn't exist!",
         "fetch_prefix": "Error: "
     },
     "lang": {
