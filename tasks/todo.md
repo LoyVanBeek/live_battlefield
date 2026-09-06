@@ -31,3 +31,26 @@
   - GM page: 1 `.sunk-line` on blue's board, 4 sunk cells.
 - E2E subset re-run after verification: test_team_page, test_complete_game, test_ship_editor, test_trickle — 6 passed.
 - Test stack torn down (`docker compose -f docker-compose.e2e.yml down -v`).
+
+---
+
+# v2: straight strikethrough + public sunk ships
+
+## Plan (approved)
+1. Straight strikethrough along ship axis (horizontal bar for horizontal ships, vertical for vertical; singles horizontal) — team.html + game_master.html.
+2. Sunk ships public to all viewers: public grid exposes p/k for sunk-ship cells only; attacker sees line on victim's public board. Live ships stay hidden.
+
+## Tasks
+- [ ] Commit 1: straight line geometry (no rotation) in both templates
+- [ ] Commit 2: team_view.py public sunk reveal + renderGrid paint/gate + unit test
+- [ ] Verify: ty, pytest, Playwright probe (2 orientations, attacker view), E2E subset
+- [ ] Deploy: build app image, restart
+- [ ] Review section
+
+## Review (v2)
+- Commits: `bfe255a` straight strikethrough (both templates), `d43925b` public sunk-ship reveal (team_view.py + renderGrid + tests/test_team_view.py).
+- `uv run ty check app`: pass. `uv run pytest tests/`: 137 passed (3 new).
+- Playwright probe: 13/13 — attacker sees sunk ships + straight bars (126x4 horizontal, 4x96 vertical) on victim's public board; live ships hidden (7/31 cells revealed); victim private board unchanged; own board line-free; toasts still red/green.
+- E2E subset (team page, complete game, ship editor, trickle): 6 passed.
+- Deployed: `docker compose build app && up -d app`; container serves new code (verified).
+- Probe assertion fix: 10 ships = 31 cells, not 10 (initial 12/13 was a test bug, not code).
