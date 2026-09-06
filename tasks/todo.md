@@ -54,3 +54,9 @@
 - E2E subset (team page, complete game, ship editor, trickle): 6 passed.
 - Deployed: `docker compose build app && up -d app`; container serves new code (verified).
 - Probe assertion fix: 10 ships = 31 cells, not 10 (initial 12/13 was a test bug, not code).
+
+## v3: inset strikethrough
+- Commit `b0615bf`: line length = run length − 12px (6px inset per end) in both templates.
+- Probe re-run on rebuilt test-app: 13/13 (108px horizontal bar in 4-cell run, 78px vertical bar in 3-cell run, still centered).
+- Note: first probe run hit stale test-app image (forgot --build) — rebuilt and re-verified.
+- Deployed: dev image rebuilt, app restarted, new code confirmed in container.
