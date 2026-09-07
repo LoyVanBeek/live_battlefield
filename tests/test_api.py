@@ -365,6 +365,44 @@ class TestWelcomeAndMap:
         assert "/api/public-state" not in response.text
         assert "/api/locations" not in response.text
 
+    def test_root_language_query_param(self):
+        from app.api.routes import app
+
+        client = TestClient(app)
+        response = client.get("/?lang=nl")
+
+        assert response.status_code == 200
+        assert "Hoe het werkt" in response.text
+        assert response.cookies.get("lang") == "nl"
+
+    def test_root_language_from_accept_language(self):
+        from app.api.routes import app
+
+        client = TestClient(app)
+        response = client.get("/", headers={"Accept-Language": "nl,en;q=0.9"})
+
+        assert response.status_code == 200
+        assert "Hoe het werkt" in response.text
+
+    def test_root_language_cookie_persists(self):
+        from app.api.routes import app
+
+        client = TestClient(app)
+        client.get("/?lang=nl")
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert "Hoe het werkt" in response.text
+
+    def test_root_unsupported_lang_falls_back(self):
+        from app.api.routes import app
+
+        client = TestClient(app)
+        response = client.get("/?lang=fr")
+
+        assert response.status_code == 200
+        assert "How it works" in response.text
+
     def test_map_requires_game_id(self):
         from app.api.routes import app
 
