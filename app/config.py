@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     port: int = 8000
     dev_mode: bool = False
     admin_token: str = Field(default="", validation_alias="ADMIN_TOKEN")
+    gm_secret: str = Field(default="", validation_alias="GM_SECRET")
 
     @property
     def database_url_sync(self) -> str:

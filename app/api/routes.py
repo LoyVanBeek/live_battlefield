@@ -16,7 +16,6 @@ import os
 import json
 import math
 import random
-import string
 import asyncio
 from datetime import datetime, timezone, timedelta
 
@@ -84,8 +83,10 @@ async def verify_admin(
     db: AsyncSession = Depends(get_api_db),
 ):
     from app.models import get_admin
+    from app.safety import compare_digest_optional
+
     sa = await get_admin(db)
-    if not sa or sa.token != token:
+    if not sa or not compare_digest_optional(sa.token, token):
         raise HTTPException(status_code=404)
     return token
 
@@ -97,8 +98,10 @@ async def verify_admin_or_gm(
 ):
     if token:
         from app.models import get_admin
+        from app.safety import compare_digest_optional
+
         sa = await get_admin(db)
-        if sa and sa.token == token:
+        if sa and compare_digest_optional(sa.token, token):
             return {"role": "admin"}
 
     if gm_token:
@@ -161,8 +164,8 @@ async def lifespan(app: FastAPI):
     try:
         async with api_session_maker() as db:
             from app.models import get_or_create_admin
-            sa = await get_or_create_admin(db)
-            logger.info("Admin panel: /admin/%s", sa.token)
+            await get_or_create_admin(db)
+            logger.info("Admin panel available (configure ADMIN_TOKEN to set the admin URL).")
 
         from app.services.trickle import trickle_loop
         from app.services.game_scheduler import resume_scheduled_starts
@@ -785,6 +788,11 @@ async def join_game(
     from app.models import get_game_by_invite_token, get_game_events, create_team_token
     from app.events.models import TeamJoinedEvent, generate_team_token
     from app.events.saver import save_event
+
+    from app.rate_limit import join_limiter
+
+    if not join_limiter.allow(f"join:{invite_token}"):
+        raise HTTPException(status_code=429, detail="Too many attempts. Try again in a minute.")
 
     game = await get_game_by_invite_token(db, invite_token)
     if not game:
@@ -1615,6 +1623,12 @@ async def execute_command(
         location_num = cmd.args.get("location_number")
         code = cmd.args.get("code", "")
 
+        from app.rate_limit import code_attempt_limiter
+
+        if not code_attempt_limiter.allow(f"code:{game_id}:{cmd.team_color}"):
+            result["message"] = "Too many attempts! Try again in a minute."
+            return result
+
         if location_num not in state.location_codes:
             result["message"] = f"Location {location_num} doesn't exist!"
             return result
@@ -2125,7 +2139,9 @@ async def create_locations(
             lat = action.latitude
             lon = action.longitude
 
-        code = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        from app.events.models import generate_location_code
+
+        code = generate_location_code()
 
         number = await get_next_location_number(db, game_uuid)
 
