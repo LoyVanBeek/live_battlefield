@@ -95,3 +95,43 @@
 - Deployed: `docker compose build app && up -d app`; container serves bombToastText (verified in-image). Test stack torn down.
 - Design: `result.message` kept for Telegram bot + other consumers; client falls back to it when `error_key`/structured fields missing (or translation key missing).
 - Note: lang selection is cookie-based (server sets `lang` cookie on first visit) — default Accept-Language probing only applies before a cookie exists.
+
+---
+
+# Security review & hardening (hosting prep)
+
+## Plan (approved — "Go tackle the issues")
+1. Fix P1 authorization: force `team_color` from auth for team-token calls (execute + quick endpoints).
+2. Stored XSS: sanitize names server-side + escape all name interpolation on public/anonymous pages.
+3. Fog-of-war: `private.png` requires own team token or same-game GM token.
+4. Weak secrets: longer location codes, wider token alphabet, hmac.compare_digest, secrets-based admin token (not logged).
+5. Rate limiting on code redeem + join endpoints.
+6. `/registergm` gated by optional `GM_SECRET`.
+7. Security headers + vendored Leaflet (kill unpkg Referer leak).
+8. Dockerfile: non-root user, pinned slim base, no tests/static duplication.
+9. Verify: ty, pytest, E2E parity vs baseline, deploy.
+
+## Tasks
+- [x] P1.1 auth-color enforcement (routes.py execute + quick place_all_ships/remove_ship)
+- [x] P1.2 sanitize_name (app/safety.py) at join/rename/create/rename entry points + esc() in all templates
+- [x] P1.3 private.png requires own team_token or same-game gm_token; game_id param removed
+- [x] P1.4 generate_location_code(6) + team token alphabet + rate_limit.py (code_attempt_limiter, join_limiter)
+- [x] P2 GM_SECRET gate on /registergm; compare_digest in verify_admin/verify_admin_or_gm; token_urlsafe admin token; token log removed
+- [x] P2/P3 security_headers middleware + /static mount + vendored Leaflet 1.9.4
+- [x] P3 Dockerfile non-root (battleship uid 1000), python:3.11.13-slim, no tests copy; Dockerfile.e2e USER root for setup then battleship
+- [x] Tests: tests/test_safety.py + auth-color / private.png regression tests in tests/test_api.py
+- [x] Verify: `uv run ty check app` (pass), `uv run pytest tests/` (150 passed)
+- [x] Verify: E2E parity — identical 7 failed/25 passed on baseline vs changes (all 7 pre-existing `#join-color` stale-POM failures, unrelated to security work)
+- [ ] Commits: step-by-step (authz, XSS/templates, private board auth, tokens/rate-limit/GM_SECRET, headers/leaflet, Docker)
+- [ ] Deploy + review section
+
+## Design notes
+- `sanitize_name` strips `< > & " '` and caps at 30 chars (matches client maxlength). Escape-only in templates via `esc()`; server-side sanitization is the real defense.
+- Team tokens: 9 chars from ascii_letters+digits (~54 bits). Admin token: `secrets.token_urlsafe(24)`.
+- Location codes: 6 chars secrets-derived, agnostic to case for verbal sharing; `random.choices` replaced.
+- Rate limiter is in-memory per key (game+color for codes, invite token for joins), 10/min; fine for single-Pi deployment.
+- `security_headers`: nosniff, X-Frame-Options DENY, Referrer-Policy no-referrer, Cache-Control only when not set (preserves replay GIF public caching).
+- Leaflet vendored to app/static/leaflet/ (unpkg no longer referenced → no token leak via Referer).
+
+## Review
+- TBD after commits + deployment.
