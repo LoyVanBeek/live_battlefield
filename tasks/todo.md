@@ -134,4 +134,23 @@
 - Leaflet vendored to app/static/leaflet/ (unpkg no longer referenced → no token leak via Referer).
 
 ## Review
-- TBD after commits + deployment.
+- Commits:
+  - `0370a2f` fix: force team_color from auth token on team endpoints (execute, place_all_ships, remove_ship)
+  - `2691348` fix: sanitize team names server-side and escape all name interpolation in templates
+  - `550953e` fix: require team token or same-game GM token for private board PNG
+  - `afe0040` fix: strong secrets, rate-limit code/join, and optional GM_SECRET gate for /registergm
+  - `e1e3716` feat: security headers, self-hosted Leaflet, and non-root pinned-container Dockerfile
+  - `229131b` docs: record security hardening review and lessons
+- `uv run ty check app`: pass. `uv run pytest tests/`: 150 passed (23 new security regression tests).
+- E2E parity vs baseline: identical 7 failed / 25 passed (7 pre-existing `#join-color` stale-POM failures in test_gm_page/test_full_flow; reproduced on baseline, unrelated to this work).
+- Deployed: `docker compose build app && up -d app`; container runs as `battleship` (non-root) uid 1000.
+- Live verification (prod, real HTTP):
+  - Security headers on all responses (nosniff, DENY, no-referrer, Cache-Control fallback).
+  - `/static/leaflet/leaflet.{js,css}` + marker images serve 200 (unpkg no longer referenced).
+  - Join with `<script>Red</script> Team` → stored as `scriptRed/script Team` (angle brackets stripped).
+  - private.png: 401 with no/invalid token, 200 with own team token.
+  - Admin create-game + delete-game work; new token formats live (e.g. `EPG-fAL-4W6`).
+  - Join rate limit: 10 allowed, then 429 with clear message.
+  - Admin token no longer logged at startup (was leaking to stdout).
+- Smoke-test game removed from prod DB afterwards.
+- NGROK_AUTHTOKEN/NGROK_DOMAIN are commented out in `.env` → ngrok container can't authenticate (pre-existing config state; Funnel is the chosen tunnel).
