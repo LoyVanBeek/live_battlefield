@@ -196,7 +196,8 @@ async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "no-referrer"
+    if "Referrer-Policy" not in response.headers:
+        response.headers["Referrer-Policy"] = "no-referrer"
     if "Cache-Control" not in response.headers:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
@@ -268,15 +269,43 @@ async def _check_game_paused(db: AsyncSession, game_id: str) -> dict | None:
 
 
 @app.get("/")
-async def root():
-    from fastapi.responses import RedirectResponse
-
-    return RedirectResponse(url="/map")
+async def root(request: Request):
+    return await _render_welcome(request)
 
 
 @app.get("/map", response_class=HTMLResponse)
-async def map_page(request: Request):
-    return templates.TemplateResponse(request, "map.html", {"request": request})
+async def map_page(
+    request: Request,
+    game_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from fastapi.responses import RedirectResponse
+    from app.models import get_game
+
+    if not game_id:
+        return RedirectResponse(url="/")
+
+    try:
+        game_uuid = uuid.UUID(game_id)
+    except ValueError:
+        return RedirectResponse(url="/")
+
+    game = await get_game(db, game_uuid)
+    if not game:
+        return RedirectResponse(url="/")
+
+    response = templates.TemplateResponse(
+        request, "map.html",
+        {"request": request, "game_id": game_id},
+    )
+    response.headers["Referrer-Policy"] = "origin"
+    return response
+
+
+async def _render_welcome(request: Request):
+    return templates.TemplateResponse(
+        request, "welcome.html", {"request": request}
+    )
 
 
 @app.get("/api/locations")
@@ -387,6 +416,7 @@ async def game_master_page(
         {
             "request": request,
             "gm_token": gm_token,
+            "game_id": str(game.id),
             "game_name": game.name or "Battlefield",
             "tr": translations,
             "tr_json": json.dumps(translations),
@@ -407,9 +437,11 @@ async def game_master_locations_page(
     game = await get_game_by_gm_token(db, gm_token)
     if not game:
         return HTMLResponse("Not found", status_code=404)
-    return templates.TemplateResponse(
-        request, "locations.html", {"request": request, "gm_token": gm_token}
+    response = templates.TemplateResponse(
+        request, "locations.html", {"request": request, "gm_token": gm_token, "game_id": str(game.id)}
     )
+    response.headers["Referrer-Policy"] = "origin"
+    return response
 
 
 @app.get("/game-master/{gm_token}/events", response_class=HTMLResponse)
@@ -422,7 +454,7 @@ async def game_master_events_page(
     if not game:
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
-        request, "events.html", {"request": request, "gm_token": gm_token}
+        request, "events.html", {"request": request, "gm_token": gm_token, "game_id": str(game.id)}
     )
 
 
