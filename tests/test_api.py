@@ -549,6 +549,83 @@ class TestBoardJson:
         finally:
             app.dependency_overrides.clear()
 
+    def test_private_board_png_requires_auth(self):
+        from app.api.routes import app
+
+        app.dependency_overrides.clear()
+
+        client = TestClient(app)
+        response = client.get("/api/board/blue/private.png", params={"game_id": "00000000-0000-0000-0000-000000000000"})
+        assert response.status_code == 401
+
+        response = client.get("/api/board/blue/private.png")
+        assert response.status_code == 401
+
+    def test_private_board_png_own_team_token_allowed(self):
+        from app.api.routes import app, get_api_db
+        from app.game.state import GameState
+        from app.events.models import TeamJoinedEvent
+
+        state = GameState()
+        event = TeamJoinedEvent(name="Blue Team", color="blue", chat_id=456, bombs=3)
+        state.handle_team_joined(event)
+
+        async def override_get_db():
+            class MockSession:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *args):
+                    pass
+
+                async def execute(self, *args, **kwargs):
+                    return MagicMock()
+
+                async def commit(self):
+                    pass
+
+            yield MockSession()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+
+        try:
+            with patch("app.models.lookup_team_token", new_callable=AsyncMock, return_value=("00000000-0000-0000-0000-000000000000", "blue")):
+                with patch("app.api.routes.GameState.from_events", return_value=state):
+                    with patch("app.api.routes.render_private_board"):
+                        with patch("app.api.routes.boards_to_bytes", return_value=b"png-bytes"):
+                            client = TestClient(app)
+                            response = client.get("/api/board/blue/private.png", params={"team_token": "abc"})
+                            assert response.status_code == 200
+                            assert response.content == b"png-bytes"
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_private_board_png_wrong_team_token_rejected(self):
+        from app.api.routes import app, get_api_db
+
+        async def override_get_db():
+            class MockSession:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *args):
+                    pass
+
+                async def execute(self, *args, **kwargs):
+                    return MagicMock()
+
+            yield MockSession()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+
+        try:
+            with patch("app.models.lookup_team_token", new_callable=AsyncMock, return_value=("00000000-0000-0000-0000-000000000000", "blue")):
+                client = TestClient(app)
+                response = client.get("/api/board/red/private.png", params={"team_token": "abc"})
+                assert response.status_code == 401
+        finally:
+            app.dependency_overrides.clear()
+
     def test_api_board_json_team_not_found(self):
         from app.api.routes import app, get_api_db, verify_gm_token
         from app.game.state import GameState

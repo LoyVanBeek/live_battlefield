@@ -1138,12 +1138,35 @@ async def get_public_boards(
 @app.get("/api/board/{team_color}/private.png")
 async def get_private_board(
     team_color: str,
-    game_id: str = Query(...),
+    team_token: Optional[str] = Query(None),
+    gm_token: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
 ):
-    from app.models import get_game_events
+    from app.models import get_game_events, lookup_team_token, get_game_by_gm_token
 
-    events = await get_game_events(db, uuid.UUID(game_id))
+    actual_game_id = None
+    authorized_color = None
+
+    if team_token:
+        result = await lookup_team_token(db, team_token)
+        if result:
+            actual_game_id, authorized_color = result
+
+    is_gm = False
+    if gm_token:
+        game = await get_game_by_gm_token(db, gm_token)
+        if game:
+            if actual_game_id is None:
+                actual_game_id = str(game.id)
+            is_gm = str(game.id) == actual_game_id
+
+    if actual_game_id is None:
+        return Response("Unauthorized", status_code=401)
+
+    if not is_gm and authorized_color != team_color:
+        return Response("Unauthorized", status_code=401)
+
+    events = await get_game_events(db, uuid.UUID(actual_game_id))
     state = GameState.from_events(events)
 
     if team_color not in state.teams:
