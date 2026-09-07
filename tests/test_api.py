@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 
 
@@ -46,6 +46,80 @@ class TestExecuteCommand:
         call_args = mock_save.call_args[0][1]
         assert call_args.event_type.value == "team_joined"
         assert call_args.color == "blue"
+
+    def test_team_role_cannot_act_as_another_color(self):
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState
+        from unittest.mock import AsyncMock
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {
+            "role": "team",
+            "game_id": "00000000-0000-0000-0000-000000000000",
+            "color": "blue",
+        }
+        try:
+            with patch("app.models.get_game_events", return_value=[]):
+                with patch("app.api.routes.save_event"):
+                    with patch("app.api.routes.GameState.from_events") as mock_from_events:
+                        mock_state = GameState()
+                        mock_from_events.return_value = mock_state
+
+                        client = TestClient(app)
+                        response = client.post(
+                            "/api/execute",
+                            json={
+                                "team_color": "red",
+                                "command": "rename",
+                                "args": {"name": "Hijacked"},
+                            },
+                        )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert "doesn't exist" in data["message"]
+
+    def test_team_role_force_placed_on_own_color(self):
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState, GameStatusField
+        from tests.test_api import create_mock_team
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {
+            "role": "team",
+            "game_id": "00000000-0000-0000-0000-000000000000",
+            "color": "blue",
+        }
+        try:
+            with patch("app.models.get_game_events", return_value=[]):
+                with patch("app.models.is_game_paused", new_callable=AsyncMock, return_value=(False, None)):
+                    with patch("app.api.routes.save_event"):
+                        with patch("app.api.routes.GameState.from_events") as mock_from_events:
+                            mock_state = GameState()
+                            mock_state.status = GameStatusField.STARTED
+                            mock_state.teams = {
+                                "blue": create_mock_team(color="blue", bombs=5)
+                            }
+                            mock_from_events.return_value = mock_state
+
+                            client = TestClient(app)
+                            response = client.post(
+                                "/api/execute",
+                                json={
+                                    "team_color": "red",
+                                    "command": "bomb",
+                                    "args": {"target": "green", "coordinate": "A1"},
+                                },
+                            )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        # Auth color is blue; the "red" in the payload is ignored, so the blue
+        # team never receives a "Team red doesn't exist" error path.
+        assert data["message"].startswith("Target team")
 
     def test_place_command_creates_ship_placed_event(self):
         from app.api.routes import app

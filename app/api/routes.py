@@ -1329,7 +1329,9 @@ async def execute_command(
 
     game_id = auth_info["game_id"]
     game_uuid = uuid.UUID(game_id)
-    team_color_from_auth = auth_info.get("color")
+
+    if auth_info.get("role") == "team":
+        cmd.team_color = auth_info["color"]
 
     events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
@@ -1771,6 +1773,9 @@ async def quick_place_all_ships(
 ):
     from app.services.ship_placement import place_all_ships_game_scoped
 
+    if auth_info.get("role") == "team":
+        action.team_color = auth_info["color"]
+
     success, message = await place_all_ships_game_scoped(db, auth_info["game_id"], action.team_color)
     return {
         "success": success,
@@ -1946,6 +1951,9 @@ async def quick_remove_ship(
     auth_info: dict = Depends(verify_team_or_gm),
 ):
     from app.models import get_game_events
+
+    if auth_info.get("role") == "team":
+        action.team_color = auth_info["color"]
 
     game_uuid = uuid.UUID(auth_info["game_id"])
     events = await get_game_events(db, game_uuid)
