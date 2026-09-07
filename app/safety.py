@@ -6,7 +6,7 @@ _MAX_NAME_LENGTH = 30
 _UNSAFE_NAME_RE = re.compile(r"[<>&\"']")
 
 
-def sanitize_name(name: str) -> str:
+def sanitize_name(name: str | None) -> str:
     """Strip HTML-unsafe characters from a user-supplied display name."""
     if name is None:
         return ""
