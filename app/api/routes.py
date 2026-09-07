@@ -858,6 +858,9 @@ async def join_game(
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
 
+    if body.team_color not in TEAM_COLORS:
+        return {"success": False, "message": "Invalid team color"}
+
     game_uuid = game.id
 
     events = await get_game_events(db, game_uuid)
@@ -1440,6 +1443,10 @@ async def execute_command(
     result: dict[str, Any] = {"success": False, "message": ""}
 
     if cmd.command == "join":
+        if cmd.team_color not in TEAM_COLORS:
+            result["message"] = "Invalid team color!"
+            return result
+
         if state.status != GameStatusField.PREPARING:
             result["message"] = "Cannot join - game already started!"
             return result

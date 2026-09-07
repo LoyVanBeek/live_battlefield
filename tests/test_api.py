@@ -137,6 +137,50 @@ class TestExecuteCommand:
         assert row == 6  # E7 -> row 6
         assert col == 4  # E7 -> col 4
 
+    def test_join_command_rejects_invalid_color(self):
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {"role": "gm", "game_id": "00000000-0000-0000-0000-000000000000"}
+        try:
+            with patch("app.models.get_game_events", return_value=[]):
+                with patch("app.api.routes.GameState.from_events") as mock_from_events:
+                    mock_from_events.return_value = GameState()
+
+                    client = TestClient(app)
+                    response = client.post(
+                        "/api/execute",
+                        json={"team_color": "pink", "command": "join", "args": {}},
+                    )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert "Invalid team color" in data["message"]
+
+
+class TestJoinGameEndpoint:
+    """Tests for /api/join-game/{invite_token}"""
+
+    def test_join_game_rejects_invalid_team_color(self):
+        from app.api.routes import app
+        from unittest.mock import AsyncMock, MagicMock
+
+        mock_game = MagicMock()
+        with patch("app.models.get_game_by_invite_token", new_callable=AsyncMock, return_value=mock_game):
+            client = TestClient(app)
+            response = client.post(
+                "/api/join-game/invite-token-123",
+                json={"team_color": "chartreuse", "name": "Cheaters"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert "Invalid team color" in data["message"]
+
 
 class TestQuickActions:
     """Tests for /api/quick/* endpoints"""
