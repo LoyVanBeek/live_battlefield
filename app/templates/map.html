@@ -176,6 +176,10 @@
         function getColorClass(color) {
             return colorClasses[color] || 'color-red';
         }
+
+        function esc(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
         
         async function loadLocations() {
             try {
@@ -247,7 +251,7 @@
                 if (data.teams && data.teams.length > 0) {
                     teamsContainer.innerHTML = data.teams.map(team => `
                         <div class="team-card ${getColorClass(team.color)}">
-                            <div class="team-name">${team.name} (${team.color})</div>
+                            <div class="team-name">${esc(team.name)} (${team.color})</div>
                             <div class="team-stats">
                                 <span>💣 Bombs: ${team.bombs}</span>
                                 <span>🚢 Ships: ${team.ships_remaining}/10</span>

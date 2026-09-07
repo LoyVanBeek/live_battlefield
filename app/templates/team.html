@@ -522,6 +522,10 @@
             return val;
         }
 
+        function esc(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
         // Pending bomb state (set by clicking a public board cell)
         let pendingBombTarget = null;
         let pendingBombCoord = null;
@@ -883,7 +887,7 @@
                     boardItem.style.backgroundColor = getRgba(team.c, 0.3);
                     boardItem.style.borderRadius = '8px';
                     boardItem.innerHTML =
-                        '<p>' + _('board.public.team_label', {name: team.n, color: team.c}) + '</p>' +
+                        '<p>' + _('board.public.team_label', {name: esc(team.n), color: team.c}) + '</p>' +
                         '<div id="' + boardId + '"></div>';
                     grid.appendChild(boardItem);
                 } else {
@@ -1411,11 +1415,11 @@ async function clearAllShips() {
 
             const q = unanswered[0];
             content.innerHTML =
-                '<p style="margin-bottom:8px;font-weight:bold;">' + q.question_text + '</p>' +
+                '<p style="margin-bottom:8px;font-weight:bold;">' + esc(q.question_text) + '</p>' +
                 '<div style="display:flex;flex-direction:column;gap:6px;">' +
                 q.answers.map(a =>
-                    '<button class="btn btn-primary" style="text-align:left;padding:8px 12px;" onclick="answerQuiz(' + q.id + ',' + a.id + ')">' +
-                        a.answer_text +
+                    '<button class="btn btn-primary" style="text-align:left;padding:8px 12px;" onclick="answerQuiz(' + String(q.id) + ',' + String(a.id) + ')">' +
+                        esc(a.answer_text) +
                     '</button>'
                 ).join('') +
                 '</div>';

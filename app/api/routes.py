@@ -802,6 +802,9 @@ async def join_game(
         return {"success": False, "message": f"Team {body.team_color} already exists!"}
 
     team_name = body.name or body.team_color
+    from app.safety import sanitize_name
+
+    team_name = sanitize_name(team_name)
 
     token = generate_team_token()
     event = TeamJoinedEvent(
@@ -1357,7 +1360,9 @@ async def execute_command(
         team_name = cmd.args.get("name", cmd.team_color)
         from app.events.models import TeamJoinedEvent, generate_team_token
         from app.models import create_team_token
+        from app.safety import sanitize_name
 
+        team_name = sanitize_name(team_name)
         token = generate_team_token()
         event = TeamJoinedEvent(
             name=team_name,
@@ -1387,7 +1392,9 @@ async def execute_command(
             return result
 
         from app.events.models import TeamRenamedEvent
+        from app.safety import sanitize_name
 
+        new_name = sanitize_name(new_name)
         event = TeamRenamedEvent(color=cmd.team_color, name=new_name)
         state, _ = event.apply(state)
         await save_event(db, event, game_uuid)
@@ -1860,7 +1867,10 @@ async def quick_add_ai(
 
     game_uuid = uuid.UUID(game_id)
     color = action.team_color.lower()
-    name = action.name or f"{color.title()} AI"
+    name = (action.name or f"{color.title()} AI")
+    from app.safety import sanitize_name
+
+    name = sanitize_name(name)
 
     if color not in TEAM_COLORS:
         return {

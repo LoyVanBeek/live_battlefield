@@ -251,6 +251,9 @@
     </div>
 
     <script>
+        function esc(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
         const EVENT_ICONS = {
             'team_joined': '👥',
             'ship_placed': '🚢',
@@ -269,7 +272,7 @@
             const type = ev.event_type;
             
             if (type === 'team_joined') {
-                return `${p.name} joined as ${p.color}`;
+                return `${esc(p.name)} joined as ${p.color}`;
             } else if (type === 'ship_placed') {
                 const dir = p.direction === 'horizontal' ? '→' : '↓';
                 return `${p.color} placed ${p.ship_type} at ${String.fromCharCode(65 + p.row)}${p.col + 1} ${dir}`;
@@ -412,7 +415,7 @@
                 html += `<th>
                     <div class="team-header">
                         <span class="team-color-dot" style="background: ${color}"></span>
-                        <span class="team-name">${team.name} (${color})</span>
+                        <span class="team-name">${esc(team.name)} (${color})</span>
                         <span class="team-bombs">💣 ${team.bombs} bombs</span>
                         <span class="team-bombs">🚢 ${team.ships_remaining}/10</span>
                         <span class="team-bombs">💥 ${team.sunk_ships} sunk</span>

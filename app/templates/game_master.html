@@ -451,6 +451,9 @@
     <div id="toast"></div>
 
     <script>
+        function esc(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
         const TR = {{ tr_json|safe }};
         function _(key, params) {
             let val = TR;
@@ -835,7 +838,7 @@
                     boardItem.id = `public-board-item-${team.color}`;
                     boardItem.style.backgroundColor = getRgba(team.color, 0.20);
                     boardItem.innerHTML = `
-                        <h4>${team.name} (${team.color})</h4>
+                        <h4>${esc(team.name)} (${team.color})</h4>
                         <div id="${boardId}"></div>
                     `;
                     grid.appendChild(boardItem);
@@ -925,14 +928,14 @@
                             <div class="team-card-header">
                                 <span class="team-name">
                                     <span class="team-color-dot" style="background: ${team.color}"></span>
-                                    <span class="team-name-text" id="team-name-label-${team.color}" style="${canRename ? 'cursor:pointer;border-bottom:1px dashed #888;' : ''}">${team.name}</span>
+                                    <span class="team-name-text" id="team-name-label-${team.color}" style="${canRename ? 'cursor:pointer;border-bottom:1px dashed #888;' : ''}">${esc(team.name)}</span>
                                     <span class="trophy-icon" id="trophy-${team.color}" style="display:none">🏆</span>
                                     ${aiIndicator}
                                 </span>
                                 ${gameStatus === 'waiting' ? `<span style="margin-left:auto;cursor:pointer;width:20px;height:20px;border-radius:50%;background:#f44336;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;" onclick="event.stopPropagation();removeTeam('${team.color}')" title="Remove team">✕</span>` : ''}
                                 <div class="rename-input-area" id="rename-input-${team.color}" style="display:none; margin-top:6px;">
                                     <div style="display:flex; gap:6px;">
-                                        <input type="text" id="rename-name-${team.color}" value="${team.name}" maxlength="30" style="flex:1; padding:6px; font-size:13px; border-radius:4px; border:2px solid #0f3460; background:#1a1a2e; color:#eee;" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();renameTeam('${team.color}')}">
+                                        <input type="text" id="rename-name-${team.color}" value="${esc(team.name)}" maxlength="30" style="flex:1; padding:6px; font-size:13px; border-radius:4px; border:2px solid #0f3460; background:#1a1a2e; color:#eee;" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();renameTeam('${team.color}')}">
                                         <button class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="renameTeam('${team.color}')">Save</button>
                                         <button class="btn" style="padding:6px 10px;font-size:12px;background:#555;color:#eee;" onclick="cancelRename('${team.color}')">✕</button>
                                     </div>

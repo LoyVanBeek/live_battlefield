@@ -69,6 +69,10 @@ async def handle_join(
     chat_id = update.effective_chat.id
     logger.info(f"handle_join: chat_id={chat_id} team_name={team_name}")
 
+    from app.safety import sanitize_name
+
+    team_name = sanitize_name(team_name)
+
     try:
         existing_player = await get_player_by_chat(db, chat_id)
         logger.info(f"handle_join: existing_player={existing_player}")
@@ -578,7 +582,9 @@ async def handle_add_ai(
     if not name:
         name = f"{color.title()} AI"
 
-    from app.game.state import TEAM_COLORS
+    from app.safety import sanitize_name
+
+    name = sanitize_name(name)
 
     if color not in TEAM_COLORS:
         return f"Invalid color! Choose from: {', '.join(TEAM_COLORS)}"
