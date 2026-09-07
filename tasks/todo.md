@@ -185,3 +185,25 @@
   - `/map?game_id=<valid>` → 200, `Referrer-Policy: origin`, GAME_ID embedded, fetches hit `/api/locations?game_id=` + `/api/public-state?game_id=` (both 200).
   - GM + events nav "Map" links point to `/map?game_id=<uuid>`; locations page returns `Referrer-Policy: origin`.
   - OSM tiles fetchable (200); browser now sends origin as Referer → no empty-Referer rejection.
+
+---
+
+# Welcome page "How it works"
+
+## Plan
+1. Add `welcome` section to en.json + nl.json: tagline + "How it works" + 5 tight bullets.
+2. welcome.html: translated copy via `tr`, language switcher `<select>` (mirrors game_master), styled bullet list.
+3. routes.py `root()`: language from `?lang=` → cookie → Accept-Language (same pattern as gm/settings pages), set lang cookie, drop `_render_welcome`.
+4. Tests: lang query param, cookie persistence, accept-language, unsupported fallback.
+
+## Tasks
+- [x] en.json/nl.json welcome section
+- [x] welcome.html translated bullets + switcher
+- [x] root() language detection + cookie
+- [x] tests (4 new) — 160 passed, ty clean
+- [x] deploy + live check (en, nl, fr-fallback, accept-language)
+
+## Review
+- Commits: `d916bd6` feat, `1eab14c` test.
+- Copy reflects actual mechanics (from ships.py/state.py/routes.py): join link, 10 ships on 10×10 no-touch fleet, real-world code redemption, 1 bomb per shot, last fleet standing wins.
+- Live: `/` en (5 bullets + tagline), `/?lang=nl` Dutch, `/?lang=fr`→en fallback, `Accept-Language: nl`→nl, `Referrer-Policy: no-referrer` intact, `lang` cookie set.
