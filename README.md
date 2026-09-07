@@ -34,7 +34,7 @@ Battleship game played via Telegram with real-life location quests.
 - `/aistatus` - View AI player status
 
 ### For Game Masters
-- `/registergm` - Register as a game master
+- `/registergm` - Register as a game master. If a `GM_SECRET` is set in `.env`, it must be passed as an argument (`/registergm <secret>`); without a secret, anyone can register.
 - Send a location message to add a new quest location
 - `/addai <team_color>` - Add an AI player (e.g., `/addai red`)
 - `/removeai <team_color>` - Remove an AI player
