@@ -79,7 +79,27 @@ async def _get_legacy_game_id(db: AsyncSession) -> uuid.UUID:
 
 # --- New auth dependencies ---
 
+from app.rate_limit import auth_fail_limiter
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _auth_failure(request: Request) -> HTTPException:
+    """Turn a failed auth check into 404, throttled per client IP."""
+    ip = _client_ip(request)
+    if not auth_fail_limiter.check(ip):
+        return HTTPException(status_code=429, detail="Too many failed attempts. Try again in a minute.")
+    auth_fail_limiter.record(ip)
+    return HTTPException(status_code=404)
+
+
 async def verify_admin(
+    request: Request,
     token: str = Query(...),
     db: AsyncSession = Depends(get_api_db),
 ):
@@ -88,11 +108,12 @@ async def verify_admin(
 
     sa = await get_admin(db)
     if not sa or not compare_digest_optional(sa.token, token):
-        raise HTTPException(status_code=404)
+        raise _auth_failure(request)
     return token
 
 
 async def verify_admin_or_gm(
+    request: Request,
     token: Optional[str] = Query(None),
     gm_token: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
@@ -111,33 +132,36 @@ async def verify_admin_or_gm(
         if game:
             return {"role": "gm", "game_id": str(game.id)}
 
-    raise HTTPException(status_code=404)
+    raise _auth_failure(request)
 
 
 async def verify_gm_token(
+    request: Request,
     gm_token: str = Query(...),
     db: AsyncSession = Depends(get_api_db),
 ):
     from app.models import get_game_by_gm_token
     game = await get_game_by_gm_token(db, gm_token)
     if not game:
-        raise HTTPException(status_code=404)
+        raise _auth_failure(request)
     return str(game.id)
 
 
 async def verify_team_token(
+    request: Request,
     team_token: str = Query(...),
     db: AsyncSession = Depends(get_api_db),
 ):
     from app.models import lookup_team_token
     result = await lookup_team_token(db, team_token)
     if not result:
-        raise HTTPException(status_code=404)
+        raise _auth_failure(request)
     game_id, color = result
     return {"game_id": game_id, "color": color}
 
 
 async def verify_team_or_gm(
+    request: Request,
     gm_token: Optional[str] = Query(None),
     team_token: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
@@ -155,7 +179,7 @@ async def verify_team_or_gm(
             game_id, color = result
             return {"role": "team", "game_id": game_id, "color": color, "team_token": team_token}
 
-    raise HTTPException(status_code=404)
+    raise _auth_failure(request)
 
 
 @asynccontextmanager

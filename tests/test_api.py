@@ -1062,3 +1062,91 @@ class TestQuizMode:
             assert data["message"] == "Correct! +5 bombs."
         finally:
             app.dependency_overrides.clear()
+
+
+class TestAuthRateLimit:
+    """Failed auth attempts are throttled per client IP."""
+
+    def test_failed_auth_attempts_are_rate_limited(self):
+        from app.api.routes import app
+        from unittest.mock import AsyncMock
+
+        with patch("app.models.get_game_by_gm_token", new_callable=AsyncMock, return_value=None):
+            client = TestClient(app)
+            statuses = [
+                client.post("/api/quick/reset-game?gm_token=wrong").status_code
+                for _ in range(12)
+            ]
+
+        assert statuses[:10] == [404] * 10
+        assert statuses[10:] == [429, 429]
+
+    def test_valid_token_not_blocked_by_failed_auth_limiter(self):
+        from app.api.routes import app
+        from app.game.state import GameState
+        from unittest.mock import AsyncMock, MagicMock
+
+        mock_game = MagicMock()
+        mock_game.id = "00000000-0000-0000-0000-000000000001"
+
+        with patch("app.models.get_game_by_gm_token", new_callable=AsyncMock, return_value=None):
+            client = TestClient(app)
+            for _ in range(10):
+                client.post(
+                    "/api/quick/reset-game?gm_token=wrong",
+                    headers={"X-Forwarded-For": "9.9.9.9"},
+                )
+
+        with patch("app.models.get_game_by_gm_token", new_callable=AsyncMock, return_value=mock_game):
+            with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                with patch("app.models.delete_all_events", new_callable=AsyncMock, return_value=0):
+                    with patch("app.models.delete_all_team_tokens", new_callable=AsyncMock):
+                        with patch("app.models.update_game_status", new_callable=AsyncMock):
+                            with patch("app.api.routes.GameState.from_events", return_value=GameState()):
+                                response = client.post(
+                                    "/api/quick/reset-game?gm_token=valid",
+                                    headers={"X-Forwarded-For": "9.9.9.9"},
+                                )
+
+        assert response.status_code == 200
+
+    def test_auth_rate_limit_is_per_ip(self):
+        from app.api.routes import app
+        from unittest.mock import AsyncMock
+
+        with patch("app.models.get_game_by_gm_token", new_callable=AsyncMock, return_value=None):
+            client = TestClient(app)
+            for _ in range(10):
+                client.post(
+                    "/api/quick/reset-game?gm_token=wrong",
+                    headers={"X-Forwarded-For": "1.1.1.1"},
+                )
+            blocked = client.post(
+                "/api/quick/reset-game?gm_token=wrong",
+                headers={"X-Forwarded-For": "1.1.1.1"},
+            )
+            other = client.post(
+                "/api/quick/reset-game?gm_token=wrong",
+                headers={"X-Forwarded-For": "2.2.2.2"},
+            )
+
+        assert blocked.status_code == 429
+        assert other.status_code == 404
+
+    def test_client_ip_prefers_forwarded_for(self):
+        from app.api.routes import _client_ip
+        from starlette.requests import Request
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [(b"x-forwarded-for", b"3.3.3.3, 10.0.0.1")],
+            "query_string": b"",
+            "client": ("1.2.3.4", 1234),
+        }
+        request = Request(scope)
+        assert _client_ip(request) == "3.3.3.3"
+
+        scope_no_forwarded = dict(scope, headers=[])
+        assert _client_ip(Request(scope_no_forwarded)) == "1.2.3.4"
