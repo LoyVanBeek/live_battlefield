@@ -269,8 +269,27 @@ async def _check_game_paused(db: AsyncSession, game_id: str) -> dict | None:
 
 
 @app.get("/")
-async def root(request: Request):
-    return await _render_welcome(request)
+async def root(request: Request, lang: Optional[str] = Query(None)):
+    if lang and lang in SUPPORTED_LANGS:
+        chosen_lang = lang
+    else:
+        chosen_lang = request.cookies.get("lang", "")
+        if chosen_lang not in SUPPORTED_LANGS:
+            chosen_lang = detect_language(request.headers.get("accept-language", ""))
+
+    translations = get_translations(chosen_lang)
+
+    response = templates.TemplateResponse(
+        request, "welcome.html",
+        {
+            "request": request,
+            "tr": translations,
+            "tr_json": json.dumps(translations),
+            "current_lang": chosen_lang,
+        },
+    )
+    response.set_cookie(key="lang", value=chosen_lang, max_age=365 * 24 * 3600)
+    return response
 
 
 @app.get("/map", response_class=HTMLResponse)
@@ -300,12 +319,6 @@ async def map_page(
     )
     response.headers["Referrer-Policy"] = "origin"
     return response
-
-
-async def _render_welcome(request: Request):
-    return templates.TemplateResponse(
-        request, "welcome.html", {"request": request}
-    )
 
 
 @app.get("/api/locations")
