@@ -2580,31 +2580,35 @@ async def clear_players(
 @app.post("/api/quick/clear-database")
 async def clear_database(
     db: AsyncSession = Depends(get_api_db),
-    game_id: str = Depends(verify_gm_token),
+    _=Depends(verify_admin),
 ):
-    from app.events.models import generate_team_token
     from app.models import (
         delete_all_players,
         delete_all_events,
         delete_all_locations,
         delete_all_team_tokens,
+        get_all_games,
+        update_game_status,
     )
     from app.database import GameStatus
 
-    game_uuid = uuid.UUID(game_id)
-
-    players_count = await delete_all_players(db, game_uuid)
-    events_count = await delete_all_events(db, game_uuid)
-    locations_count = await delete_all_locations(db, game_uuid)
-    await delete_all_team_tokens(db, game_uuid)
-
-    from app.models import update_game_status
-
-    await update_game_status(db, game_uuid, GameStatus.WAITING, started_at=None)
+    players_count = 0
+    events_count = 0
+    locations_count = 0
+    games = await get_all_games(db)
+    for game in games:
+        players_count += await delete_all_players(db, game.id)
+        events_count += await delete_all_events(db, game.id)
+        locations_count += await delete_all_locations(db, game.id)
+        await delete_all_team_tokens(db, game.id)
+        await update_game_status(db, game.id, GameStatus.WAITING, started_at=None)
 
     return {
         "success": True,
-        "message": f"Database cleared! Players: {players_count}, Events: {events_count}, Locations: {locations_count}.",
+        "message": (
+            f"Database cleared ({len(games)} games)! "
+            f"Players: {players_count}, Events: {events_count}, Locations: {locations_count}."
+        ),
     }
 
 

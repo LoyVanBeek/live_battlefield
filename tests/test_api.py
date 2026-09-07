@@ -182,6 +182,54 @@ class TestJoinGameEndpoint:
         assert "Invalid team color" in data["message"]
 
 
+class TestClearDatabase:
+    """Tests for /api/quick/clear-database (admin-only global reset)"""
+
+    def test_clear_database_rejects_gm_token(self):
+        from app.api.routes import app
+        from unittest.mock import AsyncMock, MagicMock
+
+        admin = MagicMock()
+        admin.token = "test_admin_token"
+        with patch("app.models.get_admin", new_callable=AsyncMock, return_value=admin):
+            client = TestClient(app)
+            response = client.post(
+                "/api/quick/clear-database?token=wrong_token&gm_token=somegm"
+            )
+
+        assert response.status_code == 404
+
+    def test_clear_database_as_admin_wipes_all_games(self):
+        from app.api.routes import app, verify_admin
+        from unittest.mock import AsyncMock, MagicMock
+
+        game1, game2 = MagicMock(), MagicMock()
+        app.dependency_overrides[verify_admin] = lambda: "test_admin_token"
+        try:
+            with patch("app.models.get_all_games", new_callable=AsyncMock, return_value=[game1, game2]):
+                with patch("app.models.delete_all_players", new_callable=AsyncMock, return_value=3) as mock_players:
+                    with patch("app.models.delete_all_events", new_callable=AsyncMock, return_value=5) as mock_events:
+                        with patch("app.models.delete_all_locations", new_callable=AsyncMock, return_value=2) as mock_locations:
+                            with patch("app.models.delete_all_team_tokens", new_callable=AsyncMock) as mock_tokens:
+                                with patch("app.models.update_game_status", new_callable=AsyncMock) as mock_status:
+                                    client = TestClient(app)
+                                    response = client.post("/api/quick/clear-database")
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert mock_players.await_count == 2
+        assert mock_events.await_count == 2
+        assert mock_locations.await_count == 2
+        assert mock_tokens.await_count == 2
+        assert mock_status.await_count == 2
+        assert "Players: 6" in data["message"]
+        assert "Events: 10" in data["message"]
+        assert "Locations: 4" in data["message"]
+
+
 class TestQuickActions:
     """Tests for /api/quick/* endpoints"""
 
