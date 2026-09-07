@@ -340,6 +340,108 @@ class TestLocations:
         assert "locations" in data
 
 
+class TestWelcomeAndMap:
+    """Root serves a welcome page only; /map requires a game_id."""
+
+    def test_root_serves_welcome_page_only(self):
+        from app.api.routes import app
+
+        client = TestClient(app)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert response.headers["Referrer-Policy"] == "no-referrer"
+        assert "Live Battlefield" in response.text
+        assert "/map" not in response.headers.get("location", "")
+
+    def test_root_does_not_expose_game_data(self):
+        from app.api.routes import app
+
+        client = TestClient(app)
+        response = client.get("/")
+
+        assert "teams-container" not in response.text
+        assert "game-status-badge" not in response.text
+        assert "/api/public-state" not in response.text
+        assert "/api/locations" not in response.text
+
+    def test_map_requires_game_id(self):
+        from app.api.routes import app
+
+        client = TestClient(app)
+        response = client.get("/map", follow_redirects=False)
+
+        assert 300 <= response.status_code < 400
+        assert response.headers["location"] == "/"
+
+    def test_map_requires_valid_uuid(self):
+        from app.api.routes import app
+
+        client = TestClient(app)
+        response = client.get("/map?game_id=not-a-uuid", follow_redirects=False)
+
+        assert 300 <= response.status_code < 400
+        assert response.headers["location"] == "/"
+
+    def test_map_unknown_game_redirects_home(self):
+        from app.api.routes import app, get_api_db
+
+        async def override_get_db():
+            class MockSession:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *args):
+                    pass
+
+                async def execute(self, *args, **kwargs):
+                    return MagicMock()
+
+            yield MockSession()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        try:
+            with patch("app.models.get_game", new_callable=AsyncMock, return_value=None):
+                client = TestClient(app)
+                response = client.get("/map?game_id=00000000-0000-0000-0000-000000000000", follow_redirects=False)
+        finally:
+            app.dependency_overrides.clear()
+
+        assert 300 <= response.status_code < 400
+        assert response.headers["location"] == "/"
+
+    def test_map_renders_for_valid_game(self):
+        from app.api.routes import app, get_api_db
+
+        async def override_get_db():
+            class MockSession:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *args):
+                    pass
+
+                async def execute(self, *args, **kwargs):
+                    return MagicMock()
+
+            yield MockSession()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        mock_game = MagicMock()
+        mock_game.id = "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.models.get_game", new_callable=AsyncMock, return_value=mock_game):
+                client = TestClient(app)
+                response = client.get("/map?game_id=00000000-0000-0000-0000-000000000000")
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        assert response.headers["Referrer-Policy"] == "origin"
+        assert "00000000-0000-0000-0000-000000000000" in response.text
+        assert "live_board" not in response.text.lower()
+
+
 class TestBoardJson:
     """Tests for /api/board/*/public.json and /api/board/*/private.json endpoints"""
 
