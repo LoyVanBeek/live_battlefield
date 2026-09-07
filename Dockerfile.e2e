@@ -1,11 +1,17 @@
 FROM live_battlefield-app AS base
 
+USER root
+
 RUN pip install pytest-playwright pytest-asyncio httpx
 
 RUN playwright install --with-deps chromium
 
+RUN chown -R battleship:battleship /app
+
 COPY tests_e2e/ tests_e2e/
 
 ENV PYTHONPATH=/app
+
+USER battleship
 
 CMD ["pytest", "tests_e2e/", "-v", "--video=on", "--output=test-results"]

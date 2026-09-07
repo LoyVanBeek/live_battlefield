@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, Request, HTTPException, Query
 from fastapi.responses import Response, HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
 import logging
@@ -189,8 +190,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Live Battlefield API", lifespan=lifespan)
 
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    if "Cache-Control" not in response.headers:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
 templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 templates = Jinja2Templates(directory=templates_dir)
+
+static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 class ExecuteCommand(BaseModel):
