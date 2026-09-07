@@ -154,3 +154,34 @@
   - Admin token no longer logged at startup (was leaking to stdout).
 - Smoke-test game removed from prod DB afterwards.
 - NGROK_AUTHTOKEN/NGROK_DOMAIN are commented out in `.env` → ngrok container can't authenticate (pre-existing config state; Funnel is the chosen tunnel).
+
+---
+
+# Welcome-only root + game-ID-scoped public map
+
+## Plan (approved — "1A, 2A: no links to admin")
+1. `/` serves a static welcome page (brand + tagline, no game data, no map, no links).
+2. `/map` requires `?game_id=` (valid UUID of an existing game); otherwise redirect to `/`. Map page JS passes game_id to `/api/locations` + `/api/public-state`.
+3. OSM tile fix: security middleware sets `Referrer-Policy` only when unset; `/map` and `/game-master/{gm}/locations-secret` set `origin` (browser sends origin as Referer → OSM accepts). `no-referrer` everywhere else.
+4. GM dashboard + events nav "Map" links carry `game_id`.
+5. Verify: pytest + ty, rebuild/restart, live header/content checks.
+
+## Tasks
+- [x] welcome.html (static, no links)
+- [x] routes.py: root → welcome; /map game_id gate; middleware referrer override; template contexts (game_id)
+- [x] templates: map.html GAME_ID fetches; game_master.html + events.html nav links
+- [x] tests: / welcome only, /map gate (missing/invalid/unknown), headers (no-referrer vs origin)
+- [x] verify: pytest 156 passed, ty clean, rendered-JS node --check OK
+- [x] deploy: image rebuilt, app restarted, live checks pass
+- [ ] commits + review section
+
+## Review
+- Commits: `1e09aa1` fix (welcome root + game-scoped map + referrer override), `35ba854` tests.
+- `uv run ty check app`: pass. `uv run pytest tests/`: 156 passed (6 new in TestWelcomeAndMap).
+- Rendered-JS `node --check` on game_master/events/map: OK (validated after Jinja render with real translations).
+- Deployed: image rebuilt, app restarted, live checks:
+  - `/` → 200 welcome ("Live Battlefield" + tagline only), `Referrer-Policy: no-referrer`, no game data, no redirect.
+  - `/map` (no/bogus/unknown game_id) → 307 to `/`.
+  - `/map?game_id=<valid>` → 200, `Referrer-Policy: origin`, GAME_ID embedded, fetches hit `/api/locations?game_id=` + `/api/public-state?game_id=` (both 200).
+  - GM + events nav "Map" links point to `/map?game_id=<uuid>`; locations page returns `Referrer-Policy: origin`.
+  - OSM tiles fetchable (200); browser now sends origin as Referer → no empty-Referer rejection.
