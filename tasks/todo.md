@@ -233,3 +233,17 @@
 - 191 unit tests passing, ty clean (full project), e2e 32/32, pip-audit "No known vulnerabilities", app healthy in Docker.
 - Accepted residuals: tokens in uvicorn access logs (user decision), 54-bit human-typeable tokens, XFF trust on LAN, no CSP (deferred), trickle interval=0 GM self-DoS.
 - Open for user: set PGADMIN_PASSWORD + NGROK_AUTHTOKEN in .env; push feature/hosting (~19 commits ahead of origin).
+
+---
+
+# Specials Phase 0 + 1 (feature/specials)
+
+## Plan
+- Phase 0: shared bomb resolution + specials config (done, approved).
+- Phase 1: special ammo inventory + torpedo, anonymous bomb, area bomb; each as its own commit; all GM-toggleable.
+
+## Review
+- Phase 0: `7f88ccd` refactor (resolve_bomb shared by REST+bot; bot pause gate + winner persistence fixed), `8e2c7f7` config (migration 009 games.specials JSONB, SPECIALS registry, specials_settings endpoint, settings-page section).
+- Phase 1: `1b11813` ammo inventory (SpecialAmmoGrantedEvent + migration 010, earn via codes/quiz, GM grant_special endpoint, team_view 'sa'), `5c5398c` torpedo (one-hit sink), `334fadf` anonymous ('anon' sentinel, gray rendering, anonymous notifications), `e867c07` area bomb (NxN, radius baked into event, skips bombed cells), `247a5e1` UI (team-page bomb-type picker with ammo counts, GM grant widget).
+- 248 unit tests passing, ty clean, template JS syntax-checked with node.
+- Next: Phase 2 (reward-per-sunk, treasure chest as real-world location) → Phase 3 (armor, deactivate) → Phase 4 (radar N-cell, zombie revive-once) → Phase 5 (tsunami, turn-based).
