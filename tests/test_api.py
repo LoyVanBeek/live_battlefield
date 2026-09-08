@@ -1194,3 +1194,15 @@ class TestAuthRateLimit:
 
         scope_no_forwarded = dict(scope, headers=[])
         assert _client_ip(Request(scope_no_forwarded)) == "1.2.3.4"
+
+
+class TestDocsDisabled:
+    """Interactive API docs are disabled unless DEV_MODE is set."""
+
+    def test_docs_and_openapi_return_404(self):
+        from app.api.routes import app
+
+        client = TestClient(app)
+        assert client.get("/docs").status_code == 404
+        assert client.get("/redoc").status_code == 404
+        assert client.get("/openapi.json").status_code == 404

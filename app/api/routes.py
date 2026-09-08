@@ -212,7 +212,13 @@ async def lifespan(app: FastAPI):
     await shutdown_schedules()
 
 
-app = FastAPI(title="Live Battlefield API", lifespan=lifespan)
+app = FastAPI(
+    title="Live Battlefield API",
+    lifespan=lifespan,
+    docs_url="/docs" if settings.dev_mode else None,
+    redoc_url="/redoc" if settings.dev_mode else None,
+    openapi_url="/openapi.json" if settings.dev_mode else None,
+)
 
 
 @app.middleware("http")
