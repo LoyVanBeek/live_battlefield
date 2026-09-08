@@ -2208,6 +2208,17 @@ async def create_locations(
             "message": "Cannot create locations - game already started!",
         }
 
+    if action.count <= 0:
+        return {"success": False, "message": "Count must be at least 1!"}
+
+    if not (
+        math.isfinite(action.latitude)
+        and math.isfinite(action.longitude)
+        and -90 <= action.latitude <= 90
+        and -180 <= action.longitude <= 180
+    ):
+        return {"success": False, "message": "Invalid coordinates!"}
+
     existing_locations = await get_game_locations(db, game_uuid)
     if len(existing_locations) + action.count > 100:
         return {

@@ -1273,3 +1273,76 @@ class TestDocsDisabled:
         assert client.get("/docs").status_code == 404
         assert client.get("/redoc").status_code == 404
         assert client.get("/openapi.json").status_code == 404
+
+
+class TestCreateLocationsGuards:
+    """Input validation for /api/quick/create_locations."""
+
+    def _call(self, db=None, **overrides):
+        from app.api.routes import app, verify_gm_token, get_api_db
+        from app.game.state import GameState
+
+        payload = {"latitude": 52.0, "longitude": 4.0, "count": 5}
+        payload.update(overrides)
+
+        if db is not None:
+            async def override_get_db():
+                yield db
+
+            app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=GameState()):
+                with patch("app.models.get_game_events", return_value=[]):
+                    with patch("app.models.get_game_locations", return_value=[]):
+                        with patch("app.models.get_next_location_number", new_callable=AsyncMock, return_value=1):
+                            with patch("app.api.routes.save_event", new_callable=AsyncMock):
+                                client = TestClient(app)
+                                return client.post("/api/quick/create_locations", json=payload)
+        finally:
+            app.dependency_overrides.clear()
+
+    @staticmethod
+    def _mock_db():
+        class MockSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            def add(self, *args, **kwargs):
+                pass
+
+            async def commit(self):
+                pass
+
+            async def execute(self, *args, **kwargs):
+                return MagicMock()
+
+        return MockSession()
+
+    def test_rejects_zero_count(self):
+        response = self._call(db=self._mock_db(), count=0)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert "at least 1" in data["message"]
+
+    def test_rejects_negative_count(self):
+        response = self._call(db=self._mock_db(), count=-3)
+        assert response.json()["success"] is False
+
+    def test_rejects_nan_latitude(self):
+        response = self._call(db=self._mock_db(), latitude="nan")
+        assert response.json()["success"] is False
+        assert "Invalid coordinates" in response.json()["message"]
+
+    def test_rejects_out_of_range_coordinates(self):
+        assert self._call(db=self._mock_db(), latitude=91.0).json()["success"] is False
+        assert self._call(db=self._mock_db(), longitude=181.0).json()["success"] is False
+
+    def test_valid_input_passes_guards(self):
+        response = self._call(db=self._mock_db(), count=1)
+        assert response.status_code == 200
+        assert response.json()["success"] is True
