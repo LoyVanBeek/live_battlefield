@@ -596,7 +596,7 @@ async def admin_create_game(
         gm_token=gm_token,
         invite_token=invite_token,
     )
-    logger.info("Game created: id=%s gm_token=%s", game.id, game.gm_token)
+    logger.info("Game created: id=%s", game.id)
     return {"token": game.gm_token, "invite_token": game.invite_token}
 
 
@@ -659,7 +659,7 @@ async def admin_create_games(
         gm_token=gm_token,
         invite_token=invite_token,
     )
-    logger.info("Game created: id=%s gm_token=%s", game.id, game.gm_token)
+    logger.info("Game created: id=%s", game.id)
     return {
         "id": str(game.id),
         "name": game.name,
