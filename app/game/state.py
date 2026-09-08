@@ -163,10 +163,12 @@ class TeamState:
                 ship.hits = len(ship.cells)  # a torpedo sinks in one hit
             else:
                 ship.hits += 1
-            self.public_board[row][col] = (attacker_color, True)
+            recorded_attacker = "anon" if bomb_type == "anonymous_bomb" else attacker_color
+            self.public_board[row][col] = (recorded_attacker, True)
             return BombResult.HIT, ship, _copy_team(self)
 
-        self.public_board[row][col] = (attacker_color, False)
+        recorded_attacker = "anon" if bomb_type == "anonymous_bomb" else attacker_color
+        self.public_board[row][col] = (recorded_attacker, False)
         return BombResult.MISS, None, _copy_team(self)
 
     def get_sunk_ships(self) -> list[Ship]:

@@ -212,3 +212,55 @@ class TestTorpedoBomb:
         assert replayed.teams["red"].special_ammo["torpedo"] == 0
         assert replayed.teams["red"].bombs == 4
         assert updated.ship_sunk is True
+
+
+class TestAnonymousBomb:
+    def _anon_state(self) -> GameState:
+        state = _started_state()
+        state.teams["red"].special_ammo = {"anonymous_bomb": 1}
+        return state
+
+    def test_anon_hit_records_anon_as_attacker(self):
+        state = self._anon_state()
+        resolution = resolve_bomb(state, "red", "blue", "A1", bomb_type="anonymous_bomb")
+
+        assert isinstance(resolution, BombApplied)
+        assert resolution.hit is True
+        # The victim's public board must not reveal the attacker color
+        assert state.teams["blue"].public_board[0][0] == ("anon", True)
+
+    def test_anon_miss_records_anon_as_attacker(self):
+        state = self._anon_state()
+        resolution = resolve_bomb(state, "red", "blue", "J10", bomb_type="anonymous_bomb")
+
+        assert isinstance(resolution, BombApplied)
+        assert state.teams["blue"].public_board[9][9] == ("anon", False)
+
+    def test_anon_consumes_ammo(self):
+        state = self._anon_state()
+        resolve_bomb(state, "red", "blue", "A1", bomb_type="anonymous_bomb")
+        assert state.teams["red"].special_ammo["anonymous_bomb"] == 0
+        assert state.teams["red"].bombs == 4
+
+    def test_anon_replay_records_anon(self):
+        from app.events.models import BombThrownEvent
+
+        replayed = GameState(teams=dict(self._anon_state().teams))
+        event = BombThrownEvent(
+            attacker_color="red", target_color="blue", row=0, col=0,
+            bomb_type="anonymous_bomb",
+        )
+        replayed, _ = event.apply(replayed)
+
+        assert replayed.teams["blue"].public_board[0][0] == ("anon", True)
+        assert replayed.teams["red"].special_ammo["anonymous_bomb"] == 0
+
+    def test_anon_board_png_renders_without_crash(self):
+        state = self._anon_state()
+        resolve_bomb(state, "red", "blue", "A1", bomb_type="anonymous_bomb")
+        resolve_bomb(state, "red", "blue", "J10", bomb_type="anonymous_bomb")
+
+        from app.game.board import render_board, boards_to_bytes
+
+        img = render_board(state.teams["blue"], show_private=False)
+        assert boards_to_bytes(img)  # gray fallback for unknown 'anon' color

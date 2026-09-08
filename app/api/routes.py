@@ -1647,7 +1647,16 @@ async def execute_command(
                     bot = Bot(token=settings.telegram_bot_token)
                     coord_display = coordinate_to_string(resolution.row, resolution.col)
 
-                    if resolution.bomb_result == BombResult.HIT:
+                    if bomb_type == "anonymous_bomb":
+                        if resolution.bomb_result == BombResult.HIT:
+                            notify_msg = f"💥 You were hit by an unknown attacker at {coord_display}!"
+                            if resolution.ship:
+                                notify_msg += f" Your {resolution.ship_type} was hit!"
+                                if resolution.ship.is_sunk():
+                                    notify_msg = notify_msg.replace("was hit!", "was SUNK!")
+                        else:
+                            notify_msg = f"💨 A bomb missed at {coord_display}!"
+                    elif resolution.bomb_result == BombResult.HIT:
                         notify_msg = f"💥 HIT! {state.teams[cmd.team_color].name} ({cmd.team_color}) bombed you at {coord_display}!"
                         if resolution.ship:
                             notify_msg += f" Your {resolution.ship_type} was hit!"
