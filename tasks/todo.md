@@ -257,3 +257,13 @@
 - `41b29d3` treasure chest: locations.kind (quest|chest) + locations.reward JSONB (migration 011); per-chest contents set by the GM (bombs 0-20, special ammo 0-10 each, sanitized by filter_chest_reward); chest creation gated on the treasure_chest special and requires non-empty reward; redemption (REST + bot) grants exact contents (capped bombs via CodeRedeemedEvent, ammo via SpecialAmmoGrantedEvents); map popup + GM table + add form updated.
 - 261 unit tests passing, ty clean, template JS node-checked.
 - Next: Phase 3 (armor shield, team deactivation) → Phase 4 (radar N-cell reveal, zombie revive-once) → Phase 5 (tsunami, turn-based).
+
+---
+
+# Specials Phase 3 (feature/specials)
+
+## Review
+- `7e7c456` armor shield: ShieldActivatedEvent (migration 012), TeamState.shielded_until, execute 'shield' command (ammo-gated, duration configurable). Bombing a shielded team records a hit marker (detected, anon-aware) without damage or consuming the cell; the shielded flag is baked into BombThrownEvent for deterministic replay (no wall-clock in replay) and set by the AI bomb path too. Team page shows an activate button + shield status; 'su' in team view.
+- `a20378a` team deactivation: DeactivateTeamEvent (migration 013), execute 'deactivate' command (ammo-gated, targets enemy team) + GM POST /api/quick/deactivate_team. Deactivated teams are rejected at the bomb/code/quiz gate points (team_deactivated); bot bomb/code paths gated too. 'du' in team view.
+- 279 unit tests passing, ty clean, template JS node-checked.
+- Next: Phase 4 (radar ship N-cell reveal, zombie revive-once) → Phase 5 (tsunami, turn-based).
