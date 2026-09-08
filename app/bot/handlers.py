@@ -305,6 +305,27 @@ async def handle_bomb(
     )
     await save_event(db, event, game_id=game_id)
 
+    reward_capped = 0
+    if resolution.sunk:
+        from app.game.specials import SpecialsConfig
+        from app.models import get_game
+
+        game = await get_game(db, game_id)
+        config = SpecialsConfig(game.specials if game else None)
+        if config.is_enabled("reward_per_sunk"):
+            max_bombs = game.max_bombs if game else 100
+            reward_capped = min(
+                int(config.value("reward_per_sunk", "bombs", 2)),
+                max_bombs - attacker.bombs,
+            )
+            if reward_capped > 0:
+                await save_event(
+                    db,
+                    BombsAddedEvent(color=player.color, count=reward_capped, success=True),
+                    game_id=game_id,
+                )
+                attacker.bombs += reward_capped
+
     target_player = await get_player_by_color_in_game(db, game_id, target_color)
     if target_player and target_player.chat_id:
         coord_str = coordinate_to_string(resolution.row, resolution.col)
@@ -332,6 +353,8 @@ async def handle_bomb(
         msg = f"You bombed {resolution.target_name} at {coord}. 💨 MISS!"
 
     msg += f"\nBombs remaining: {attacker.bombs}"
+    if reward_capped > 0:
+        msg += f"\n🎁 +{reward_capped} reward bombs for the sinking!"
 
     winner = resolution.winner
     if winner is not None and state.status == GameStatusField.STARTED:

@@ -1588,23 +1588,28 @@ async def execute_command(
 
         from app.game.specials import BOMB_TYPE_SPECIALS, SpecialsConfig
 
+        config: SpecialsConfig | None = None
+        game = None
+        radius = 0
+
         if bomb_type != "normal":
             if bomb_type not in BOMB_TYPE_SPECIALS:
                 result["message"] = f"Unknown bomb type: {bomb_type}"
                 result["error_key"] = "special_unknown"
                 return result
 
-            game = await get_game(db, game_uuid)
+            from app.models import get_game as _get_game
+
+            game = await _get_game(db, game_uuid)
             config = SpecialsConfig(game.specials if game else None)
             if not config.is_enabled(bomb_type):
                 result["message"] = f"{bomb_type} is not enabled for this game!"
                 result["error_key"] = "special_disabled"
                 return result
 
-        radius = 0
-        if bomb_type == "area_bomb":
-            size = int(config.value("area_bomb", "size", 3))
-            radius = max(0, (size - 1) // 2)
+            if bomb_type == "area_bomb":
+                size = int(config.value("area_bomb", "size", 3))
+                radius = max(0, (size - 1) // 2)
 
         from app.game.state import resolve_bomb
 
@@ -1643,6 +1648,32 @@ async def execute_command(
             radius=radius,
         )
         await save_event(db, event, game_uuid)
+
+        if resolution.sunk:
+            if config is None:
+                from app.models import get_game as _get_game
+
+                game = await _get_game(db, game_uuid)
+                config = SpecialsConfig(game.specials if game else None)
+
+            if config.is_enabled("reward_per_sunk"):
+                from app.events.models import BombsAddedEvent
+
+                attacker_team = state.teams[cmd.team_color]
+                max_bombs = game.max_bombs if game else 100
+                reward_capped = min(
+                    int(config.value("reward_per_sunk", "bombs", 2)),
+                    max_bombs - attacker_team.bombs,
+                )
+                if reward_capped > 0:
+                    await save_event(
+                        db,
+                        BombsAddedEvent(color=cmd.team_color, count=reward_capped, success=True),
+                        game_uuid,
+                    )
+                    attacker_team.bombs += reward_capped
+                    result["bombs_left"] = attacker_team.bombs
+                    result["message"] += f" +{reward_capped} reward bombs!"
 
         if TELEGRAM_BOT_AVAILABLE and settings.telegram_bot_token:
             from app.models import get_player_by_color_in_game

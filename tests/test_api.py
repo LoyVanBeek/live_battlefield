@@ -1519,3 +1519,86 @@ class TestSpecialBombValidation:
         assert data["hit"] is True
         assert data["sunk"] is True
         assert data["ship_type"] == "patrol_boat"
+
+
+class TestRewardPerSunk:
+    """Sinking a ship grants the attacker reward bombs when enabled."""
+
+    def _post_sinking_bomb(self, specials, bombs=5):
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState, GameStatusField, TeamState, Ship
+
+        state = GameState()
+        state.status = GameStatusField.STARTED
+        red = TeamState(name="Red", color="red", chat_id=1, bombs=bombs)
+        red.special_ammo = {"torpedo": 1}
+        blue = TeamState(name="Blue", color="blue", chat_id=2, bombs=1)
+        blue.ships.append(Ship(ship_type="patrol_boat", cells=[(0, 0), (0, 1)]))
+        state.teams = {"red": red, "blue": blue}
+
+        game = MagicMock()
+        game.specials = specials
+        game.max_bombs = 100
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {
+            "role": "team", "game_id": "00000000-0000-0000-0000-000000000000", "color": "red"
+        }
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                        with patch("app.api.routes.save_event", new_callable=AsyncMock) as mock_save:
+                            with patch("app.api.routes._check_game_paused", new_callable=AsyncMock, return_value=None):
+                                with patch("app.models.get_player_by_color_in_game", new_callable=AsyncMock, return_value=None):
+                                    client = TestClient(app)
+                                    response = client.post(
+                                        "/api/execute",
+                                        json={
+                                            "team_color": "red", "command": "bomb",
+                                            "args": {"target": "blue", "coordinate": "A1", "bomb_type": "torpedo"},
+                                        },
+                                    )
+        finally:
+            app.dependency_overrides.clear()
+        return response, mock_save
+
+    def test_sunk_ship_grants_reward_bombs(self):
+        response, mock_save = self._post_sinking_bomb(
+            {
+                "torpedo": {"enabled": True},
+                "reward_per_sunk": {"enabled": True, "bombs": 3},
+            }
+        )
+        data = response.json()
+        assert data["success"] is True
+        assert data["sunk"] is True
+        assert data["bombs_left"] == 7  # 5 - 1 torpedo + 3 reward
+        assert "+3 reward bombs!" in data["message"]
+
+        assert mock_save.await_count == 2
+        reward_event = mock_save.await_args_list[1].args[1]
+        assert reward_event.event_type.value == "bombs_added"
+        assert reward_event.count == 3
+
+    def test_no_reward_when_disabled(self):
+        response, mock_save = self._post_sinking_bomb(
+            {
+                "torpedo": {"enabled": True},
+                "reward_per_sunk": {"enabled": False, "bombs": 3},
+            }
+        )
+        assert response.json()["bombs_left"] == 4
+        assert mock_save.await_count == 1
+
+    def test_reward_capped_at_max_bombs(self):
+        response, mock_save = self._post_sinking_bomb(
+            {
+                "torpedo": {"enabled": True},
+                "reward_per_sunk": {"enabled": True, "bombs": 5},
+            },
+            bombs=99,
+        )
+        data = response.json()
+        assert data["bombs_left"] == 100  # 99 - 1 torpedo + 2 capped reward
+        reward_event = mock_save.await_args_list[1].args[1]
+        assert reward_event.count == 2
