@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="{{ current_lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Battlefield</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .welcome {
+            text-align: center;
+            padding: 40px 24px;
+            max-width: 640px;
+            width: 100%;
+        }
+        .lang-select-wrap {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 12px;
+        }
+        h1 {
+            font-size: 42px;
+            color: #00d9ff;
+            margin-bottom: 16px;
+            letter-spacing: 1px;
+        }
+        .tagline {
+            font-size: 16px;
+            color: #aaa;
+            line-height: 1.6;
+        }
+        .magic-line {
+            width: 60px;
+            height: 3px;
+            background: #0f3460;
+            margin: 20px auto 24px;
+            border-radius: 2px;
+        }
+        h2 {
+            font-size: 18px;
+            color: #00d9ff;
+            margin-bottom: 14px;
+            letter-spacing: 0.5px;
+        }
+        .how-it-works {
+            list-style: none;
+            text-align: left;
+            display: inline-block;
+            max-width: 520px;
+        }
+        .how-it-works li {
+            position: relative;
+            padding: 10px 0 10px 26px;
+            font-size: 15px;
+            color: #ccc;
+            line-height: 1.55;
+            border-bottom: 1px solid #16213e;
+        }
+        .how-it-works li:last-child {
+            border-bottom: none;
+        }
+        .how-it-works li::before {
+            content: "";
+            position: absolute;
+            left: 2px;
+            top: 18px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #0f3460;
+            border: 2px solid #00d9ff;
+        }
+        select.lang-select {
+            padding: 6px 10px;
+            font-size: 13px;
+            border: 2px solid #0f3460;
+            border-radius: 5px;
+            background: #1a1a2e;
+            color: #eee;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="welcome">
+        <div class="lang-select-wrap">
+            <select class="lang-select" onchange="window.location.href = '/?lang=' + this.value">
+                <option value="en" {% if current_lang == 'en' %}selected{% endif %}>{{ tr.lang.en }}</option>
+                <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>{{ tr.lang.nl }}</option>
+            </select>
+        </div>
+        <h1>{{ tr.welcome.heading }}</h1>
+        <div class="magic-line"></div>
+        <p class="tagline">{{ tr.welcome.tagline }}</p>
+        <h2>{{ tr.welcome.how_title }}</h2>
+        <ul class="how-it-works">
+            <li>{{ tr.welcome.step1 }}</li>
+            <li>{{ tr.welcome.step2 }}</li>
+            <li>{{ tr.welcome.step3 }}</li>
+            <li>{{ tr.welcome.step4 }}</li>
+            <li>{{ tr.welcome.step5 }}</li>
+        </ul>
+    </div>
+</body>
+</html>

@@ -52,13 +52,12 @@ from typing import Optional
 from datetime import datetime, timezone
 import math
 import random
-import string
-import secrets
+
+from app.events.models import generate_location_code
 
 
-def generate_code(length: int = 4) -> str:
-    alphabet = string.ascii_uppercase + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(length))
+def generate_code(length: int = 6) -> str:
+    return generate_location_code(length)
 
 
 async def handle_join(
@@ -68,6 +67,10 @@ async def handle_join(
         return
     chat_id = update.effective_chat.id
     logger.info(f"handle_join: chat_id={chat_id} team_name={team_name}")
+
+    from app.safety import sanitize_name
+
+    team_name = sanitize_name(team_name)
 
     try:
         existing_player = await get_player_by_chat(db, chat_id)
@@ -533,8 +536,18 @@ async def handle_locations_list(db, update: Update, context: ContextTypes.DEFAUL
 
 
 async def handle_register_gm(db, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from app.config import settings
+    from app.safety import compare_digest_optional
+
     if update.effective_chat is None:
         return
+
+    required_secret = settings.gm_secret
+    if required_secret:
+        provided = (context.args[0] if context.args else "") or ""
+        if not provided or not compare_digest_optional(provided, required_secret):
+            return "Registering as a game master requires the setup secret. Ask the host for it."
+
     chat_id = update.effective_chat.id
 
     existing_player = await get_player_by_chat(db, chat_id)
@@ -578,7 +591,9 @@ async def handle_add_ai(
     if not name:
         name = f"{color.title()} AI"
 
-    from app.game.state import TEAM_COLORS
+    from app.safety import sanitize_name
+
+    name = sanitize_name(name)
 
     if color not in TEAM_COLORS:
         return f"Invalid color! Choose from: {', '.join(TEAM_COLORS)}"
@@ -703,7 +718,6 @@ async def handle_create_locations(
         return f"Cannot create {count} locations! Would exceed 100 maximum. Current: {len(existing_locations)}"
 
     import random
-    import string
 
     created = []
 
@@ -723,7 +737,7 @@ async def handle_create_locations(
         lat = latitude + lat_offset
         lon = longitude + lon_offset
 
-        code = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        code = generate_code()
 
         number = await get_next_location_number(db, game_id)
 

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, Request, HTTPException, Query
 from fastapi.responses import Response, HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
 import logging
@@ -16,7 +17,6 @@ import os
 import json
 import math
 import random
-import string
 import asyncio
 from datetime import datetime, timezone, timedelta
 
@@ -79,26 +79,51 @@ async def _get_legacy_game_id(db: AsyncSession) -> uuid.UUID:
 
 # --- New auth dependencies ---
 
+from app.rate_limit import auth_fail_limiter
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _auth_failure(request: Request) -> HTTPException:
+    """Turn a failed auth check into 404, throttled per client IP."""
+    ip = _client_ip(request)
+    if not auth_fail_limiter.check(ip):
+        return HTTPException(status_code=429, detail="Too many failed attempts. Try again in a minute.")
+    auth_fail_limiter.record(ip)
+    return HTTPException(status_code=404)
+
+
 async def verify_admin(
+    request: Request,
     token: str = Query(...),
     db: AsyncSession = Depends(get_api_db),
 ):
     from app.models import get_admin
+    from app.safety import compare_digest_optional
+
     sa = await get_admin(db)
-    if not sa or sa.token != token:
-        raise HTTPException(status_code=404)
+    if not sa or not compare_digest_optional(sa.token, token):
+        raise _auth_failure(request)
     return token
 
 
 async def verify_admin_or_gm(
+    request: Request,
     token: Optional[str] = Query(None),
     gm_token: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
 ):
     if token:
         from app.models import get_admin
+        from app.safety import compare_digest_optional
+
         sa = await get_admin(db)
-        if sa and sa.token == token:
+        if sa and compare_digest_optional(sa.token, token):
             return {"role": "admin"}
 
     if gm_token:
@@ -107,33 +132,36 @@ async def verify_admin_or_gm(
         if game:
             return {"role": "gm", "game_id": str(game.id)}
 
-    raise HTTPException(status_code=404)
+    raise _auth_failure(request)
 
 
 async def verify_gm_token(
+    request: Request,
     gm_token: str = Query(...),
     db: AsyncSession = Depends(get_api_db),
 ):
     from app.models import get_game_by_gm_token
     game = await get_game_by_gm_token(db, gm_token)
     if not game:
-        raise HTTPException(status_code=404)
+        raise _auth_failure(request)
     return str(game.id)
 
 
 async def verify_team_token(
+    request: Request,
     team_token: str = Query(...),
     db: AsyncSession = Depends(get_api_db),
 ):
     from app.models import lookup_team_token
     result = await lookup_team_token(db, team_token)
     if not result:
-        raise HTTPException(status_code=404)
+        raise _auth_failure(request)
     game_id, color = result
     return {"game_id": game_id, "color": color}
 
 
 async def verify_team_or_gm(
+    request: Request,
     gm_token: Optional[str] = Query(None),
     team_token: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
@@ -151,7 +179,7 @@ async def verify_team_or_gm(
             game_id, color = result
             return {"role": "team", "game_id": game_id, "color": color, "team_token": team_token}
 
-    raise HTTPException(status_code=404)
+    raise _auth_failure(request)
 
 
 @asynccontextmanager
@@ -161,8 +189,8 @@ async def lifespan(app: FastAPI):
     try:
         async with api_session_maker() as db:
             from app.models import get_or_create_admin
-            sa = await get_or_create_admin(db)
-            logger.info("Admin panel: /admin/%s", sa.token)
+            await get_or_create_admin(db)
+            logger.info("Admin panel available (configure ADMIN_TOKEN to set the admin URL).")
 
         from app.services.trickle import trickle_loop
         from app.services.game_scheduler import resume_scheduled_starts
@@ -184,10 +212,31 @@ async def lifespan(app: FastAPI):
     await shutdown_schedules()
 
 
-app = FastAPI(title="Live Battlefield API", lifespan=lifespan)
+app = FastAPI(
+    title="Live Battlefield API",
+    lifespan=lifespan,
+    docs_url="/docs" if settings.dev_mode else None,
+    redoc_url="/redoc" if settings.dev_mode else None,
+    openapi_url="/openapi.json" if settings.dev_mode else None,
+)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    if "Referrer-Policy" not in response.headers:
+        response.headers["Referrer-Policy"] = "no-referrer"
+    if "Cache-Control" not in response.headers:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 templates = Jinja2Templates(directory=templates_dir)
+
+static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 class ExecuteCommand(BaseModel):
@@ -250,15 +299,56 @@ async def _check_game_paused(db: AsyncSession, game_id: str) -> dict | None:
 
 
 @app.get("/")
-async def root():
-    from fastapi.responses import RedirectResponse
+async def root(request: Request, lang: Optional[str] = Query(None)):
+    if lang and lang in SUPPORTED_LANGS:
+        chosen_lang = lang
+    else:
+        chosen_lang = request.cookies.get("lang", "")
+        if chosen_lang not in SUPPORTED_LANGS:
+            chosen_lang = detect_language(request.headers.get("accept-language", ""))
 
-    return RedirectResponse(url="/map")
+    translations = get_translations(chosen_lang)
+
+    response = templates.TemplateResponse(
+        request, "welcome.html",
+        {
+            "request": request,
+            "tr": translations,
+            "tr_json": json.dumps(translations),
+            "current_lang": chosen_lang,
+        },
+    )
+    response.set_cookie(key="lang", value=chosen_lang, max_age=365 * 24 * 3600)
+    return response
 
 
 @app.get("/map", response_class=HTMLResponse)
-async def map_page(request: Request):
-    return templates.TemplateResponse(request, "map.html", {"request": request})
+async def map_page(
+    request: Request,
+    game_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_api_db),
+):
+    from fastapi.responses import RedirectResponse
+    from app.models import get_game
+
+    if not game_id:
+        return RedirectResponse(url="/")
+
+    try:
+        game_uuid = uuid.UUID(game_id)
+    except ValueError:
+        return RedirectResponse(url="/")
+
+    game = await get_game(db, game_uuid)
+    if not game:
+        return RedirectResponse(url="/")
+
+    response = templates.TemplateResponse(
+        request, "map.html",
+        {"request": request, "game_id": game_id},
+    )
+    response.headers["Referrer-Policy"] = "origin"
+    return response
 
 
 @app.get("/api/locations")
@@ -369,6 +459,7 @@ async def game_master_page(
         {
             "request": request,
             "gm_token": gm_token,
+            "game_id": str(game.id),
             "game_name": game.name or "Battlefield",
             "tr": translations,
             "tr_json": json.dumps(translations),
@@ -389,9 +480,11 @@ async def game_master_locations_page(
     game = await get_game_by_gm_token(db, gm_token)
     if not game:
         return HTMLResponse("Not found", status_code=404)
-    return templates.TemplateResponse(
-        request, "locations.html", {"request": request, "gm_token": gm_token}
+    response = templates.TemplateResponse(
+        request, "locations.html", {"request": request, "gm_token": gm_token, "game_id": str(game.id)}
     )
+    response.headers["Referrer-Policy"] = "origin"
+    return response
 
 
 @app.get("/game-master/{gm_token}/events", response_class=HTMLResponse)
@@ -404,7 +497,7 @@ async def game_master_events_page(
     if not game:
         return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(
-        request, "events.html", {"request": request, "gm_token": gm_token}
+        request, "events.html", {"request": request, "gm_token": gm_token, "game_id": str(game.id)}
     )
 
 
@@ -503,7 +596,7 @@ async def admin_create_game(
         gm_token=gm_token,
         invite_token=invite_token,
     )
-    logger.info("Game created: id=%s gm_token=%s", game.id, game.gm_token)
+    logger.info("Game created: id=%s", game.id)
     return {"token": game.gm_token, "invite_token": game.invite_token}
 
 
@@ -556,16 +649,17 @@ async def admin_create_games(
 ):
     from app.models import create_game
     from app.events.models import generate_team_token
+    from app.safety import sanitize_name
 
     gm_token = generate_team_token()
     invite_token = generate_team_token()
     game = await create_game(
         db,
-        name=body.name,
+        name=sanitize_name(body.name) if body.name else None,
         gm_token=gm_token,
         invite_token=invite_token,
     )
-    logger.info("Game created: id=%s gm_token=%s", game.id, game.gm_token)
+    logger.info("Game created: id=%s", game.id)
     return {
         "id": str(game.id),
         "name": game.name,
@@ -641,6 +735,8 @@ async def event_stream(
                 return HTMLResponse("Unauthorized", status_code=401)
 
     q = await manager.connect(game_id)
+    if q is None:
+        return HTMLResponse("Too many live connections for this game", status_code=429)
 
     async def event_generator():
         try:
@@ -786,9 +882,17 @@ async def join_game(
     from app.events.models import TeamJoinedEvent, generate_team_token
     from app.events.saver import save_event
 
+    from app.rate_limit import join_limiter
+
+    if not join_limiter.allow(f"join:{invite_token}"):
+        raise HTTPException(status_code=429, detail="Too many attempts. Try again in a minute.")
+
     game = await get_game_by_invite_token(db, invite_token)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
+
+    if body.team_color not in TEAM_COLORS:
+        return {"success": False, "message": "Invalid team color"}
 
     game_uuid = game.id
 
@@ -802,6 +906,9 @@ async def join_game(
         return {"success": False, "message": f"Team {body.team_color} already exists!"}
 
     team_name = body.name or body.team_color
+    from app.safety import sanitize_name
+
+    team_name = sanitize_name(team_name)
 
     token = generate_team_token()
     event = TeamJoinedEvent(
@@ -1135,12 +1242,35 @@ async def get_public_boards(
 @app.get("/api/board/{team_color}/private.png")
 async def get_private_board(
     team_color: str,
-    game_id: str = Query(...),
+    team_token: Optional[str] = Query(None),
+    gm_token: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_api_db),
 ):
-    from app.models import get_game_events
+    from app.models import get_game_events, lookup_team_token, get_game_by_gm_token
 
-    events = await get_game_events(db, uuid.UUID(game_id))
+    actual_game_id = None
+    authorized_color = None
+
+    if team_token:
+        result = await lookup_team_token(db, team_token)
+        if result:
+            actual_game_id, authorized_color = result
+
+    is_gm = False
+    if gm_token:
+        game = await get_game_by_gm_token(db, gm_token)
+        if game:
+            if actual_game_id is None:
+                actual_game_id = str(game.id)
+            is_gm = str(game.id) == actual_game_id
+
+    if actual_game_id is None:
+        return Response("Unauthorized", status_code=401)
+
+    if not is_gm and authorized_color != team_color:
+        return Response("Unauthorized", status_code=401)
+
+    events = await get_game_events(db, uuid.UUID(actual_game_id))
     state = GameState.from_events(events)
 
     if team_color not in state.teams:
@@ -1181,21 +1311,16 @@ async def get_board_replay_gif(
 ):
     from app.models import lookup_team_token, get_game_events
 
-    actual_game_id = game_id
-    if team_token:
-        result = await lookup_team_token(db, team_token)
-        if result:
-            actual_game_id, _ = result
-
-    if actual_game_id is None:
+    result = await lookup_team_token(db, team_token)
+    if not result:
         return Response("Unauthorized", status_code=401)
 
-    game_uuid = uuid.UUID(actual_game_id)
-    events = await get_game_events(db, game_uuid)
-    state = GameState.from_events(events)
+    actual_game_id, _ = result
 
-    if state.team_tokens.get(team_token) is None and game_id is None:
+    if game_id and game_id != actual_game_id:
         return Response("Unauthorized", status_code=401)
+
+    events = await get_game_events(db, uuid.UUID(actual_game_id))
 
     gif_bytes = create_public_board_gif(events, team_color)
     if not gif_bytes:
@@ -1329,7 +1454,9 @@ async def execute_command(
 
     game_id = auth_info["game_id"]
     game_uuid = uuid.UUID(game_id)
-    team_color_from_auth = auth_info.get("color")
+
+    if auth_info.get("role") == "team":
+        cmd.team_color = auth_info["color"]
 
     events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
@@ -1344,6 +1471,10 @@ async def execute_command(
     result: dict[str, Any] = {"success": False, "message": ""}
 
     if cmd.command == "join":
+        if cmd.team_color not in TEAM_COLORS:
+            result["message"] = "Invalid team color!"
+            return result
+
         if state.status != GameStatusField.PREPARING:
             result["message"] = "Cannot join - game already started!"
             return result
@@ -1355,7 +1486,9 @@ async def execute_command(
         team_name = cmd.args.get("name", cmd.team_color)
         from app.events.models import TeamJoinedEvent, generate_team_token
         from app.models import create_team_token
+        from app.safety import sanitize_name
 
+        team_name = sanitize_name(team_name)
         token = generate_team_token()
         event = TeamJoinedEvent(
             name=team_name,
@@ -1385,7 +1518,9 @@ async def execute_command(
             return result
 
         from app.events.models import TeamRenamedEvent
+        from app.safety import sanitize_name
 
+        new_name = sanitize_name(new_name)
         event = TeamRenamedEvent(color=cmd.team_color, name=new_name)
         state, _ = event.apply(state)
         await save_event(db, event, game_uuid)
@@ -1583,6 +1718,12 @@ async def execute_command(
         location_num = cmd.args.get("location_number")
         code = cmd.args.get("code", "")
 
+        from app.rate_limit import code_attempt_limiter
+
+        if not code_attempt_limiter.allow(f"code:{game_id}:{cmd.team_color}"):
+            result["message"] = "Too many attempts! Try again in a minute."
+            return result
+
         if location_num not in state.location_codes:
             result["message"] = f"Location {location_num} doesn't exist!"
             return result
@@ -1648,6 +1789,10 @@ async def execute_command(
         question_row = question.scalar_one_or_none()
         if not question_row or question_row.game_id != game_uuid:
             result["message"] = "Invalid question!"
+            return result
+
+        if answer_row.question_id != question_row.id:
+            result["message"] = "Invalid answer!"
             return result
 
         # Check this team hasn't already answered this question
@@ -1771,6 +1916,9 @@ async def quick_place_all_ships(
 ):
     from app.services.ship_placement import place_all_ships_game_scoped
 
+    if auth_info.get("role") == "team":
+        action.team_color = auth_info["color"]
+
     success, message = await place_all_ships_game_scoped(db, auth_info["game_id"], action.team_color)
     return {
         "success": success,
@@ -1855,7 +2003,10 @@ async def quick_add_ai(
 
     game_uuid = uuid.UUID(game_id)
     color = action.team_color.lower()
-    name = action.name or f"{color.title()} AI"
+    name = (action.name or f"{color.title()} AI")
+    from app.safety import sanitize_name
+
+    name = sanitize_name(name)
 
     if color not in TEAM_COLORS:
         return {
@@ -1946,6 +2097,9 @@ async def quick_remove_ship(
     auth_info: dict = Depends(verify_team_or_gm),
 ):
     from app.models import get_game_events
+
+    if auth_info.get("role") == "team":
+        action.team_color = auth_info["color"]
 
     game_uuid = uuid.UUID(auth_info["game_id"])
     events = await get_game_events(db, game_uuid)
@@ -2056,6 +2210,17 @@ async def create_locations(
             "message": "Cannot create locations - game already started!",
         }
 
+    if action.count <= 0:
+        return {"success": False, "message": "Count must be at least 1!"}
+
+    if not (
+        math.isfinite(action.latitude)
+        and math.isfinite(action.longitude)
+        and -90 <= action.latitude <= 90
+        and -180 <= action.longitude <= 180
+    ):
+        return {"success": False, "message": "Invalid coordinates!"}
+
     existing_locations = await get_game_locations(db, game_uuid)
     if len(existing_locations) + action.count > 100:
         return {
@@ -2084,7 +2249,9 @@ async def create_locations(
             lat = action.latitude
             lon = action.longitude
 
-        code = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        from app.events.models import generate_location_code
+
+        code = generate_location_code()
 
         number = await get_next_location_number(db, game_uuid)
 
@@ -2456,31 +2623,35 @@ async def clear_players(
 @app.post("/api/quick/clear-database")
 async def clear_database(
     db: AsyncSession = Depends(get_api_db),
-    game_id: str = Depends(verify_gm_token),
+    _=Depends(verify_admin),
 ):
-    from app.events.models import generate_team_token
     from app.models import (
         delete_all_players,
         delete_all_events,
         delete_all_locations,
         delete_all_team_tokens,
+        get_all_games,
+        update_game_status,
     )
     from app.database import GameStatus
 
-    game_uuid = uuid.UUID(game_id)
-
-    players_count = await delete_all_players(db, game_uuid)
-    events_count = await delete_all_events(db, game_uuid)
-    locations_count = await delete_all_locations(db, game_uuid)
-    await delete_all_team_tokens(db, game_uuid)
-
-    from app.models import update_game_status
-
-    await update_game_status(db, game_uuid, GameStatus.WAITING, started_at=None)
+    players_count = 0
+    events_count = 0
+    locations_count = 0
+    games = await get_all_games(db)
+    for game in games:
+        players_count += await delete_all_players(db, game.id)
+        events_count += await delete_all_events(db, game.id)
+        locations_count += await delete_all_locations(db, game.id)
+        await delete_all_team_tokens(db, game.id)
+        await update_game_status(db, game.id, GameStatus.WAITING, started_at=None)
 
     return {
         "success": True,
-        "message": f"Database cleared! Players: {players_count}, Events: {events_count}, Locations: {locations_count}.",
+        "message": (
+            f"Database cleared ({len(games)} games)! "
+            f"Players: {players_count}, Events: {events_count}, Locations: {locations_count}."
+        ),
     }
 
 

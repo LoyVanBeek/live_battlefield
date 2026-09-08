@@ -149,8 +149,8 @@ async def get_or_create_admin(db: AsyncSession) -> Admin:
             await db.refresh(admin)
     else:
         if not token:
-            from app.events.models import generate_team_token
-            token = generate_team_token()
+            import secrets
+            token = secrets.token_urlsafe(24)
         admin = Admin(token=token)
         db.add(admin)
         await db.commit()

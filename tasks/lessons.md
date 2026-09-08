@@ -40,3 +40,22 @@
 - Even though `loadTeams` and `apiCall` appear before the error in the source, the entire block fails to parse — nothing runs
 - After template changes, verify with `node --check` that the extracted JS is valid
 - Docker images must be rebuilt (`docker compose build`) for template changes to reach the container — `docker compose restart` alone only restarts the process with the image-baked code
+
+## E2E and prod compose share the project name — never `down --remove-orphans`
+- `docker-compose.yml` and `docker-compose.e2e.yml` are both project `live_battlefield` (derived from the directory name), so containers/networks interleave
+- `docker compose -f docker-compose.e2e.yml down --remove-orphans` will treat the PROD stack (`app`, `ngrok`, `pgadmin`, `postgres`) as orphans and delete those containers
+- Only ever tear down the test stack by exact service names: `docker compose -f docker-compose.e2e.yml down test-app test-postgres`
+- Containers are replayable from config; data lives in named volumes — never pass `-v` unless you truly want the DB gone
+
+## Stale E2E POM vs redesigned GM UI
+- `gm_page.py` `join_color_select` targets `#join-color`, which no longer exists (replaced by click-to-join per-color inputs). 7 E2E tests (`test_full_flow`, most of `test_gm_page`) fail on this pre-existing debt — reproduce on baseline, do not attribute to new changes
+
+## Piped commands mask exit codes in `&&` chains
+- `uv run pytest ... | tail -2 && git commit ...` commits on test failure — the chain sees `tail`'s exit status (0), not pytest's
+- Bit me once: committed a failing test and had to amend (commit `5128d4b` era, quiz scoping test)
+- Rule: run pytest as its own command and check the result before composing; when piping is unavoidable, use `set -o pipefail` or capture output to a file and echo the real exit status
+- Same applies to audit/lint tools whose summary lines hide a non-zero exit
+
+## piped audit output truncation hides remaining findings
+- `pip-audit | tail -N` showed only the last findings — fixing one package revealed the next (pillow → idna → mako → click needed FOUR rounds)
+- Rule: write audit output to a file and inspect it fully; trust the exit code, not the visible tail

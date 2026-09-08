@@ -1,6 +1,13 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -12,21 +19,25 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    logging: *default-logging
 
   pgadmin:
     image: dpage/pgadmin4
+    restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
     ports:
       - "127.0.0.1:5050:80"
     depends_on:
       - postgres
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    logging: *default-logging
 
   app:
     build: .
+    restart: unless-stopped
     ports:
       - "8000:8000"
     depends_on:
@@ -37,6 +48,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/battleship
     env_file:
       - .env
+    logging: *default-logging
     develop:
       watch:
         - action: sync
@@ -47,13 +59,16 @@ services:
 
   ngrok:
     image: ngrok/ngrok:latest
+    restart: unless-stopped
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
       - NGROK_DOMAIN=${NGROK_DOMAIN}
     entrypoint: []
     command: sh -c "exec ngrok http app:8000 $${NGROK_DOMAIN:+--url=$$NGROK_DOMAIN}"
+    logging: *default-logging
 
 volumes:
   postgres_data:

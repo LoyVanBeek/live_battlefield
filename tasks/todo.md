@@ -95,3 +95,141 @@
 - Deployed: `docker compose build app && up -d app`; container serves bombToastText (verified in-image). Test stack torn down.
 - Design: `result.message` kept for Telegram bot + other consumers; client falls back to it when `error_key`/structured fields missing (or translation key missing).
 - Note: lang selection is cookie-based (server sets `lang` cookie on first visit) — default Accept-Language probing only applies before a cookie exists.
+
+---
+
+# Security review & hardening (hosting prep)
+
+## Plan (approved — "Go tackle the issues")
+1. Fix P1 authorization: force `team_color` from auth for team-token calls (execute + quick endpoints).
+2. Stored XSS: sanitize names server-side + escape all name interpolation on public/anonymous pages.
+3. Fog-of-war: `private.png` requires own team token or same-game GM token.
+4. Weak secrets: longer location codes, wider token alphabet, hmac.compare_digest, secrets-based admin token (not logged).
+5. Rate limiting on code redeem + join endpoints.
+6. `/registergm` gated by optional `GM_SECRET`.
+7. Security headers + vendored Leaflet (kill unpkg Referer leak).
+8. Dockerfile: non-root user, pinned slim base, no tests/static duplication.
+9. Verify: ty, pytest, E2E parity vs baseline, deploy.
+
+## Tasks
+- [x] P1.1 auth-color enforcement (routes.py execute + quick place_all_ships/remove_ship)
+- [x] P1.2 sanitize_name (app/safety.py) at join/rename/create/rename entry points + esc() in all templates
+- [x] P1.3 private.png requires own team_token or same-game gm_token; game_id param removed
+- [x] P1.4 generate_location_code(6) + team token alphabet + rate_limit.py (code_attempt_limiter, join_limiter)
+- [x] P2 GM_SECRET gate on /registergm; compare_digest in verify_admin/verify_admin_or_gm; token_urlsafe admin token; token log removed
+- [x] P2/P3 security_headers middleware + /static mount + vendored Leaflet 1.9.4
+- [x] P3 Dockerfile non-root (battleship uid 1000), python:3.11.13-slim, no tests copy; Dockerfile.e2e USER root for setup then battleship
+- [x] Tests: tests/test_safety.py + auth-color / private.png regression tests in tests/test_api.py
+- [x] Verify: `uv run ty check app` (pass), `uv run pytest tests/` (150 passed)
+- [x] Verify: E2E parity — identical 7 failed/25 passed on baseline vs changes (all 7 pre-existing `#join-color` stale-POM failures, unrelated to security work)
+- [ ] Commits: step-by-step (authz, XSS/templates, private board auth, tokens/rate-limit/GM_SECRET, headers/leaflet, Docker)
+- [ ] Deploy + review section
+
+## Design notes
+- `sanitize_name` strips `< > & " '` and caps at 30 chars (matches client maxlength). Escape-only in templates via `esc()`; server-side sanitization is the real defense.
+- Team tokens: 9 chars from ascii_letters+digits (~54 bits). Admin token: `secrets.token_urlsafe(24)`.
+- Location codes: 6 chars secrets-derived, agnostic to case for verbal sharing; `random.choices` replaced.
+- Rate limiter is in-memory per key (game+color for codes, invite token for joins), 10/min; fine for single-Pi deployment.
+- `security_headers`: nosniff, X-Frame-Options DENY, Referrer-Policy no-referrer, Cache-Control only when not set (preserves replay GIF public caching).
+- Leaflet vendored to app/static/leaflet/ (unpkg no longer referenced → no token leak via Referer).
+
+## Review
+- Commits:
+  - `0370a2f` fix: force team_color from auth token on team endpoints (execute, place_all_ships, remove_ship)
+  - `2691348` fix: sanitize team names server-side and escape all name interpolation in templates
+  - `550953e` fix: require team token or same-game GM token for private board PNG
+  - `afe0040` fix: strong secrets, rate-limit code/join, and optional GM_SECRET gate for /registergm
+  - `e1e3716` feat: security headers, self-hosted Leaflet, and non-root pinned-container Dockerfile
+  - `229131b` docs: record security hardening review and lessons
+- `uv run ty check app`: pass. `uv run pytest tests/`: 150 passed (23 new security regression tests).
+- E2E parity vs baseline: identical 7 failed / 25 passed (7 pre-existing `#join-color` stale-POM failures in test_gm_page/test_full_flow; reproduced on baseline, unrelated to this work).
+- Deployed: `docker compose build app && up -d app`; container runs as `battleship` (non-root) uid 1000.
+- Live verification (prod, real HTTP):
+  - Security headers on all responses (nosniff, DENY, no-referrer, Cache-Control fallback).
+  - `/static/leaflet/leaflet.{js,css}` + marker images serve 200 (unpkg no longer referenced).
+  - Join with `<script>Red</script> Team` → stored as `scriptRed/script Team` (angle brackets stripped).
+  - private.png: 401 with no/invalid token, 200 with own team token.
+  - Admin create-game + delete-game work; new token formats live (e.g. `EPG-fAL-4W6`).
+  - Join rate limit: 10 allowed, then 429 with clear message.
+  - Admin token no longer logged at startup (was leaking to stdout).
+- Smoke-test game removed from prod DB afterwards.
+- NGROK_AUTHTOKEN/NGROK_DOMAIN are commented out in `.env` → ngrok container can't authenticate (pre-existing config state; Funnel is the chosen tunnel).
+
+---
+
+# Welcome-only root + game-ID-scoped public map
+
+## Plan (approved — "1A, 2A: no links to admin")
+1. `/` serves a static welcome page (brand + tagline, no game data, no map, no links).
+2. `/map` requires `?game_id=` (valid UUID of an existing game); otherwise redirect to `/`. Map page JS passes game_id to `/api/locations` + `/api/public-state`.
+3. OSM tile fix: security middleware sets `Referrer-Policy` only when unset; `/map` and `/game-master/{gm}/locations-secret` set `origin` (browser sends origin as Referer → OSM accepts). `no-referrer` everywhere else.
+4. GM dashboard + events nav "Map" links carry `game_id`.
+5. Verify: pytest + ty, rebuild/restart, live header/content checks.
+
+## Tasks
+- [x] welcome.html (static, no links)
+- [x] routes.py: root → welcome; /map game_id gate; middleware referrer override; template contexts (game_id)
+- [x] templates: map.html GAME_ID fetches; game_master.html + events.html nav links
+- [x] tests: / welcome only, /map gate (missing/invalid/unknown), headers (no-referrer vs origin)
+- [x] verify: pytest 156 passed, ty clean, rendered-JS node --check OK
+- [x] deploy: image rebuilt, app restarted, live checks pass
+- [ ] commits + review section
+
+## Review
+- Commits: `1e09aa1` fix (welcome root + game-scoped map + referrer override), `35ba854` tests.
+- `uv run ty check app`: pass. `uv run pytest tests/`: 156 passed (6 new in TestWelcomeAndMap).
+- Rendered-JS `node --check` on game_master/events/map: OK (validated after Jinja render with real translations).
+- Deployed: image rebuilt, app restarted, live checks:
+  - `/` → 200 welcome ("Live Battlefield" + tagline only), `Referrer-Policy: no-referrer`, no game data, no redirect.
+  - `/map` (no/bogus/unknown game_id) → 307 to `/`.
+  - `/map?game_id=<valid>` → 200, `Referrer-Policy: origin`, GAME_ID embedded, fetches hit `/api/locations?game_id=` + `/api/public-state?game_id=` (both 200).
+  - GM + events nav "Map" links point to `/map?game_id=<uuid>`; locations page returns `Referrer-Policy: origin`.
+  - OSM tiles fetchable (200); browser now sends origin as Referer → no empty-Referer rejection.
+
+---
+
+# Welcome page "How it works"
+
+## Plan
+1. Add `welcome` section to en.json + nl.json: tagline + "How it works" + 5 tight bullets.
+2. welcome.html: translated copy via `tr`, language switcher `<select>` (mirrors game_master), styled bullet list.
+3. routes.py `root()`: language from `?lang=` → cookie → Accept-Language (same pattern as gm/settings pages), set lang cookie, drop `_render_welcome`.
+4. Tests: lang query param, cookie persistence, accept-language, unsupported fallback.
+
+## Tasks
+- [x] en.json/nl.json welcome section
+- [x] welcome.html translated bullets + switcher
+- [x] root() language detection + cookie
+- [x] tests (4 new) — 160 passed, ty clean
+- [x] deploy + live check (en, nl, fr-fallback, accept-language)
+
+## Review
+- Commits: `d916bd6` feat, `1eab14c` test.
+- Copy reflects actual mechanics (from ships.py/state.py/routes.py): join link, 10 ships on 10×10 no-touch fleet, real-world code redemption, 1 bomb per shot, last fleet standing wins.
+- Live: `/` en (5 bullets + tagline), `/?lang=nl` Dutch, `/?lang=fr`→en fallback, `Accept-Language: nl`→nl, `Referrer-Policy: no-referrer` intact, `lang` cookie set.
+
+---
+
+# Security hardening pass 3 + process debt (session)
+
+## Plan
+1. Address residual findings from security review passes: log secrets, SSE cap, limiter memory, docs exposure, docker hardening, e2e CI.
+2. Add dependency audit to CI (pip-audit via uv export).
+3. Record lessons, close out the session.
+
+## Tasks
+- [x] Security fixes: replay.gif auth, docs off unless DEV_MODE, game-name sanitize/escape, secrets out of logs, quiz answer game-scoping, create_locations guards
+- [x] Admin-only global DB reset (GM keeps per-game reset); team-color validation on join endpoints; auth-failure rate limiter (per-IP, fail-closed 429)
+- [x] Docker hardening: .dockerignore (root + Dockerfile.e2e variant), app HEALTHCHECK, restart policies, log rotation, pgAdmin env override
+- [x] E2E CI repair: Dockerfile.e2e.dockerignore (BuildKit per-Dockerfile ignore), playwright browsers as runtime user
+- [x] E2E POM migration to current GM/team UI — suite green 32/32 (was 7 failed baseline)
+- [x] Rate limiter bounded key storage; SSE per-game connection cap (429 at 30)
+- [x] Dependency audit: upgraded pillow 12.3.0, starlette 1.3.1, pydantic-settings 2.15.0, python-dotenv 1.2.3, idna 3.19, mako 1.4.1, click 8.5.0 → pip-audit clean
+- [x] CI: audit step after unit tests
+- [x] Lessons: piped exit codes, audit truncation
+
+## Review
+- Commits this session (security/deps/ci): 83757c9, d238949, 91f0e8c, 732bc29, 5128d4b, e0cf350, 291de32, bd0a7b4, b24121d, c6f92a4, 15deb19, a7c78c2 + deps/ci/docs commits.
+- 191 unit tests passing, ty clean (full project), e2e 32/32, pip-audit "No known vulnerabilities", app healthy in Docker.
+- Accepted residuals: tokens in uvicorn access logs (user decision), 54-bit human-typeable tokens, XFF trust on LAN, no CSP (deferred), trickle interval=0 GM self-DoS.
+- Open for user: set PGADMIN_PASSWORD + NGROK_AUTHTOKEN in .env; push feature/hosting (~19 commits ahead of origin).

@@ -9,20 +9,9 @@ class GameMasterPage:
         self.page.goto(self.url)
         self.page.wait_for_load_state("networkidle")
 
-    def join_color_select(self):
-        return self.page.locator("#join-color")
-
-    def join_name_input(self):
-        return self.page.locator("#join-name")
-
-    def join_button(self):
-        return self.page.locator("button.btn-success", has_text="Join")
-
     def join_team(self, color: str, name: str):
-        self.join_color_select().select_option(color)
-        self.join_name_input().fill(name)
-        self.join_button().click()
-        self.page.wait_for_timeout(500)
+        """Join a team via the inline available-card flow."""
+        self.join_team_inline(color, name)
 
     def team_card(self, color: str):
         return self.page.locator(f"#team-card-{color}")
@@ -35,9 +24,6 @@ class GameMasterPage:
 
     def end_button(self):
         return self.page.locator("#btn-end")
-
-    def new_game_button(self):
-        return self.page.locator("#btn-new")
 
     def game_status_element(self):
         return self.page.locator("#game-status")

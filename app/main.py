@@ -484,8 +484,8 @@ async def post_init(application: Application):
     await init_db()
     from app.models import get_or_create_admin
     async with async_session_maker() as db:
-        sa = await get_or_create_admin(db)
-        logger.info("Admin token: %s", sa.token)
+        await get_or_create_admin(db)
+        logger.info("Admin panel configured.")
 
 
 def run_bot():

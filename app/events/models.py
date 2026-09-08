@@ -8,8 +8,13 @@ from app.database import GameEvent
 
 
 def generate_team_token() -> str:
-    raw = "".join(secrets.choice(string.ascii_lowercase) for _ in range(9))
+    raw = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(9))
     return f"{raw[:3]}-{raw[3:6]}-{raw[6:]}"
+
+
+def generate_location_code(length: int = 6) -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 if TYPE_CHECKING:
     from app.game.state import (

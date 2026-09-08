@@ -268,6 +268,16 @@
         "target_doesnt_exist": "Target team {color} doesn't exist!",
         "fetch_prefix": "Error: "
     },
+    "welcome": {
+        "heading": "\ud83d\uddfa\ufe0f Live Battlefield",
+        "tagline": "A live, map-based team battle game.",
+        "how_title": "How it works",
+        "step1": "Receive a join link and share it to form teams.",
+        "step2": "Place your fleet of 10 ships on the 10\u00d710 board \u2014 ships can't touch.",
+        "step3": "Visit real-world locations and redeem their codes to earn bombs.",
+        "step4": "Each shot costs one bomb. Sink all enemy ships.",
+        "step5": "The last fleet standing wins!"
+    },
     "lang": {
         "label": "Language",
         "en": "\ud83c\uddec\ud83c\udde7 English",
