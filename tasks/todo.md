@@ -288,3 +288,4 @@
 - Turn-based mode deliberately deferred (user decision).
 - 298 unit tests passing, ty clean, template JS node-checked.
 - Specials roadmap complete: torpedo, anonymous bomb, area bomb, armor, deactivate, radar ship, zombie ship, tsunami, treasure chest, reward-per-sunk — all GM-toggleable via the specials settings, each with per-feature commits and coverage.
+- Correction: tsunami is GM-button-only since `1fa2f95` — the automatic scheduler and interval_minutes setting were removed, and the button moved into the GM panel's "🎁 Specials" box.
