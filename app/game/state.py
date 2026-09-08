@@ -171,6 +171,25 @@ class TeamState:
         self.public_board[row][col] = (recorded_attacker, False)
         return BombResult.MISS, None, _copy_team(self)
 
+    def receive_area_bomb(
+        self, row: int, col: int, attacker_color: str, bomb_type: str, radius: int
+    ) -> tuple[int, list[Ship]]:
+        """Bomb every unbombed cell in an NxN square (already-bombed cells are skipped).
+
+        Returns (hit count, ships hit). Ships are shared objects, so damage
+        accumulates on `self` even though receive_bomb returns copies.
+        """
+        ships_hit: dict[int, Ship] = {}
+        hits = 0
+        for r in range(max(0, row - radius), min(len(self.private_board), row + radius + 1)):
+            for c in range(max(0, col - radius), min(len(self.private_board[0]), col + radius + 1)):
+                result, ship, _ = self.receive_bomb(r, c, attacker_color, bomb_type)
+                if result == BombResult.HIT:
+                    hits += 1
+                    if ship is not None:
+                        ships_hit[id(ship)] = ship
+        return hits, list(ships_hit.values())
+
     def get_sunk_ships(self) -> list[Ship]:
         return [s for s in self.ships if s.is_sunk()]
 
@@ -372,6 +391,7 @@ def resolve_bomb(
     coord: str,
     allow_self_bomb: bool = True,
     bomb_type: str = "normal",
+    radius: int = 0,
 ) -> "BombApplied | BombRejected":
     """Validate and apply a bomb on the live state.
 
@@ -430,7 +450,7 @@ def resolve_bomb(
             color=target_color,
         )
 
-    if (row, col) in target.bombed_cells:
+    if radius <= 0 and (row, col) in target.bombed_cells:
         return BombRejected(
             message=f"{coord} already bombed!",
             error_key="already_bombed",
@@ -451,6 +471,38 @@ def resolve_bomb(
             **team.special_ammo,
             bomb_type: team.special_ammo.get(bomb_type, 0) - 1,
         }
+
+    if radius > 0:
+        hits, ships_hit = target.receive_area_bomb(
+            row, col, attacker_color, bomb_type, radius
+        )
+        state.teams[target_color] = _copy_team(target)
+        primary_ship = ships_hit[0] if ships_hit else None
+        sunk_ships = [s for s in ships_hit if s.is_sunk()]
+        if hits > 0:
+            msg = f"Area bomb at {coord}: {hits} hit(s)"
+            if sunk_ships:
+                msg += f", sunk {', '.join(s.ship_type for s in sunk_ships)}!"
+            else:
+                msg += "!"
+        else:
+            msg = f"Area bomb at {coord}: all miss!"
+        bombs_left = state.teams[attacker_color].bombs
+        return BombApplied(
+            message=f"Bombed {target_color} at {coord}: {msg} Bombs left: {bombs_left}",
+            bomb_result=BombResult.HIT if hits > 0 else BombResult.MISS,
+            ship=primary_ship,
+            target_name=target.name,
+            coord=coord,
+            bombs_left=bombs_left,
+            row=row,
+            col=col,
+            hit=hits > 0,
+            sunk=bool(sunk_ships),
+            ship_type=primary_ship.ship_type if primary_ship else None,
+            winner=state.get_winner(),
+        )
+
     bomb_result, ship, new_target = target.receive_bomb(
         row, col, attacker_color, bomb_type
     )

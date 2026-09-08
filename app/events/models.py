@@ -222,6 +222,7 @@ class BombThrownEvent:
     ship_type: Optional[str] = None
     ship_sunk: Optional[bool] = None
     bomb_type: str = "normal"
+    radius: int = 0
 
     def apply(self, state: "GameState") -> tuple["GameState", "BombThrownEvent"]:
         from app.game.state import TeamState, BombResult
@@ -240,9 +241,16 @@ class BombThrownEvent:
         if attacker.bombs <= 0:
             return state, self
 
-        result, ship, new_target = target.receive_bomb(
-            self.row, self.col, attacker_color, self.bomb_type
-        )
+        if self.radius > 0:
+            hits, ships_hit = target.receive_area_bomb(
+                self.row, self.col, attacker_color, self.bomb_type, self.radius
+            )
+            result = BombResult.HIT if hits > 0 else BombResult.MISS
+            ship = ships_hit[0] if ships_hit else None
+        else:
+            result, ship, new_target = target.receive_bomb(
+                self.row, self.col, attacker_color, self.bomb_type
+            )
 
         new_ammo = dict(attacker.special_ammo)
         if self.bomb_type != "normal":
@@ -251,7 +259,13 @@ class BombThrownEvent:
         new_teams = dict(state.teams)
         new_attacker = attacker.with_bombs(attacker.bombs - 1).with_special_ammo(new_ammo)
         if target_color == attacker_color:
-            new_teams[attacker_color] = new_target.with_bombs(new_attacker.bombs).with_special_ammo(new_ammo)
+            # receive_* mutated the shared team object in place; new_attacker
+            # already carries the updated bombs/ammo for the same color.
+            new_teams[attacker_color] = new_attacker
+        elif self.radius > 0:
+            # Area bombs mutate the target in place; keep the mutated object.
+            new_teams[attacker_color] = new_attacker
+            new_teams[target_color] = target
         else:
             new_teams[attacker_color] = new_attacker
             new_teams[target_color] = new_target
@@ -277,6 +291,7 @@ class BombThrownEvent:
                 "ship_type": self.ship_type,
                 "ship_sunk": self.ship_sunk,
                 "bomb_type": self.bomb_type,
+                "radius": self.radius,
             },
             player_id=player_id,
             game_id=game_id,

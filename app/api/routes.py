@@ -1601,10 +1601,15 @@ async def execute_command(
                 result["error_key"] = "special_disabled"
                 return result
 
+        radius = 0
+        if bomb_type == "area_bomb":
+            size = int(config.value("area_bomb", "size", 3))
+            radius = max(0, (size - 1) // 2)
+
         from app.game.state import resolve_bomb
 
         resolution = resolve_bomb(
-            state, cmd.team_color, target_color, coord, bomb_type=bomb_type
+            state, cmd.team_color, target_color, coord, bomb_type=bomb_type, radius=radius
         )
 
         if isinstance(resolution, BombRejected):
@@ -1635,6 +1640,7 @@ async def execute_command(
             col=resolution.col,
             result=resolution.bomb_result.value,
             bomb_type=bomb_type,
+            radius=radius,
         )
         await save_event(db, event, game_uuid)
 

@@ -264,3 +264,83 @@ class TestAnonymousBomb:
 
         img = render_board(state.teams["blue"], show_private=False)
         assert boards_to_bytes(img)  # gray fallback for unknown 'anon' color
+
+
+class TestAreaBomb:
+    def _area_state(self, radius: int = 1) -> GameState:
+        state = _started_state()
+        state.teams["red"].special_ammo = {"area_bomb": 1}
+        state.teams["red"].bombs = 5
+        return state
+
+    def test_area_bomb_sinks_two_cell_ship_in_one_bomb(self):
+        state = self._area_state()
+        # Radius 1 around A1 (0,0) covers (0,0),(0,1),(1,0),(1,1) — the whole patrol boat
+        resolution = resolve_bomb(
+            state, "red", "blue", "A1", bomb_type="area_bomb", radius=1
+        )
+
+        assert isinstance(resolution, BombApplied)
+        assert resolution.hit is True
+        assert resolution.sunk is True
+        assert state.teams["blue"].ships[0].is_sunk() is True
+
+    def test_area_bomb_consumes_ammo_and_bomb_once(self):
+        state = self._area_state()
+        resolve_bomb(state, "red", "blue", "A1", bomb_type="area_bomb", radius=1)
+
+        assert state.teams["red"].special_ammo["area_bomb"] == 0
+        assert state.teams["red"].bombs == 4
+
+    def test_area_bomb_skips_already_bombed_cells(self):
+        state = self._area_state()
+        state.teams["red"].special_ammo = {"area_bomb": 2}
+        resolve_bomb(state, "red", "blue", "A1", bomb_type="area_bomb", radius=0)
+        # (0,0) already bombed; radius 1 must not re-record it
+        bombed_before = list(state.teams["blue"].bombed_cells)
+        resolution = resolve_bomb(
+            state, "red", "blue", "A1", bomb_type="area_bomb", radius=1
+        )
+
+        assert isinstance(resolution, BombApplied)
+        assert state.teams["blue"].bombed_cells.count((0, 0)) == 1
+        assert len(state.teams["blue"].bombed_cells) > len(bombed_before)
+
+    def test_area_bomb_clamps_at_board_edges(self):
+        state = self._area_state()
+        # Red's own ship is at (9,0)-(9,1); bomb the far corner instead
+        resolution = resolve_bomb(
+            state, "red", "blue", "A1", bomb_type="area_bomb", radius=5
+        )
+        assert isinstance(resolution, BombApplied)
+        assert state.teams["blue"].ships[0].is_sunk() is True
+
+    def test_area_bomb_replay_matches_live(self):
+        from app.events.models import BombThrownEvent
+
+        state = self._area_state()
+        live = _started_state()
+        live.teams["red"].special_ammo = {"area_bomb": 1}
+
+        resolve_bomb(state, "red", "blue", "A1", bomb_type="area_bomb", radius=1)
+        replayed = GameState(teams=dict(live.teams))
+        event = BombThrownEvent(
+            attacker_color="red", target_color="blue", row=0, col=0,
+            bomb_type="area_bomb", radius=1,
+        )
+        replayed, updated = event.apply(replayed)
+
+        assert replayed.teams["blue"].ships[0].is_sunk()
+        assert replayed.teams["blue"].bombed_cells == state.teams["blue"].bombed_cells
+        assert replayed.teams["red"].special_ammo["area_bomb"] == 0
+        assert replayed.teams["red"].bombs == 4
+        assert updated.ship_sunk is True
+
+    def test_area_bomb_without_ammo_rejected(self):
+        state = _started_state()
+        resolution = resolve_bomb(
+            state, "red", "blue", "A1", bomb_type="area_bomb", radius=1
+        )
+
+        assert isinstance(resolution, BombRejected)
+        assert resolution.error_key == "no_special_ammo"
