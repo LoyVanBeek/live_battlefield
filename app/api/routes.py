@@ -649,12 +649,13 @@ async def admin_create_games(
 ):
     from app.models import create_game
     from app.events.models import generate_team_token
+    from app.safety import sanitize_name
 
     gm_token = generate_team_token()
     invite_token = generate_team_token()
     game = await create_game(
         db,
-        name=body.name,
+        name=sanitize_name(body.name) if body.name else None,
         gm_token=gm_token,
         invite_token=invite_token,
     )

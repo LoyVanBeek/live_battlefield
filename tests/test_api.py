@@ -229,6 +229,30 @@ class TestClearDatabase:
         assert "Events: 10" in data["message"]
         assert "Locations: 4" in data["message"]
 
+    def test_create_game_sanitizes_name(self):
+        from app.api.routes import app, verify_admin
+        from unittest.mock import AsyncMock, MagicMock
+
+        app.dependency_overrides[verify_admin] = lambda: "test_admin_token"
+        try:
+            with patch("app.models.create_game", new_callable=AsyncMock) as mock_create:
+                mock_game = MagicMock()
+                mock_game.id = "00000000-0000-0000-0000-000000000001"
+                mock_create.return_value = mock_game
+                client = TestClient(app)
+                response = client.post(
+                    "/api/admin/games",
+                    json={"name": '<script>alert("x")</script>'},
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        passed_name = mock_create.call_args.kwargs["name"]
+        assert "<" not in passed_name
+        assert ">" not in passed_name
+        assert '"' not in passed_name
+
 
 class TestQuickActions:
     """Tests for /api/quick/* endpoints"""

@@ -123,6 +123,10 @@
             return window.location.pathname.replace('/admin/', '');
         }
 
+        function esc(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
         async function apiCall(url, method, body) {
             try {
                 const sep = url.includes('?') ? '&' : '?';
@@ -166,10 +170,11 @@
                 const statusClass = g.status === 'started' ? 'started' : g.status === 'ended' ? 'ended' : 'waiting';
                 const statusLabel = g.status === 'started' ? '🎮 Started' : g.status === 'ended' ? '🏁 Ended' : '⏳ Waiting';
                 const displayName = g.name || 'Game ' + g.id.slice(0, 8);
+                const safeName = esc(displayName);
                 const gmUrl = window.location.origin + '/game-master/' + g.gm_token;
                 return '<div class="game-row">' +
-                    '<input type="checkbox" class="game-checkbox" value="' + g.id + '" data-name="' + displayName + '" onchange="updateDeleteButton()" style="margin-right:15px;">' +
-                    '<div class="game-info"><div class="name">' + displayName + '</div>' +
+                    '<input type="checkbox" class="game-checkbox" value="' + g.id + '" data-name="' + safeName + '" onchange="updateDeleteButton()" style="margin-right:15px;">' +
+                    '<div class="game-info"><div class="name">' + safeName + '</div>' +
                     '<div class="status ' + statusClass + '">' + statusLabel + ' — ' + g.team_count + ' teams, ' + g.location_count + ' locations</div></div>' +
                     '<div style="display:flex;gap:8px;">' +
                     '<button class="btn btn-primary" onclick="copyText(\'' + gmUrl + '\')">📋 Copy GM URL</button>' +
