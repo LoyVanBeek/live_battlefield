@@ -247,3 +247,13 @@
 - Phase 1: `1b11813` ammo inventory (SpecialAmmoGrantedEvent + migration 010, earn via codes/quiz, GM grant_special endpoint, team_view 'sa'), `5c5398c` torpedo (one-hit sink), `334fadf` anonymous ('anon' sentinel, gray rendering, anonymous notifications), `e867c07` area bomb (NxN, radius baked into event, skips bombed cells), `247a5e1` UI (team-page bomb-type picker with ammo counts, GM grant widget).
 - 248 unit tests passing, ty clean, template JS syntax-checked with node.
 - Next: Phase 2 (reward-per-sunk, treasure chest as real-world location) → Phase 3 (armor, deactivate) → Phase 4 (radar N-cell, zombie revive-once) → Phase 5 (tsunami, turn-based).
+
+---
+
+# Specials Phase 2 (feature/specials)
+
+## Review
+- `541d891` reward-per-sunk: sinking a ship grants the attacker bonus bombs (GM-configured amount, capped at max_bombs, persisted as a capped BombsAddedEvent); REST + bot parity. Config loaded lazily so normal-bomb paths with mocked DBs stay cheap.
+- `41b29d3` treasure chest: locations.kind (quest|chest) + locations.reward JSONB (migration 011); per-chest contents set by the GM (bombs 0-20, special ammo 0-10 each, sanitized by filter_chest_reward); chest creation gated on the treasure_chest special and requires non-empty reward; redemption (REST + bot) grants exact contents (capped bombs via CodeRedeemedEvent, ammo via SpecialAmmoGrantedEvents); map popup + GM table + add form updated.
+- 261 unit tests passing, ty clean, template JS node-checked.
+- Next: Phase 3 (armor shield, team deactivation) → Phase 4 (radar N-cell reveal, zombie revive-once) → Phase 5 (tsunami, turn-based).
