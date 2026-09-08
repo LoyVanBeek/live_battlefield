@@ -290,5 +290,17 @@
     "label": "Taal",
     "en": "🇬🇧 English",
     "nl": "🇳🇱 Nederlands"
+  },
+  "specials": {
+    "torpedo": "Een torpedo zinkt het geraakte schip in één klap. Kost één torpedo per schot.",
+    "anonymous_bomb": "Niemand kan zien wie deze bom gooide — de treffer wordt anoniem geregistreerd.",
+    "area_bomb": "Bombardeert elk vakje in een NxN vierkant rond het doel (grootte ingesteld door de spelleider).",
+    "armor": "Beschermt je vloot voor een beperkte tijd: bommen worden gedetecteerd maar doen geen schade.",
+    "deactivate": "Blokkeert een vijandig team voor enkele minuten: geen bommen, codes of quizantwoorden.",
+    "radar_ship": "Zolang je radarschip drijft, zie je vijandelijke schepen in de buurt. Tegenstanders weten alleen dat er radar bestaat.",
+    "zombie_ship": "Als dit schip zinkt, herstelt het één keer volledig en gaat opnieuw in de aanval.",
+    "tsunami": "Een reuzengolf spoelt willekeurige schepen weg — ingezet door de spelleider of via een timer.",
+    "treasure_chest": "Een echte schatkist vol buit: vind hem en los de code in voor de beloning.",
+    "reward_per_sunk": "Krijg bonusbommen voor elk vijandig schip dat je zinkt."
   }
 }

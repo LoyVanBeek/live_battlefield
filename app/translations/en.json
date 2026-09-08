@@ -290,5 +290,17 @@
     "label": "Language",
     "en": "🇬🇧 English",
     "nl": "🇳🇱 Nederlands"
+  },
+  "specials": {
+    "torpedo": "A torpedo sinks the ship it hits in one blow. Costs one torpedo per shot.",
+    "anonymous_bomb": "Nobody can see who fired this bomb — the hit is recorded as anonymous.",
+    "area_bomb": "Bombs every cell in an NxN square around the target (size set by the game master).",
+    "armor": "Shields your fleet for a limited time: incoming bombs are detected but deal no damage.",
+    "deactivate": "Locks an enemy team out of bombing, codes and quiz answers for a few minutes.",
+    "radar_ship": "While your radar ship floats, you can see enemy ships near it. Opponents only know a radar exists.",
+    "zombie_ship": "When this ship sinks, it reassembles once at full health and fights again.",
+    "tsunami": "A giant wave randomly washes away ships — triggered by the game master or on a timer.",
+    "treasure_chest": "A real-world chest full of loot: find it and redeem its code for the reward inside.",
+    "reward_per_sunk": "Earn bonus bombs for every enemy ship you sink."
   }
 }

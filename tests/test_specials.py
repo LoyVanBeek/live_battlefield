@@ -938,3 +938,30 @@ class TestTsunami:
             ):
                 assert live_ship.is_sunk() == replay_ship.is_sunk()
                 assert live_ship.hits == replay_ship.hits
+
+
+class TestSpecialTranslations:
+    """Every special must have a description in every supported language."""
+
+    def test_descriptions_exist_for_all_specials(self):
+        import json
+
+        from app.translations import SUPPORTED_LANGS
+
+        for lang in SUPPORTED_LANGS:
+            data = json.load(open(f"app/translations/{lang}.json"))
+            descriptions = data.get("specials", {})
+            for special_id in SPECIALS:
+                text = descriptions.get(special_id)
+                assert text, f"missing specials.{special_id} description in {lang}.json"
+                assert len(text) >= 20, f"specials.{special_id} description too short in {lang}.json"
+
+    def test_descriptions_explain_gameplay(self):
+        import json
+
+        en = json.load(open("app/translations/en.json"))
+        # gameplay essence spot-checks
+        assert "sinks" in en["specials"]["torpedo"].lower()
+        assert "anonymous" in en["specials"]["anonymous_bomb"].lower()
+        assert "shield" in en["specials"]["armor"].lower() or "no damage" in en["specials"]["armor"].lower()
+        assert "again" in en["specials"]["zombie_ship"].lower()

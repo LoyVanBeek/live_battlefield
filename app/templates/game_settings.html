@@ -425,15 +425,21 @@
             const list = document.getElementById('specials-list');
             list.innerHTML = '';
             for (const [id, cfg] of Object.entries(state.specials)) {
-                const row = document.createElement('div');
-                row.style.cssText = 'display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid #22224a;';
-                let html = '<label style="min-width:150px;text-transform:capitalize;"><input type="checkbox" data-special="' + id + '" data-key="enabled"' + (cfg.enabled ? ' checked' : '') + '> ' + id.replaceAll('_', ' ') + '</label>';
+                const block = document.createElement('div');
+                block.style.cssText = 'padding:6px 0;border-bottom:1px solid #22224a;';
+                let html = '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">';
+                html += '<label style="min-width:150px;text-transform:capitalize;"><input type="checkbox" data-special="' + id + '" data-key="enabled"' + (cfg.enabled ? ' checked' : '') + '> ' + id.replaceAll('_', ' ') + '</label>';
                 for (const [key, value] of Object.entries(cfg)) {
                     if (key === 'enabled' || typeof value !== 'number') continue;
                     html += '<label>' + key.replaceAll('_', ' ') + ' <input type="number" data-special="' + id + '" data-key="' + key + '" value="' + value + '" style="width:60px;"></label>';
                 }
-                row.innerHTML = html;
-                list.appendChild(row);
+                html += '</div>';
+                const desc = _('specials.' + id);
+                if (desc) {
+                    html += '<p style="margin:4px 0 0 0;font-size:12px;color:#888;">' + desc + '</p>';
+                }
+                block.innerHTML = html;
+                list.appendChild(block);
             }
         }
 
