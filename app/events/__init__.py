@@ -17,6 +17,7 @@ from app.events.models import (
     QuizAnsweredEvent,
     SpecialAmmoGrantedEvent,
     ShieldActivatedEvent,
+    DeactivateTeamEvent,
 )
 from app.events.factory import create_event, create_events
 from app.events.saver import save_event

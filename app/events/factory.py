@@ -21,6 +21,7 @@ from app.events.models import (
     QuizAnsweredEvent,
     SpecialAmmoGrantedEvent,
     ShieldActivatedEvent,
+    DeactivateTeamEvent,
 )
 
 
@@ -90,6 +91,9 @@ def create_event(db_event: GameEvent) -> Optional[AnyEvent]:
 
     elif event_type_value == "shield_activated":
         return ShieldActivatedEvent(**payload_dict)
+
+    elif event_type_value == "team_deactivated":
+        return DeactivateTeamEvent(**payload_dict)
 
     return None
 

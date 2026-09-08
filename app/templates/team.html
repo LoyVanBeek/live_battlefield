@@ -1065,6 +1065,17 @@
                                 '<span id="shield-status" style="color:#4caf50;font-size:12px;"></span>' +
                             '</div>' +
                         '</div>' : '') +
+                    (specialBombs.indexOf('deactivate') !== -1 ?
+                        '<div class="action-group">' +
+                            '<h3>🚫 Deactivate</h3>' +
+                            '<div class="action-inputs">' +
+                                '<select id="deactivate-target">' +
+                                    '<option value="">' + _('action.bomb.select_target') + '</option>' +
+                                '</select>' +
+                                '<button class="btn btn-danger" onclick="deactivateTeam()">' +
+                                    'Deactivate (' + (specialAmmo['deactivate'] || 0) + ')</button>' +
+                            '</div>' +
+                        '</div>' : '') +
                     '<div class="action-group">' +
                         '<h3>' + _('action.code.heading') + '</h3>' +
                         '<div class="action-inputs">' +
@@ -1108,6 +1119,18 @@
                     select.appendChild(opt);
                 }
             });
+            var deactivateSelect = document.getElementById('deactivate-target');
+            if (deactivateSelect) {
+                deactivateSelect.innerHTML = '<option value="">' + _('action.bomb.select_target') + '</option>';
+                allTeams.forEach(function (team) {
+                    if (team.c !== TEAM_COLOR) {
+                        var opt = document.createElement('option');
+                        opt.value = team.c;
+                        opt.textContent = _('action.bomb.team_option', {name: team.n, color: team.c});
+                        deactivateSelect.appendChild(opt);
+                    }
+                });
+            }
         }
 
         async function placeAllShips() {
@@ -1398,6 +1421,17 @@ async function clearAllShips() {
             document.getElementById('bomb-confirm').classList.remove('active');
             pendingBombTarget = null;
             pendingBombCoord = null;
+        }
+
+        async function deactivateTeam() {
+            var target = document.getElementById('deactivate-target').value;
+            if (!target) { showToast(_('error.select_target'), 'error'); return; }
+            var result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'deactivate',
+                args: { target: target }
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
         }
 
         async function activateShield() {

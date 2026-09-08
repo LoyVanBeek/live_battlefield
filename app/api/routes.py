@@ -305,6 +305,23 @@ async def _check_game_paused(db: AsyncSession, game_id: str) -> dict | None:
     return None
 
 
+def _check_team_deactivated(state, color: str) -> dict | None:
+    """Reject actions for teams that are temporarily deactivated."""
+    from datetime import datetime, timezone
+
+    team = state.teams.get(color)
+    if team and team.is_deactivated(datetime.now(timezone.utc)):
+        remaining = int((team.deactivated_until - datetime.now(timezone.utc)).total_seconds())
+        minutes = max(1, remaining // 60)
+        return {
+            "success": False,
+            "message": f"Your team is deactivated! Wait ~{minutes} more minute(s).",
+            "error_key": "team_deactivated",
+            "minutes": minutes,
+        }
+    return None
+
+
 @app.get("/")
 async def root(request: Request, lang: Optional[str] = Query(None)):
     if lang and lang in SUPPORTED_LANGS:
@@ -1586,6 +1603,10 @@ async def execute_command(
         if paused_check:
             return paused_check
 
+        deactivated_check = _check_team_deactivated(state, cmd.team_color)
+        if deactivated_check:
+            return deactivated_check
+
         target_color = str(cmd.args.get("target"))
         coord = cmd.args.get("coordinate", "A1")
         bomb_type = str(cmd.args.get("bomb_type", "normal"))
@@ -1724,6 +1745,69 @@ async def execute_command(
             result["winner"] = winner.name
             result["message"] += f" 🏆 {winner.name} ({winner.color}) wins!"
 
+    elif cmd.command == "deactivate":
+        if state.status != GameStatusField.STARTED:
+            result["message"] = "Cannot deactivate - game hasn't started yet!"
+            return result
+
+        paused_check = await _check_game_paused(db, game_id)
+        if paused_check:
+            return paused_check
+
+        deactivated_check = _check_team_deactivated(state, cmd.team_color)
+        if deactivated_check:
+            return deactivated_check
+
+        from app.game.specials import SpecialsConfig
+
+        game = await get_game(db, game_uuid)
+        config = SpecialsConfig(game.specials if game else None)
+        if not config.is_enabled("deactivate"):
+            result["message"] = "Deactivation is not enabled for this game!"
+            result["error_key"] = "special_disabled"
+            return result
+
+        target_color = str(cmd.args.get("target"))
+        if target_color not in state.teams:
+            result["message"] = f"Target team {target_color} doesn't exist!"
+            result["error_key"] = "target_doesnt_exist"
+            result["color"] = target_color
+            return result
+
+        if target_color == cmd.team_color:
+            result["message"] = "You cannot deactivate yourself!"
+            return result
+
+        actor = state.teams[cmd.team_color]
+        if actor.special_ammo.get("deactivate", 0) <= 0:
+            result["message"] = "No deactivation ammo left!"
+            result["error_key"] = "no_special_ammo"
+            return result
+
+        target_team = state.teams[target_color]
+        if target_team.is_deactivated(datetime.now(timezone.utc)):
+            result["message"] = f"{target_color} is already deactivated!"
+            return result
+
+        minutes = int(config.value("deactivate", "minutes", 5))
+        until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+
+        from app.events.models import DeactivateTeamEvent
+
+        event = DeactivateTeamEvent(
+            color=target_color, by_color=cmd.team_color, until=until.isoformat(), success=True
+        )
+        # Live mutation mirroring DeactivateTeamEvent.apply
+        actor.special_ammo = {
+            **actor.special_ammo,
+            "deactivate": actor.special_ammo.get("deactivate", 0) - 1,
+        }
+        state.teams[target_color] = target_team.with_deactivation(until)
+        await save_event(db, event, game_uuid)
+
+        result["success"] = True
+        result["message"] = f"🚫 {target_color} deactivated for {minutes} minutes!"
+
     elif cmd.command == "shield":
         if state.status != GameStatusField.STARTED:
             result["message"] = "Cannot activate shield - game hasn't started yet!"
@@ -1797,6 +1881,10 @@ async def execute_command(
         paused_check = await _check_game_paused(db, game_id)
         if paused_check:
             return paused_check
+
+        deactivated_check = _check_team_deactivated(state, cmd.team_color)
+        if deactivated_check:
+            return deactivated_check
 
         if cmd.team_color not in state.teams:
             result["message"] = f"Team {cmd.team_color} doesn't exist!"
@@ -1889,6 +1977,10 @@ async def execute_command(
         paused_check = await _check_game_paused(db, game_id)
         if paused_check:
             return paused_check
+
+        deactivated_check = _check_team_deactivated(state, cmd.team_color)
+        if deactivated_check:
+            return deactivated_check
 
         if cmd.team_color not in state.teams:
             result["message"] = f"Team {cmd.team_color} doesn't exist!"
@@ -2040,6 +2132,49 @@ async def grant_special(
         "success": True,
         "message": f"Granted {action.count} {action.bomb_type} to {action.team_color}.",
         "ammo": ammo,
+    }
+
+
+class DeactivateTeamAction(BaseModel):
+    team_color: str
+    minutes: int = 5
+
+
+@app.post("/api/quick/deactivate_team")
+async def quick_deactivate_team(
+    action: DeactivateTeamAction,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from datetime import datetime, timezone, timedelta
+    from app.events.models import DeactivateTeamEvent
+    from app.models import get_game_events
+
+    game_uuid = uuid.UUID(game_id)
+
+    if action.minutes <= 0:
+        return {"success": False, "message": "Minutes must be at least 1!"}
+
+    events = await get_game_events(db, game_uuid)
+    state = GameState.from_events(events)
+
+    if action.team_color not in state.teams:
+        return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
+
+    target_team = state.teams[action.team_color]
+    if target_team.is_deactivated(datetime.now(timezone.utc)):
+        return {"success": False, "message": f"{action.team_color} is already deactivated!"}
+
+    until = datetime.now(timezone.utc) + timedelta(minutes=action.minutes)
+    event = DeactivateTeamEvent(
+        color=action.team_color, by_color=None, until=until.isoformat(), success=True
+    )
+    state.teams[action.team_color] = target_team.with_deactivation(until)
+    await save_event(db, event, game_uuid)
+
+    return {
+        "success": True,
+        "message": f"🚫 {action.team_color} deactivated for {action.minutes} minutes!",
     }
 
 

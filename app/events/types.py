@@ -20,3 +20,4 @@ class EventType(str, Enum):
     QUIZ_ANSWERED = "quiz_answered"
     SPECIAL_AMMO_GRANTED = "special_ammo_granted"
     SHIELD_ACTIVATED = "shield_activated"
+    TEAM_DEACTIVATED = "team_deactivated"

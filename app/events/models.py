@@ -726,6 +726,55 @@ class ShieldActivatedEvent:
         )
 
 
+@dataclass
+class DeactivateTeamEvent:
+    """Deactivates a team for a duration; consumes one deactivate ammo unit
+    from the acting team (if any)."""
+
+    event_type: EventType = EventType.TEAM_DEACTIVATED
+    color: str = ""  # the deactivated team
+    by_color: Optional[str] = None  # the acting team (None when set by the GM)
+    until: Optional[str] = None  # ISO timestamp; string for payload round-trip
+    success: bool = False
+
+    def apply(self, state: "GameState") -> tuple["GameState", "DeactivateTeamEvent"]:
+        from datetime import datetime
+
+        if self.color not in state.teams:
+            return state, replace(self, success=False)
+
+        target_team = state.teams[self.color]
+        deactivated_until = datetime.fromisoformat(self.until) if self.until else None
+        new_target = target_team.with_deactivation(deactivated_until)
+
+        new_teams = {**state.teams, self.color: new_target}
+
+        if self.by_color and self.by_color in state.teams:
+            actor = state.teams[self.by_color]
+            new_ammo = dict(actor.special_ammo)
+            new_ammo["deactivate"] = max(0, new_ammo.get("deactivate", 0) - 1)
+            new_actor = actor.with_special_ammo(new_ammo)
+            if self.by_color == self.color:
+                new_teams[self.color] = new_actor
+            else:
+                new_teams[self.by_color] = new_actor
+
+        return replace(state, teams=new_teams), replace(self, success=True)
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.TEAM_DEACTIVATED,
+            payload={
+                "color": self.color,
+                "by_color": self.by_color,
+                "until": self.until,
+                "success": self.success,
+            },
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
 AnyEvent = Union[
     "TeamJoinedEvent",
     "TeamRenamedEvent",
@@ -745,4 +794,5 @@ AnyEvent = Union[
     "QuizAnsweredEvent",
     "SpecialAmmoGrantedEvent",
     "ShieldActivatedEvent",
+    "DeactivateTeamEvent",
 ]

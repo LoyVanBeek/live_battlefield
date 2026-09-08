@@ -3,7 +3,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.events.models import LocationAddedEvent, ShieldActivatedEvent, SpecialAmmoGrantedEvent, TeamJoinedEvent
+from app.events.models import (
+    DeactivateTeamEvent,
+    LocationAddedEvent,
+    ShieldActivatedEvent,
+    SpecialAmmoGrantedEvent,
+    TeamJoinedEvent,
+)
 from app.game.specials import SPECIALS, SpecialsConfig, filter_specials, grant_enabled_special_ammo
 from app.game.state import GameState
 
@@ -500,3 +506,176 @@ class TestShieldCommand:
         )
         assert response.json()["success"] is False
         assert "already active" in response.json()["message"]
+
+
+class TestDeactivateTeamEvent:
+    def test_apply_deactivates_target_and_consumes_actor_ammo(self):
+        from datetime import datetime, timezone, timedelta
+
+        state = GameState()
+        state, _ = TeamJoinedEvent(name="Red", color="red", chat_id=1, bombs=3).apply(state)
+        state, _ = TeamJoinedEvent(name="Blue", color="blue", chat_id=2, bombs=3).apply(state)
+        state, _ = SpecialAmmoGrantedEvent(color="red", bomb_type="deactivate", count=1).apply(state)
+
+        until = datetime.now(timezone.utc) + timedelta(minutes=5)
+        event = DeactivateTeamEvent(color="blue", by_color="red", until=until.isoformat(), success=True)
+        state, applied = event.apply(state)
+
+        assert applied.success is True
+        assert state.teams["blue"].is_deactivated(datetime.now(timezone.utc)) is True
+        assert state.teams["red"].special_ammo["deactivate"] == 0
+
+    def test_apply_gm_deactivation_has_no_actor(self):
+        from datetime import datetime, timezone, timedelta
+
+        state = GameState()
+        state, _ = TeamJoinedEvent(name="Blue", color="blue", chat_id=2, bombs=3).apply(state)
+
+        until = datetime.now(timezone.utc) + timedelta(minutes=5)
+        event = DeactivateTeamEvent(color="blue", by_color=None, until=until.isoformat(), success=True)
+        state, applied = event.apply(state)
+
+        assert applied.success is True
+        assert state.teams["blue"].is_deactivated(datetime.now(timezone.utc)) is True
+
+    def test_expired_deactivation_allows_actions(self):
+        from datetime import datetime, timezone, timedelta
+
+        state = GameState()
+        state, _ = TeamJoinedEvent(name="Blue", color="blue", chat_id=2, bombs=3).apply(state)
+        past = datetime.now(timezone.utc) - timedelta(minutes=1)
+        state.teams["blue"] = state.teams["blue"].with_deactivation(past)
+        assert state.teams["blue"].is_deactivated(datetime.now(timezone.utc)) is False
+
+
+class TestDeactivateCommand:
+    def _setup(self, ammo=1, enabled=True):
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState, GameStatusField, TeamState
+
+        state = GameState()
+        state.status = GameStatusField.STARTED
+        red = TeamState(name="Red", color="red", chat_id=1, bombs=5)
+        red.special_ammo = {"deactivate": ammo}
+        blue = TeamState(name="Blue", color="blue", chat_id=2, bombs=1)
+        state.teams = {"red": red, "blue": blue}
+
+        game = MagicMock()
+        game.specials = {"deactivate": {"enabled": enabled, "minutes": 5}}
+        game.paused_until = None
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {
+            "role": "team", "game_id": "00000000-0000-0000-0000-000000000000", "color": "red"
+        }
+        return app, state, game
+
+    def test_deactivate_success(self):
+        app, state, game = self._setup()
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                        with patch("app.api.routes.save_event", new_callable=AsyncMock) as mock_save:
+                            with patch("app.api.routes._check_game_paused", new_callable=AsyncMock, return_value=None):
+                                client = TestClient(app)
+                                response = client.post(
+                                    "/api/execute",
+                                    json={
+                                        "team_color": "red", "command": "deactivate",
+                                        "args": {"target": "blue"},
+                                    },
+                                )
+        finally:
+            app.dependency_overrides.clear()
+
+        data = response.json()
+        assert data["success"] is True
+        assert "deactivated for 5 minutes" in data["message"]
+        assert state.teams["red"].special_ammo["deactivate"] == 0
+        assert state.teams["blue"].is_deactivated(__import__("datetime").datetime.now(__import__("datetime").timezone.utc)) is True
+        saved_event = mock_save.await_args_list[0].args[1]
+        assert saved_event.event_type.value == "team_deactivated"
+        assert saved_event.by_color == "red"
+
+    def test_deactivate_disabled_rejected(self):
+        app, state, game = self._setup(enabled=False)
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                        client = TestClient(app)
+                        response = client.post(
+                            "/api/execute",
+                            json={
+                                "team_color": "red", "command": "deactivate",
+                                "args": {"target": "blue"},
+                            },
+                        )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.json()["error_key"] == "special_disabled"
+
+    def test_deactivated_team_cannot_bomb(self):
+        import uuid
+        from datetime import datetime, timezone, timedelta
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState, GameStatusField, TeamState
+
+        state = GameState()
+        state.status = GameStatusField.STARTED
+        red = TeamState(name="Red", color="red", chat_id=1, bombs=5)
+        red.deactivated_until = datetime.now(timezone.utc) + timedelta(minutes=5)
+        blue = TeamState(name="Blue", color="blue", chat_id=2, bombs=1)
+        state.teams = {"red": red, "blue": blue}
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {
+            "role": "team", "game_id": "00000000-0000-0000-0000-000000000000", "color": "red"
+        }
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.api.routes._check_game_paused", new_callable=AsyncMock, return_value=None):
+                        client = TestClient(app)
+                        response = client.post(
+                            "/api/execute",
+                            json={
+                                "team_color": "red", "command": "bomb",
+                                "args": {"target": "blue", "coordinate": "A1"},
+                            },
+                        )
+        finally:
+            app.dependency_overrides.clear()
+
+        data = response.json()
+        assert data["success"] is False
+        assert data["error_key"] == "team_deactivated"
+
+    def test_gm_can_deactivate_team(self):
+        from app.api.routes import app, verify_gm_token
+        from app.game.state import GameState, GameStatusField, TeamState
+        from datetime import datetime, timezone
+
+        state = GameState()
+        state.status = GameStatusField.STARTED
+        blue = TeamState(name="Blue", color="blue", chat_id=2, bombs=1)
+        state.teams = {"blue": blue}
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.api.routes.save_event", new_callable=AsyncMock) as mock_save:
+                        client = TestClient(app)
+                        response = client.post(
+                            "/api/quick/deactivate_team",
+                            json={"team_color": "blue", "minutes": 7},
+                        )
+        finally:
+            app.dependency_overrides.clear()
+
+        data = response.json()
+        assert data["success"] is True
+        assert state.teams["blue"].is_deactivated(datetime.now(timezone.utc)) is True
+        saved_event = mock_save.await_args_list[0].args[1]
+        assert saved_event.by_color is None

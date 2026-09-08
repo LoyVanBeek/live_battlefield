@@ -286,6 +286,12 @@ async def handle_bomb(
     if paused:
         return "The game is paused! Try again later."
 
+    from datetime import datetime as _dt, timezone as _tz
+
+    attacker_check = state.teams.get(player.color)
+    if attacker_check and attacker_check.is_deactivated(_dt.now(_tz.utc)):
+        return "Your team is deactivated! Wait a few minutes and try again."
+
     from app.game.state import resolve_bomb, BombRejected
 
     resolution = resolve_bomb(
@@ -419,7 +425,11 @@ async def handle_code(
     if player.color not in state.teams:
         return "You are not in the game yet!"
 
+    from datetime import datetime as _dt, timezone as _tz
+
     team = state.teams[player.color]
+    if team.is_deactivated(_dt.now(_tz.utc)):
+        return "Your team is deactivated! Wait a few minutes and try again."
 
     if location.code.upper() != code.upper():
         return "Invalid code! Please check the code at the location."
