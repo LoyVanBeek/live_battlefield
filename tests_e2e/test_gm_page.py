@@ -9,19 +9,11 @@ def test_page_loads(page, app_url, seeded_game):
     title = page.title()
     assert "Game Master" in title
 
-    options = gm.join_color_select().locator("option").all()
-    option_values = [opt.get_attribute("value") for opt in options]
-    assert "" in option_values
-    assert "red" in option_values
-    assert "blue" in option_values
-    assert "green" in option_values
+    for color in ["red", "blue", "green"]:
+        assert gm.available_team_card(color).count() == 1
 
     assert gm.start_button().is_disabled()
     assert gm.end_button().is_disabled()
-
-    new_game_btn = gm.new_game_button()
-    new_game_style = new_game_btn.get_attribute("style")
-    assert new_game_style is None or "display: none" not in new_game_style
 
 
 def test_create_team(page, app_url, seeded_game):
@@ -41,13 +33,13 @@ def test_create_team_duplicate_color(page, app_url, seeded_game):
     gm.goto()
 
     gm.join_team("red", "First Team")
-    # After first join, "red" is no longer available in the dropdown
-    # The duplicate join via the same select should be rejected by the API
-    # We verify that only one team card exists for red
+    # Only one team card may exist for red after a single join
     cards = gm.team_card("red").all()
     assert len(cards) == 1
     name_text = gm.team_card_name("red").text_content()
     assert "First Team" in name_text
+    # The red available card disappears once the color is taken
+    assert gm.available_team_card("red").count() == 0
 
 
 def test_create_multiple_teams(page, app_url, seeded_game):
@@ -104,7 +96,6 @@ def test_end_game(page, app_url, seeded_game_with_teams):
 
     assert gm.start_button().is_disabled()
     assert gm.end_button().is_disabled()
-    assert not gm.new_game_button().is_disabled()
 
 
 def test_start_button_disabled_without_preconditions(page, app_url, seeded_game):

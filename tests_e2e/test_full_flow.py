@@ -54,28 +54,15 @@ def test_full_flow(page, app_url, admin_token):
     page.wait_for_url("**/team/**", timeout=10000)
     assert "/team/" in page.url
 
-    # ── 4. Place an airplane_carrier at A1 horizontal ──
-    # Wait for ship placement controls to appear
-    page.wait_for_timeout(1000)
+    # ── 4. Place a ship via the visual ship editor ──
+    from tests_e2e.pages.team_page import TeamPage
 
-    # Select ship type
-    ship_type = page.locator("#ship-type")
-    ship_type.wait_for(state="visible", timeout=5000)
-    ship_type.select_option("airplane_carrier")
-
-    # Enter coordinate
-    coord_input = page.locator("#coord-input")
-    coord_input.fill("A1")
-
-    # Select direction
-    direction = page.locator("#direction")
-    direction.select_option("horizontal")
-
-    # Click Place Ship
-    place_btn = page.locator("button", has_text="Place Ship")
-    place_btn.click()
-
-    # Wait for success toast/message
+    tp = TeamPage(page, page.url)
+    page.wait_for_function(
+        'document.querySelectorAll(".ship-inv-item").length > 0', timeout=10000
+    )
+    tp.select_ship_in_inventory(0)
+    tp.place_ship_on_board(0, 0)
     page.wait_for_timeout(1500)
 
     # ── 5. Verify ship was placed via API ──
