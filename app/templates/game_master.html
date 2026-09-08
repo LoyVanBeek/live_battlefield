@@ -351,7 +351,6 @@
             <div class="buttons">
                 <button class="btn btn-success" id="btn-start" onclick="startGame()">{{ tr.gm.start_game }}</button>
                 <button class="btn btn-danger" id="btn-end" onclick="endGame()">{{ tr.gm.end_game }}</button>
-                <button class="btn btn-warning" id="btn-tsunami" onclick="triggerTsunami()" style="display:none;">{{ tr.gm.tsunami_trigger }}</button>
                 <select id="pause-duration" style="padding:8px;font-size:13px;border-radius:5px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
                     <option value="0">{{ tr.gm.pause_indefinite }}</option>
                     <option value="1">1m</option>
@@ -439,6 +438,9 @@
                     </select>
                     <input type="number" id="special-count" value="1" min="1" style="width: 70px; padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
                     <button class="btn btn-primary" onclick="grantSpecial()">{{ tr.gm.special_grant }}</button>
+                </div>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-warning" id="btn-tsunami" onclick="triggerTsunami()" style="display:none;">{{ tr.gm.tsunami_trigger }}</button>
                 </div>
             </div>
 

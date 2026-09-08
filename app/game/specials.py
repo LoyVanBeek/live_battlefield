@@ -18,7 +18,7 @@ SPECIALS: dict[str, dict[str, Any]] = {
     "deactivate": {"enabled": False, "minutes": 5, "ammo_per_team": 1},
     "radar_ship": {"enabled": False, "radius_cells": 3},
     "zombie_ship": {"enabled": False},
-    "tsunami": {"enabled": False, "interval_minutes": 45, "ships_destroyed": 1},
+    "tsunami": {"enabled": False, "ships_destroyed": 1},
     "treasure_chest": {"enabled": False},
     "reward_per_sunk": {"enabled": False, "bombs": 2},
 }

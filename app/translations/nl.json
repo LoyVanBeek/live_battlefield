@@ -92,7 +92,7 @@
     "confirm_auto_ships_started": "Bezig met plaatsen voor {n} team(s)...",
     "confirm_auto_ships_ok": "✅ {name} ({color}): {msg}",
     "confirm_auto_ships_fail": "❌ {name} ({color}): {msg}",
-    "special_ammo_heading": "🎁 Speciale munitie",
+    "special_ammo_heading": "🎁 Specials",
     "special_select_team": "Selecteer team...",
     "special_select_type": "Selecteer special...",
     "special_grant": "Toekennen",
@@ -299,7 +299,7 @@
     "deactivate": "Blokkeert een vijandig team voor enkele minuten: geen bommen, codes of quizantwoorden.",
     "radar_ship": "Zolang je radarschip drijft, zie je vijandelijke schepen in de buurt. Tegenstanders weten alleen dat er radar bestaat.",
     "zombie_ship": "Als dit schip zinkt, herstelt het één keer volledig en gaat opnieuw in de aanval.",
-    "tsunami": "Een reuzengolf spoelt willekeurige schepen weg — ingezet door de spelleider of via een timer.",
+    "tsunami": "Een reuzengolf spoelt willekeurige schepen weg — ingezet door de spelleider.",
     "treasure_chest": "Een echte schatkist vol buit: vind hem en los de code in voor de beloning.",
     "reward_per_sunk": "Krijg bonusbommen voor elk vijandig schip dat je zinkt."
   }

@@ -92,7 +92,7 @@
     "confirm_auto_ships_started": "Placing ships for {n} team(s)...",
     "confirm_auto_ships_ok": "✅ {name} ({color}): {msg}",
     "confirm_auto_ships_fail": "❌ {name} ({color}): {msg}",
-    "special_ammo_heading": "🎁 Special ammo",
+    "special_ammo_heading": "🎁 Specials",
     "special_select_team": "Select team...",
     "special_select_type": "Select special...",
     "special_grant": "Grant",
@@ -299,7 +299,7 @@
     "deactivate": "Locks an enemy team out of bombing, codes and quiz answers for a few minutes.",
     "radar_ship": "While your radar ship floats, you can see enemy ships near it. Opponents only know a radar exists.",
     "zombie_ship": "When this ship sinks, it reassembles once at full health and fights again.",
-    "tsunami": "A giant wave randomly washes away ships — triggered by the game master or on a timer.",
+    "tsunami": "A giant wave randomly washes away ships — triggered by the game master.",
     "treasure_chest": "A real-world chest full of loot: find it and redeem its code for the reward inside.",
     "reward_per_sunk": "Earn bonus bombs for every enemy ship you sink."
   }
