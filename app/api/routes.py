@@ -735,6 +735,8 @@ async def event_stream(
                 return HTMLResponse("Unauthorized", status_code=401)
 
     q = await manager.connect(game_id)
+    if q is None:
+        return HTMLResponse("Too many live connections for this game", status_code=429)
 
     async def event_generator():
         try:

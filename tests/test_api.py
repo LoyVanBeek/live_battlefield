@@ -1346,3 +1346,22 @@ class TestCreateLocationsGuards:
         response = self._call(db=self._mock_db(), count=1)
         assert response.status_code == 200
         assert response.json()["success"] is True
+
+
+class TestEventStreamCap:
+    """SSE streams are rejected with 429 when the game is at connection capacity."""
+
+    def test_event_stream_returns_429_at_capacity(self):
+        from app.api.routes import app, manager
+        from unittest.mock import AsyncMock, patch
+
+        with patch("app.models.lookup_team_token", new_callable=AsyncMock, return_value=("00000000-0000-0000-0000-000000000000", "red")):
+            with patch("app.team_view.get_team_view", new_callable=AsyncMock, return_value={"s": "waiting"}):
+                with patch.object(manager, "connect", new_callable=AsyncMock, return_value=None):
+                    client = TestClient(app)
+                    response = client.get(
+                        "/api/events/stream",
+                        params={"team_token": "tok"},
+                    )
+
+        assert response.status_code == 429
