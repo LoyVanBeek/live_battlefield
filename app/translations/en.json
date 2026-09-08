@@ -91,7 +91,11 @@
     "confirm_auto_ships_done": "All teams already have all ships placed!",
     "confirm_auto_ships_started": "Placing ships for {n} team(s)...",
     "confirm_auto_ships_ok": "✅ {name} ({color}): {msg}",
-    "confirm_auto_ships_fail": "❌ {name} ({color}): {msg}"
+    "confirm_auto_ships_fail": "❌ {name} ({color}): {msg}",
+    "special_ammo_heading": "🎁 Special ammo",
+    "special_select_team": "Select team...",
+    "special_select_type": "Select special...",
+    "special_grant": "Grant"
   },
   "action": {
     "loading": "Loading actions...",
@@ -119,7 +123,8 @@
       "select_target": "Select target",
       "coord_placeholder": "A1",
       "throw": "Throw Bomb",
-      "team_option": "{name} ({color})"
+      "team_option": "{name} ({color})",
+      "normal": "💣 Normal bomb"
     },
     "code": {
       "heading": "🔑 Redeem Code",

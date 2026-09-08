@@ -426,6 +426,21 @@
                 <button class="btn btn-success" onclick="resumeAllAI()">{{ tr.gm.ai_resume_all }}</button>
             </div>
 
+            <!-- Special ammo grant -->
+            <div style="margin-bottom: 15px; padding: 15px; background: #0f3460; border-radius: 8px;">
+                <h3 style="margin-bottom: 10px;">{{ tr.gm.special_ammo_heading }}</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                    <select id="special-team" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                        <option value="">{{ tr.gm.special_select_team }}</option>
+                    </select>
+                    <select id="special-type" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                        <option value="">{{ tr.gm.special_select_type }}</option>
+                    </select>
+                    <input type="number" id="special-count" value="1" min="1" style="width: 70px; padding: 8px; font-size: 14px; border-radius: 5px; border: 2px solid #0f3460; background: #1a1a2e; color: #eee;">
+                    <button class="btn btn-primary" onclick="grantSpecial()">{{ tr.gm.special_grant }}</button>
+                </div>
+            </div>
+
         </div>
 
     </div>
@@ -893,6 +908,39 @@
             }
             aiColorSelect.value = aiSelectedValue;
 
+            // Populate special-ammo grant widgets (preserve selections)
+            const specialTeamSelect = document.getElementById('special-team');
+            if (specialTeamSelect) {
+                const prevTeam = specialTeamSelect.value;
+                specialTeamSelect.innerHTML = '';
+                Object.keys(state.teams || {}).forEach(color => {
+                    const opt = document.createElement('option');
+                    opt.value = color;
+                    opt.textContent = (state.teams[color].name || color) + ' (' + color + ')';
+                    specialTeamSelect.appendChild(opt);
+                });
+                if (prevTeam && specialTeamSelect.querySelector('option[value="' + prevTeam + '"]')) {
+                    specialTeamSelect.value = prevTeam;
+                }
+            }
+            const specialTypeSelect = document.getElementById('special-type');
+            if (specialTypeSelect) {
+                const prevType = specialTypeSelect.value;
+                specialTypeSelect.innerHTML = '';
+                const specials = state.specials || {};
+                Object.keys(specials).forEach(id => {
+                    if (['torpedo', 'anonymous_bomb', 'area_bomb'].includes(id) && specials[id].enabled) {
+                        const opt = document.createElement('option');
+                        opt.value = id;
+                        opt.textContent = id.replaceAll('_', ' ');
+                        specialTypeSelect.appendChild(opt);
+                    }
+                });
+                if (prevType && specialTypeSelect.querySelector('option[value="' + prevType + '"]')) {
+                    specialTypeSelect.value = prevType;
+                }
+            }
+
             const teamsGrid = document.getElementById('teams-grid');
             const availGrid = document.getElementById('available-teams-grid');
             const availSection = document.getElementById('available-teams-section');
@@ -1216,6 +1264,25 @@
                 document.getElementById('ai-name').value = '';
             }
             loadTeams();
+        }
+
+        async function grantSpecial() {
+            const teamColor = document.getElementById('special-team').value;
+            const bombType = document.getElementById('special-type').value;
+            const count = parseInt(document.getElementById('special-count').value) || 1;
+
+            if (!teamColor) { showToast('Select a team', 'error'); return; }
+            if (!bombType) { showToast('Select a special', 'error'); return; }
+
+            const result = await apiCall('/api/quick/grant_special', 'POST', {
+                team_color: teamColor,
+                bomb_type: bombType,
+                count: count
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+            if (result.success) {
+                loadTeams();
+            }
         }
 
         async function removeAI(color) {

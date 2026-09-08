@@ -91,7 +91,11 @@
     "confirm_auto_ships_done": "Alle teams hebben al alle schepen geplaatst!",
     "confirm_auto_ships_started": "Bezig met plaatsen voor {n} team(s)...",
     "confirm_auto_ships_ok": "✅ {name} ({color}): {msg}",
-    "confirm_auto_ships_fail": "❌ {name} ({color}): {msg}"
+    "confirm_auto_ships_fail": "❌ {name} ({color}): {msg}",
+    "special_ammo_heading": "🎁 Speciale munitie",
+    "special_select_team": "Selecteer team...",
+    "special_select_type": "Selecteer special...",
+    "special_grant": "Toekennen"
   },
   "action": {
     "loading": "Acties laden...",
@@ -119,7 +123,8 @@
       "select_target": "Selecteer doelwit",
       "coord_placeholder": "A1",
       "throw": "Gooi Bom",
-      "team_option": "{name} ({color})"
+      "team_option": "{name} ({color})",
+      "normal": "💣 Normale bom"
     },
     "code": {
       "heading": "🔑 Code Inwisselen",

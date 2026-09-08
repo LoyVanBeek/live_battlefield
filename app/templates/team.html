@@ -528,6 +528,9 @@
 
         // Pending bomb state (set by clicking a public board cell)
         let pendingBombTarget = null;
+        let specialBombs = [];
+        let specialAmmo = {};
+        let selectedBombType = 'normal';
         let pendingBombCoord = null;
         let winnerName = null;
         let currentBombCount = 0;
@@ -819,6 +822,13 @@
             // Quiz
             quizEnabled = data.qe || false;
 
+            // Specials
+            specialBombs = data.sb || [];
+            specialAmmo = (data.t && data.t.sa) || {};
+            if (!(selectedBombType === 'normal' || (specialAmmo[selectedBombType] || 0) > 0)) {
+                selectedBombType = 'normal';
+            }
+
             // Game status badge (inline in header)
             var badgeEl = document.getElementById('game-status-badge');
             var isPaused = data.pu && new Date(data.pu) > new Date();
@@ -1033,6 +1043,13 @@
                         '<div class="action-inputs">' +
                             '<select id="target-team">' +
                                 '<option value="">' + _('action.bomb.select_target') + '</option>' +
+                            '</select>' +
+                            '<select id="bomb-type-select" onchange="selectedBombType=this.value">' +
+                                '<option value="normal">' + _('action.bomb.normal') + '</option>' +
+                                specialBombs.map(function(bt) {
+                                    var ammo = specialAmmo[bt] || 0;
+                                    return '<option value="' + bt + '"' + (ammo <= 0 ? ' disabled' : '') + (selectedBombType === bt ? ' selected' : '') + '>' + bt.replaceAll('_', ' ') + ' (' + ammo + ')</option>';
+                                }).join('') +
                             '</select>' +
                             '<input type="text" id="bomb-coord" placeholder="' + _('action.bomb.coord_placeholder') + '" onkeypress="if(event.key===\'Enter\')throwBomb()">' +
                             '<button class="btn btn-primary" onclick="throwBomb()">' + _('action.bomb.throw') + '</button>' +
@@ -1343,8 +1360,9 @@ async function clearAllShips() {
             var result = await apiCall('/api/execute', 'POST', {
                 team_color: TEAM_COLOR,
                 command: 'bomb',
-                args: { target: target, coordinate: coord }
+                args: { target: target, coordinate: coord, bomb_type: selectedBombType }
             });
+            selectedBombType = 'normal';
             showToast(bombToastText(result), result.hit ? 'success' : 'error');
         }
 
@@ -1360,8 +1378,9 @@ async function clearAllShips() {
             var result = await apiCall('/api/execute', 'POST', {
                 team_color: TEAM_COLOR,
                 command: 'bomb',
-                args: { target: target, coordinate: coord }
+                args: { target: target, coordinate: coord, bomb_type: selectedBombType }
             });
+            selectedBombType = 'normal';
             showToast(bombToastText(result), result.hit ? 'success' : 'error');
         }
 

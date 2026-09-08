@@ -1,4 +1,6 @@
 import uuid
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import lookup_team_token, get_game_events, get_game
 from app.game.state import GameState
@@ -17,7 +19,7 @@ async def get_team_view(team_token: str, db: AsyncSession) -> dict:
 
     game = await get_game(db, game_id)
 
-    result = {
+    result: dict[str, Any] = {
         "s": state.status.value,
         "ec": len(events),
         "t": _serialize_team(state.teams[color], private=True, status=state.status.value),
@@ -31,6 +33,11 @@ async def get_team_view(team_token: str, db: AsyncSession) -> dict:
         result["mb"] = game.max_bombs
         result["qe"] = game.quiz_enabled
         result["ss"] = game.scheduled_start_at.isoformat() if game.scheduled_start_at else ""
+        from app.game.specials import BOMB_TYPE_SPECIALS, SpecialsConfig
+
+        config = SpecialsConfig(game.specials)
+        enabled_bombs: list[str] = [bt for bt in BOMB_TYPE_SPECIALS if config.is_enabled(bt)]
+        result["sb"] = enabled_bombs
         from datetime import datetime, timezone
         result["pu"] = game.paused_until.isoformat() if game.paused_until and game.paused_until > datetime.now(timezone.utc) else ""
     winner = state.get_winner()
