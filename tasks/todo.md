@@ -267,3 +267,14 @@
 - `a20378a` team deactivation: DeactivateTeamEvent (migration 013), execute 'deactivate' command (ammo-gated, targets enemy team) + GM POST /api/quick/deactivate_team. Deactivated teams are rejected at the bomb/code/quiz gate points (team_deactivated); bot bomb/code paths gated too. 'du' in team view.
 - 279 unit tests passing, ty clean, template JS node-checked.
 - Next: Phase 4 (radar ship N-cell reveal, zombie revive-once) → Phase 5 (tsunami, turn-based).
+
+---
+
+# Specials Phase 4 (feature/specials)
+
+## Review
+- `077a21e` traits foundation: Ship.traits + revived flag, traits in placement payloads (backward-compatible), TRAIT_ASSIGNED event (migration 014) + execute 'assign_trait' command (one trait per team, gated on radar_ship/zombie_ship specials), SHIP_TRAITS registry.
+- `36324e5` radar ship: team_view reveals enemy ship cells within radar_ship.radius_cells (Chebyshev, default 3) of the owner's live radar ship — owner-only reveal via the stream; opponents see a public 'rs' badge, never the identity; no reveal once the radar ship sinks.
+- `3eec963` zombie ship: sinking a zombie ship reassembles it once (hits reset, its cells cleared of bombs/markers so it can be re-attacked; revived flag makes the next sinking final). Revival derived deterministically in resolve_bomb and BombThrownEvent.apply; announced in messages.
+- 291 unit tests passing, ty clean.
+- Next: Phase 5 (tsunami, turn-based mode) — tsunami first; turn-based only if wanted.
