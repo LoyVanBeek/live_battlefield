@@ -328,6 +328,21 @@ async def update_game_pause(db: AsyncSession, game_id: uuid.UUID, paused_until: 
     return game
 
 
+async def update_game_specials(
+    db: AsyncSession, game_id: uuid.UUID, specials: dict
+) -> Optional[Game]:
+    """Store filtered specials overrides on the game row."""
+    from app.game.specials import filter_specials
+
+    game = await get_game(db, game_id)
+    if not game:
+        return None
+    game.specials = filter_specials(specials)
+    await db.commit()
+    await db.refresh(game)
+    return game
+
+
 async def update_quiz_settings(
     db: AsyncSession, game_id: uuid.UUID, enabled: bool, total_bombs: int = 100
 ) -> Optional[Game]:

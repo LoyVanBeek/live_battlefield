@@ -178,6 +178,16 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Specials -->
+            <div class="mode-card" id="card-specials">
+                <h3>{{ tr.settings.specials_title }}</h3>
+                <p class="description">{{ tr.settings.specials_desc }}</p>
+                <div class="mode-controls" style="flex-direction:column;align-items:stretch;">
+                    <div id="specials-list"></div>
+                    <div><button class="btn btn-primary" onclick="saveSpecials()" style="margin-top:10px;">{{ tr.settings.save }}</button></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -407,6 +417,46 @@
 
         loadBombDrip();
         loadQuiz();
+        loadSpecials();
+
+        async function loadSpecials() {
+            const state = await apiCall('/api/state');
+            if (!state || !state.specials) return;
+            const list = document.getElementById('specials-list');
+            list.innerHTML = '';
+            for (const [id, cfg] of Object.entries(state.specials)) {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid #22224a;';
+                let html = '<label style="min-width:150px;text-transform:capitalize;"><input type="checkbox" data-special="' + id + '" data-key="enabled"' + (cfg.enabled ? ' checked' : '') + '> ' + id.replaceAll('_', ' ') + '</label>';
+                for (const [key, value] of Object.entries(cfg)) {
+                    if (key === 'enabled' || typeof value !== 'number') continue;
+                    html += '<label>' + key.replaceAll('_', ' ') + ' <input type="number" data-special="' + id + '" data-key="' + key + '" value="' + value + '" style="width:60px;"></label>';
+                }
+                row.innerHTML = html;
+                list.appendChild(row);
+            }
+        }
+
+        async function saveSpecials() {
+            const specials = {};
+            document.querySelectorAll('#specials-list [data-special]').forEach(input => {
+                const id = input.dataset.special;
+                const key = input.dataset.key;
+                if (!specials[id]) specials[id] = {};
+                if (input.type === 'checkbox') {
+                    specials[id][key] = input.checked;
+                } else {
+                    specials[id][key] = parseInt(input.value) || 0;
+                }
+            });
+            const result = await apiCall('/api/quick/specials_settings', 'POST', { specials: specials });
+            if (result && result.success) {
+                showToast('Specials saved', 'success');
+                loadSpecials();
+            } else {
+                showToast(result ? result.message : 'Error', 'error');
+            }
+        }
     </script>
 </body>
 </html>

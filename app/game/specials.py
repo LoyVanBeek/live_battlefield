@@ -1,0 +1,68 @@
+"""Registry and configuration for game specials.
+
+Each special declares its id and default settings here. The GM can enable
+specials per game and override settings via the game-settings page; the
+merged view (defaults + overrides) is what the rest of the code reads.
+
+Only ids listed in SPECIALS are accepted when saving — unknown ids are
+dropped so future clients can't write garbage into the config.
+"""
+
+from typing import Any
+
+SPECIALS: dict[str, dict[str, Any]] = {
+    "torpedo": {"enabled": False, "ammo_per_team": 2},
+    "anonymous_bomb": {"enabled": False, "ammo_per_team": 2},
+    "area_bomb": {"enabled": False, "ammo_per_team": 2, "size": 3},
+    "armor": {"enabled": False, "minutes": 10, "ammo_per_team": 1},
+    "deactivate": {"enabled": False, "minutes": 5, "ammo_per_team": 1},
+    "radar_ship": {"enabled": False, "radius_cells": 3},
+    "zombie_ship": {"enabled": False},
+    "tsunami": {"enabled": False, "interval_minutes": 45, "ships_destroyed": 1},
+    "treasure_chest": {"enabled": False, "bomb_value": 5},
+    "reward_per_sunk": {"enabled": False, "bombs": 2},
+}
+
+
+def filter_specials(raw: Any) -> dict[str, dict[str, Any]]:
+    """Keep only known special ids and their known setting keys."""
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for special_id, overrides in raw.items():
+        if special_id not in SPECIALS:
+            continue
+        if not isinstance(overrides, dict):
+            continue
+        defaults = SPECIALS[special_id]
+        clean: dict[str, Any] = {}
+        for key, value in overrides.items():
+            if key in defaults:
+                clean[key] = value
+        result[special_id] = clean
+    return result
+
+
+class SpecialsConfig:
+    """Merged view over the SPECIALS defaults and a game's stored overrides."""
+
+    def __init__(self, overrides: dict[str, dict[str, Any]] | None = None) -> None:
+        self._overrides = overrides or {}
+
+    def settings(self, special_id: str) -> dict[str, Any]:
+        """Merged defaults + overrides for one special ({} if unknown id)."""
+        if special_id not in SPECIALS:
+            return {}
+        merged = dict(SPECIALS[special_id])
+        merged.update(self._overrides.get(special_id, {}))
+        return merged
+
+    def is_enabled(self, special_id: str) -> bool:
+        return bool(self.settings(special_id).get("enabled", False))
+
+    def value(self, special_id: str, key: str, default: Any = None) -> Any:
+        return self.settings(special_id).get(key, default)
+
+    def to_dict(self) -> dict[str, dict[str, Any]]:
+        """Merged config for every known special — safe to send to clients."""
+        return {special_id: self.settings(special_id) for special_id in SPECIALS}

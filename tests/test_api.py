@@ -1365,3 +1365,85 @@ class TestEventStreamCap:
                     )
 
         assert response.status_code == 429
+
+
+class TestSpecialsSettings:
+    """Tests for /api/quick/specials_settings and /api/state specials key."""
+
+    def _override_gm(self):
+        from app.api.routes import app, verify_gm_token
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+
+    def test_save_and_get_merged_specials(self):
+        from app.api.routes import app, verify_gm_token
+        from app.game.specials import SpecialsConfig
+        from unittest.mock import AsyncMock, MagicMock
+
+        game = MagicMock()
+        game.specials = {"torpedo": {"enabled": True}}
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.models.update_game_specials", new_callable=AsyncMock, return_value=game):
+                client = TestClient(app)
+                response = client.post(
+                    "/api/quick/specials_settings",
+                    json={"specials": {"torpedo": {"enabled": True}, "warp_drive": {"enabled": True}}},
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["specials"]["torpedo"]["enabled"] is True
+        assert "warp_drive" not in data["specials"]
+
+    def test_save_rejects_unknown_game(self):
+        from app.api.routes import app, verify_gm_token
+        from unittest.mock import AsyncMock
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.models.update_game_specials", new_callable=AsyncMock, return_value=None):
+                client = TestClient(app)
+                response = client.post("/api/quick/specials_settings", json={"specials": {}})
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        assert response.json()["success"] is False
+
+    def test_state_includes_specials(self):
+        from app.api.routes import app, verify_gm_token
+        from app.game.state import GameState
+        from unittest.mock import MagicMock
+
+        game = MagicMock()
+        game.specials = {"area_bomb": {"enabled": True, "size": 5}}
+        game.trickle_enabled = False
+        game.trickle_bombs_per_interval = 1
+        game.trickle_interval_minutes = 10
+        game.max_bombs = 100
+        game.paused_until = None
+        game.quiz_enabled = False
+        game.quiz_total_bombs = 100
+        game.scheduled_start_at = None
+        game.name = None
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=GameState()):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_all_players_in_game", new_callable=AsyncMock, return_value=[]):
+                        with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                            client = TestClient(app)
+                            response = client.get("/api/state")
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        specials = response.json()["specials"]
+        assert specials["area_bomb"]["enabled"] is True
+        assert specials["area_bomb"]["size"] == 5
+        assert specials["armor"]["enabled"] is False  # defaults merged in

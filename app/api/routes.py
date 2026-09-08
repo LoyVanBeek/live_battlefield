@@ -36,6 +36,7 @@ from app.game.ships import (
     coordinate_to_string,
 )
 from app.game.state import BombResult, GameState, GameStatusField, BombRejected
+from app.game.specials import SpecialsConfig
 from app.events import (
     EventType,
     TeamJoinedEvent,
@@ -1142,6 +1143,7 @@ async def get_game_state(
         "quiz_enabled": game.quiz_enabled if game else False,
         "quiz_total_bombs": game.quiz_total_bombs if game else 100,
         "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at else "",
+        "specials": SpecialsConfig(game.specials if game else None).to_dict(),
     }
 
 
@@ -2497,6 +2499,28 @@ async def get_quiz_questions(
 
 class SaveQuestionsRequest(BaseModel):
     questions: list[dict] = []
+
+
+class SpecialsSettings(BaseModel):
+    specials: dict[str, dict[str, Any]] = {}
+
+
+@app.post("/api/quick/specials_settings")
+async def set_specials_settings(
+    body: SpecialsSettings,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.game.specials import SpecialsConfig
+    from app.models import update_game_specials
+
+    game_uuid = uuid.UUID(game_id)
+    game = await update_game_specials(db, game_uuid, body.specials)
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    merged = SpecialsConfig(game.specials).to_dict()
+    return {"success": True, "specials": merged, "message": "Specials saved."}
 
 
 @app.post("/api/quiz/questions")

@@ -161,6 +161,7 @@ class Game(Base):
     quiz_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
     quiz_total_bombs: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    specials: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
 
 
 class TeamToken(Base):
