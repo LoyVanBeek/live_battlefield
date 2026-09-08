@@ -853,6 +853,7 @@
             document.getElementById('rename-btn').style.display = gameStatus === 'preparing' ? '' : 'none';
             currentBombCount = myTeam.b;
             updateBombCountDisplay(myTeam.b);
+            updateShieldStatus(myTeam && myTeam.su);
             placedShipCount = myTeam.sp || 0;
             placedShipTypes = myTeam.pt || {};
             document.getElementById('ship-count').textContent = myTeam.sp;
@@ -1046,7 +1047,7 @@
                             '</select>' +
                             '<select id="bomb-type-select" onchange="selectedBombType=this.value">' +
                                 '<option value="normal">' + _('action.bomb.normal') + '</option>' +
-                                specialBombs.map(function(bt) {
+                                specialBombs.filter(function(bt) { return ['torpedo','anonymous_bomb','area_bomb'].indexOf(bt) !== -1; }).map(function(bt) {
                                     var ammo = specialAmmo[bt] || 0;
                                     return '<option value="' + bt + '"' + (ammo <= 0 ? ' disabled' : '') + (selectedBombType === bt ? ' selected' : '') + '>' + bt.replaceAll('_', ' ') + ' (' + ammo + ')</option>';
                                 }).join('') +
@@ -1055,6 +1056,15 @@
                             '<button class="btn btn-primary" onclick="throwBomb()">' + _('action.bomb.throw') + '</button>' +
                         '</div>' +
                     '</div>' +
+                    (specialBombs.indexOf('armor') !== -1 ?
+                        '<div class="action-group">' +
+                            '<h3>🛡️ Shield</h3>' +
+                            '<div class="action-inputs">' +
+                                '<button class="btn btn-primary" onclick="activateShield()">' +
+                                    'Activate shield (' + (specialAmmo['armor'] || 0) + ')</button>' +
+                                '<span id="shield-status" style="color:#4caf50;font-size:12px;"></span>' +
+                            '</div>' +
+                        '</div>' : '') +
                     '<div class="action-group">' +
                         '<h3>' + _('action.code.heading') + '</h3>' +
                         '<div class="action-inputs">' +
@@ -1388,6 +1398,26 @@ async function clearAllShips() {
             document.getElementById('bomb-confirm').classList.remove('active');
             pendingBombTarget = null;
             pendingBombCoord = null;
+        }
+
+        async function activateShield() {
+            var result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'shield',
+                args: {}
+            });
+            showToast(result.message, result.success ? 'success' : 'error');
+        }
+
+        function updateShieldStatus(su) {
+            var el = document.getElementById('shield-status');
+            if (!el) return;
+            if (su) {
+                var until = new Date(su);
+                el.textContent = until > new Date() ? 'Active until ' + until.toLocaleTimeString() : '';
+            } else {
+                el.textContent = '';
+            }
         }
 
         async function redeemCode() {

@@ -16,6 +16,7 @@ from app.events.models import (
     GameResumedEvent,
     QuizAnsweredEvent,
     SpecialAmmoGrantedEvent,
+    ShieldActivatedEvent,
 )
 from app.events.factory import create_event, create_events
 from app.events.saver import save_event

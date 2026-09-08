@@ -33,11 +33,11 @@ async def get_team_view(team_token: str, db: AsyncSession) -> dict:
         result["mb"] = game.max_bombs
         result["qe"] = game.quiz_enabled
         result["ss"] = game.scheduled_start_at.isoformat() if game.scheduled_start_at else ""
-        from app.game.specials import BOMB_TYPE_SPECIALS, SpecialsConfig
+        from app.game.specials import GRANTABLE_SPECIALS, SpecialsConfig
 
         config = SpecialsConfig(game.specials)
-        enabled_bombs: list[str] = [bt for bt in BOMB_TYPE_SPECIALS if config.is_enabled(bt)]
-        result["sb"] = enabled_bombs
+        enabled_specials: list[str] = [bt for bt in GRANTABLE_SPECIALS if config.is_enabled(bt)]
+        result["sb"] = enabled_specials
         from datetime import datetime, timezone
         result["pu"] = game.paused_until.isoformat() if game.paused_until and game.paused_until > datetime.now(timezone.utc) else ""
     winner = state.get_winner()
@@ -56,6 +56,8 @@ def _serialize_team(team, private: bool, status: str = "preparing") -> dict:
     }
     if private:
         result["sa"] = dict(team.special_ammo)
+        result["su"] = team.shielded_until.isoformat() if team.shielded_until else ""
+        result["du"] = team.deactivated_until.isoformat() if team.deactivated_until else ""
     result["g"] = _serialize_grid(team, include_ships=private)
     if status == "preparing":
         result["pt"] = dict(team.placed_ship_types)

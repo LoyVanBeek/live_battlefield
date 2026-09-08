@@ -344,3 +344,69 @@ class TestAreaBomb:
 
         assert isinstance(resolution, BombRejected)
         assert resolution.error_key == "no_special_ammo"
+
+
+class TestShieldBomb:
+    def _shielded_state(self, minutes_ahead: int = 10) -> GameState:
+        from datetime import datetime, timezone, timedelta
+
+        state = _started_state()
+        state.teams["red"].special_ammo = {"normal": 0}
+        state.teams["blue"].shielded_until = datetime.now(timezone.utc) + timedelta(minutes=minutes_ahead)
+        return state
+
+    def test_shielded_hit_records_marker_without_damage(self):
+        from datetime import datetime, timezone, timedelta
+
+        state = _started_state()
+        state.teams["blue"].shielded_until = datetime.now(timezone.utc) + timedelta(minutes=10)
+        resolution = resolve_bomb(state, "red", "blue", "A1")
+
+        assert isinstance(resolution, BombApplied)
+        assert resolution.hit is True
+        assert resolution.shielded is True
+        assert resolution.sunk is False
+        assert "shield absorbed" in resolution.message
+        # Detected but undamaged and re-bombable
+        assert state.teams["blue"].public_board[0][0] == ("red", True)
+        assert (0, 0) not in state.teams["blue"].bombed_cells
+        assert state.teams["blue"].ships[0].hits == 0
+        assert state.teams["red"].bombs == 4  # bomb consumed
+
+    def test_expired_shield_has_no_effect(self):
+        from datetime import datetime, timezone, timedelta
+
+        state = _started_state()
+        state.teams["blue"].shielded_until = datetime.now(timezone.utc) - timedelta(minutes=1)
+        resolution = resolve_bomb(state, "red", "blue", "A1")
+
+        assert isinstance(resolution, BombApplied)
+        assert resolution.shielded is False
+        assert resolution.hit is True
+        assert (0, 0) in state.teams["blue"].bombed_cells
+
+    def test_shielded_hit_replay_is_marker_only(self):
+        from app.events.models import BombThrownEvent
+
+        live = _started_state()
+        replayed = GameState(teams=dict(live.teams))
+        event = BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=0, shielded=True)
+        replayed, updated = event.apply(replayed)
+
+        assert updated.shielded is True
+        assert replayed.teams["blue"].public_board[0][0] == ("red", True)
+        assert (0, 0) not in replayed.teams["blue"].bombed_cells
+        assert replayed.teams["blue"].ships[0].hits == 0
+        assert replayed.teams["red"].bombs == 4
+
+    def test_shielded_anon_bomb_records_anon(self):
+        from datetime import datetime, timezone, timedelta
+        from app.events.models import BombThrownEvent
+
+        replayed = GameState(teams=dict(_started_state().teams))
+        event = BombThrownEvent(
+            attacker_color="red", target_color="blue", row=0, col=0,
+            bomb_type="anonymous_bomb", shielded=True,
+        )
+        replayed, _ = event.apply(replayed)
+        assert replayed.teams["blue"].public_board[0][0] == ("anon", True)

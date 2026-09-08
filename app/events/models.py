@@ -223,6 +223,7 @@ class BombThrownEvent:
     ship_sunk: Optional[bool] = None
     bomb_type: str = "normal"
     radius: int = 0
+    shielded: bool = False
 
     def apply(self, state: "GameState") -> tuple["GameState", "BombThrownEvent"]:
         from app.game.state import TeamState, BombResult
@@ -241,12 +242,19 @@ class BombThrownEvent:
         if attacker.bombs <= 0:
             return state, self
 
-        if self.radius > 0:
+        if self.shielded:
+            # Recorded as absorbed by a shield: marker only, deterministic.
+            recorded = "anon" if self.bomb_type == "anonymous_bomb" else attacker_color
+            result = BombResult.HIT
+            ship = None
+            new_target = target.record_shielded_hit(self.row, self.col, recorded)
+        elif self.radius > 0:
             hits, ships_hit = target.receive_area_bomb(
                 self.row, self.col, attacker_color, self.bomb_type, self.radius
             )
             result = BombResult.HIT if hits > 0 else BombResult.MISS
             ship = ships_hit[0] if ships_hit else None
+            new_target = target
         else:
             result, ship, new_target = target.receive_bomb(
                 self.row, self.col, attacker_color, self.bomb_type
@@ -262,10 +270,10 @@ class BombThrownEvent:
             # receive_* mutated the shared team object in place; new_attacker
             # already carries the updated bombs/ammo for the same color.
             new_teams[attacker_color] = new_attacker
-        elif self.radius > 0:
-            # Area bombs mutate the target in place; keep the mutated object.
+        elif self.radius > 0 or self.shielded:
+            # Area bombs and shielded hits mutate the target in place.
             new_teams[attacker_color] = new_attacker
-            new_teams[target_color] = target
+            new_teams[target_color] = new_target
         else:
             new_teams[attacker_color] = new_attacker
             new_teams[target_color] = new_target
@@ -292,6 +300,7 @@ class BombThrownEvent:
                 "ship_sunk": self.ship_sunk,
                 "bomb_type": self.bomb_type,
                 "radius": self.radius,
+                "shielded": self.shielded,
             },
             player_id=player_id,
             game_id=game_id,
@@ -675,6 +684,48 @@ class SpecialAmmoGrantedEvent:
         )
 
 
+@dataclass
+class ShieldActivatedEvent:
+    """Activates a timed shield on a team; consumes one armor ammo unit."""
+
+    event_type: EventType = EventType.SHIELD_ACTIVATED
+    color: str = ""
+    until: Optional[str] = None  # ISO timestamp; string for payload round-trip
+    success: bool = False
+
+    def apply(self, state: "GameState") -> tuple["GameState", "ShieldActivatedEvent"]:
+        from datetime import datetime, timezone
+
+        if self.color not in state.teams:
+            return state, replace(self, success=False)
+
+        team = state.teams[self.color]
+
+        new_ammo = dict(team.special_ammo)
+        if self.success:
+            new_ammo["armor"] = max(0, new_ammo.get("armor", 0) - 1)
+
+        shielded_until = (
+            datetime.fromisoformat(self.until) if self.until else None
+        )
+        new_team = team.with_special_ammo(new_ammo).with_shield(shielded_until)
+
+        new_teams = {**state.teams, self.color: new_team}
+        return replace(state, teams=new_teams), replace(self, success=True)
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.SHIELD_ACTIVATED,
+            payload={
+                "color": self.color,
+                "until": self.until,
+                "success": self.success,
+            },
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
 AnyEvent = Union[
     "TeamJoinedEvent",
     "TeamRenamedEvent",
@@ -693,4 +744,5 @@ AnyEvent = Union[
     "GameResumedEvent",
     "QuizAnsweredEvent",
     "SpecialAmmoGrantedEvent",
+    "ShieldActivatedEvent",
 ]

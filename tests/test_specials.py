@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.events.models import LocationAddedEvent, SpecialAmmoGrantedEvent, TeamJoinedEvent
+from app.events.models import LocationAddedEvent, ShieldActivatedEvent, SpecialAmmoGrantedEvent, TeamJoinedEvent
 from app.game.specials import SPECIALS, SpecialsConfig, filter_specials, grant_enabled_special_ammo
 from app.game.state import GameState
 
@@ -408,3 +408,95 @@ class TestCreateChest:
         data = response.json()
         assert data["success"] is False
         assert "needs a reward" in data["message"]
+
+
+class TestShieldActivatedEvent:
+    def test_apply_sets_shield_and_consumes_ammo(self):
+        from datetime import datetime, timezone, timedelta
+
+        state = GameState()
+        state, _ = TeamJoinedEvent(name="Red", color="red", chat_id=1, bombs=3).apply(state)
+        state, _ = SpecialAmmoGrantedEvent(color="red", bomb_type="armor", count=1).apply(state)
+
+        until = datetime.now(timezone.utc) + timedelta(minutes=10)
+        event = ShieldActivatedEvent(color="red", until=until.isoformat(), success=True)
+        state, applied = event.apply(state)
+
+        assert applied.success is True
+        assert state.teams["red"].special_ammo["armor"] == 0
+        assert state.teams["red"].shielded_until is not None
+        assert state.teams["red"].is_shielded(datetime.now(timezone.utc)) is True
+
+    def test_apply_unknown_team_noop(self):
+        event = ShieldActivatedEvent(color="green", until=None, success=True)
+        state = GameState()
+        new_state, applied = event.apply(state)
+        assert applied.success is False
+
+    def test_to_game_event_payload(self):
+        event = ShieldActivatedEvent(color="red", until="2026-09-08T12:00:00+00:00", success=True)
+        game_event = event.to_game_event(game_id=None)
+        assert game_event.event_type.value == "shield_activated"
+        assert game_event.payload["until"] == "2026-09-08T12:00:00+00:00"
+
+
+class TestShieldCommand:
+    def _post_shield(self, specials, ammo=1, already_shielded=False):
+        import uuid
+        from datetime import datetime, timezone, timedelta
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState, GameStatusField, TeamState
+
+        state = GameState()
+        state.status = GameStatusField.STARTED
+        red = TeamState(name="Red", color="red", chat_id=1, bombs=5)
+        red.special_ammo = {"armor": ammo}
+        if already_shielded:
+            red.shielded_until = datetime.now(timezone.utc) + timedelta(minutes=5)
+        state.teams = {"red": red}
+
+        game = MagicMock()
+        game.specials = specials
+        game.paused_until = None
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {
+            "role": "team", "game_id": "00000000-0000-0000-0000-000000000000", "color": "red"
+        }
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                        with patch("app.api.routes.save_event", new_callable=AsyncMock) as mock_save:
+                            with patch("app.api.routes._check_game_paused", new_callable=AsyncMock, return_value=None):
+                                client = TestClient(app)
+                                response = client.post(
+                                    "/api/execute",
+                                    json={"team_color": "red", "command": "shield", "args": {}},
+                                )
+        finally:
+            app.dependency_overrides.clear()
+        return response, mock_save, state
+
+    def test_activate_shield_success(self):
+        response, mock_save, state = self._post_shield({"armor": {"enabled": True, "minutes": 10}})
+        data = response.json()
+        assert data["success"] is True
+        assert "Shield active" in data["message"]
+        assert mock_save.await_count == 1
+        assert state.teams["red"].special_ammo["armor"] == 0
+        assert state.teams["red"].shielded_until is not None
+
+    def test_activate_shield_disabled_rejected(self):
+        response, mock_save, _ = self._post_shield({"armor": {"enabled": False}})
+        assert response.json()["error_key"] == "special_disabled"
+
+    def test_activate_shield_without_ammo_rejected(self):
+        response, mock_save, _ = self._post_shield({"armor": {"enabled": True}}, ammo=0)
+        assert response.json()["error_key"] == "no_special_ammo"
+
+    def test_activate_shield_twice_rejected(self):
+        response, mock_save, _ = self._post_shield(
+            {"armor": {"enabled": True, "minutes": 10}}, ammo=2, already_shielded=True
+        )
+        assert response.json()["success"] is False
+        assert "already active" in response.json()["message"]

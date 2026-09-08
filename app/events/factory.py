@@ -20,6 +20,7 @@ from app.events.models import (
     GameResumedEvent,
     QuizAnsweredEvent,
     SpecialAmmoGrantedEvent,
+    ShieldActivatedEvent,
 )
 
 
@@ -86,6 +87,9 @@ def create_event(db_event: GameEvent) -> Optional[AnyEvent]:
 
     elif event_type_value == "special_ammo_granted":
         return SpecialAmmoGrantedEvent(**payload_dict)
+
+    elif event_type_value == "shield_activated":
+        return ShieldActivatedEvent(**payload_dict)
 
     return None
 

@@ -58,6 +58,9 @@ class Ship:
         }
 
 
+_UNSET = object()
+
+
 def _copy_team(
     team: "TeamState",
     *,
@@ -71,6 +74,8 @@ def _copy_team(
     public_board: Optional[list[list[Optional[tuple[str, bool]]]]] = None,
     bombed_cells: Optional[list[tuple[int, int]]] = None,
     special_ammo: Optional[dict[str, int]] = None,
+    shielded_until: object = _UNSET,
+    deactivated_until: object = _UNSET,
 ) -> "TeamState":
     return TeamState(
         name=name if name is not None else team.name,
@@ -87,6 +92,8 @@ def _copy_team(
         public_board=public_board if public_board is not None else team.public_board,
         bombed_cells=bombed_cells if bombed_cells is not None else team.bombed_cells,
         special_ammo=special_ammo if special_ammo is not None else team.special_ammo,
+        shielded_until=team.shielded_until if shielded_until is _UNSET else shielded_until,
+        deactivated_until=team.deactivated_until if deactivated_until is _UNSET else deactivated_until,
     )
 
 
@@ -106,6 +113,8 @@ class TeamState:
     )
     bombed_cells: list[tuple[int, int]] = field(default_factory=list)
     special_ammo: dict[str, int] = field(default_factory=dict)
+    shielded_until: Optional[object] = None  # tz-aware datetime when shielded
+    deactivated_until: Optional[object] = None  # tz-aware datetime when deactivated
 
     def get_ship_at(self, row: int, col: int) -> Optional[Ship]:
         for ship in self.ships:
@@ -190,6 +199,11 @@ class TeamState:
                         ships_hit[id(ship)] = ship
         return hits, list(ships_hit.values())
 
+    def record_shielded_hit(self, row: int, col: int, attacker_color: str) -> "TeamState":
+        """Mark a cell as hit without damage or consuming the cell (shield active)."""
+        self.public_board[row][col] = (attacker_color, True)
+        return _copy_team(self)
+
     def get_sunk_ships(self) -> list[Ship]:
         return [s for s in self.ships if s.is_sunk()]
 
@@ -215,6 +229,18 @@ class TeamState:
     def with_special_ammo(self, ammo: dict[str, int]) -> "TeamState":
         return _copy_team(self, special_ammo=ammo)
 
+    def with_shield(self, until) -> "TeamState":
+        return _copy_team(self, shielded_until=until)
+
+    def with_deactivation(self, until) -> "TeamState":
+        return _copy_team(self, deactivated_until=until)
+
+    def is_shielded(self, now) -> bool:
+        return self.shielded_until is not None and self.shielded_until > now
+
+    def is_deactivated(self, now) -> bool:
+        return self.deactivated_until is not None and self.deactivated_until > now
+
     def with_reset(self) -> "TeamState":
         return _copy_team(
             self,
@@ -225,6 +251,8 @@ class TeamState:
             public_board=[[None] * 10 for _ in range(10)],
             bombed_cells=[],
             special_ammo={},
+            shielded_until=None,
+            deactivated_until=None,
         )
 
 
@@ -382,6 +410,7 @@ class BombApplied:
     sunk: bool
     ship_type: Optional[str]
     winner: Optional[TeamState]
+    shielded: bool = False
 
 
 def resolve_bomb(
@@ -472,7 +501,9 @@ def resolve_bomb(
             bomb_type: team.special_ammo.get(bomb_type, 0) - 1,
         }
 
-    if radius > 0:
+    from datetime import datetime as _datetime, timezone as _timezone
+
+    if radius > 0 and not target.is_shielded(_datetime.now(_timezone.utc)):
         hits, ships_hit = target.receive_area_bomb(
             row, col, attacker_color, bomb_type, radius
         )
@@ -501,6 +532,31 @@ def resolve_bomb(
             sunk=bool(sunk_ships),
             ship_type=primary_ship.ship_type if primary_ship else None,
             winner=state.get_winner(),
+        )
+
+    if target.is_shielded(_datetime.now(_timezone.utc)):
+        # Detected but undamaged: marker only, the cell stays bombable.
+        recorded = "anon" if bomb_type == "anonymous_bomb" else attacker_color
+        state.teams[target_color] = target.record_shielded_hit(row, col, recorded)
+        bombs_left = state.teams[attacker_color].bombs
+        return BombApplied(
+            message=(
+                f"Bombed {target_color} at {coord}: HIT at {coord}!"
+                " (a shield absorbed the damage)."
+                f" Bombs left: {bombs_left}"
+            ),
+            bomb_result=BombResult.HIT,
+            ship=None,
+            target_name=target.name,
+            coord=coord,
+            bombs_left=bombs_left,
+            row=row,
+            col=col,
+            hit=True,
+            sunk=False,
+            ship_type=None,
+            winner=state.get_winner(),
+            shielded=True,
         )
 
     bomb_result, ship, new_target = target.receive_bomb(

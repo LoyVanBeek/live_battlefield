@@ -1650,6 +1650,7 @@ async def execute_command(
             result=resolution.bomb_result.value,
             bomb_type=bomb_type,
             radius=radius,
+            shielded=resolution.shielded,
         )
         await save_event(db, event, game_uuid)
 
@@ -1722,6 +1723,53 @@ async def execute_command(
             state.status = GameStatusField.ENDED
             result["winner"] = winner.name
             result["message"] += f" 🏆 {winner.name} ({winner.color}) wins!"
+
+    elif cmd.command == "shield":
+        if state.status != GameStatusField.STARTED:
+            result["message"] = "Cannot activate shield - game hasn't started yet!"
+            return result
+
+        paused_check = await _check_game_paused(db, game_id)
+        if paused_check:
+            return paused_check
+
+        from app.game.specials import SpecialsConfig
+
+        game = await get_game(db, game_uuid)
+        config = SpecialsConfig(game.specials if game else None)
+        if not config.is_enabled("armor"):
+            result["message"] = "Armor is not enabled for this game!"
+            result["error_key"] = "special_disabled"
+            return result
+
+        team = state.teams[cmd.team_color]
+        if team.is_shielded(datetime.now(timezone.utc)):
+            result["message"] = "Your shield is already active!"
+            return result
+
+        if team.special_ammo.get("armor", 0) <= 0:
+            result["message"] = "No armor ammo left!"
+            result["error_key"] = "no_special_ammo"
+            return result
+
+        minutes = int(config.value("armor", "minutes", 10))
+        until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+
+        from app.events.models import ShieldActivatedEvent
+
+        event = ShieldActivatedEvent(color=cmd.team_color, until=until.isoformat(), success=True)
+        # Live mutation mirroring ShieldActivatedEvent.apply (event is the
+        # authoritative replay path).
+        live_team = state.teams[cmd.team_color]
+        live_team.special_ammo = {
+            **live_team.special_ammo,
+            "armor": live_team.special_ammo.get("armor", 0) - 1,
+        }
+        state.teams[cmd.team_color] = live_team.with_shield(until)
+        await save_event(db, event, game_uuid)
+
+        result["success"] = True
+        result["message"] = f"🛡️ Shield active for {minutes} minutes!"
 
     elif cmd.command == "removeai":
         if auth_info.get("role") != "gm":
@@ -1955,14 +2003,14 @@ async def grant_special(
     db: AsyncSession = Depends(get_api_db),
     game_id: str = Depends(verify_gm_token),
 ):
-    from app.game.specials import BOMB_TYPE_SPECIALS, SpecialsConfig
+    from app.game.specials import GRANTABLE_SPECIALS, SpecialsConfig
     from app.events.models import SpecialAmmoGrantedEvent
     from app.models import get_game, get_game_events
 
     game_uuid = uuid.UUID(game_id)
 
-    if action.bomb_type not in BOMB_TYPE_SPECIALS:
-        return {"success": False, "message": f"Unknown bomb type: {action.bomb_type}"}
+    if action.bomb_type not in GRANTABLE_SPECIALS:
+        return {"success": False, "message": f"Unknown special: {action.bomb_type}"}
 
     if action.count <= 0:
         return {"success": False, "message": "Count must be at least 1!"}

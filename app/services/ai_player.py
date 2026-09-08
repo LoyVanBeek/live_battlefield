@@ -118,11 +118,17 @@ class AIPlayer:
         row, col = parse_coordinate(coord)
         game_uuid = uuid.UUID(game_id)
 
+        from datetime import datetime, timezone
+
+        target_team = game_state.teams.get(target_color)
+        shielded = bool(target_team and target_team.is_shielded(datetime.now(timezone.utc)))
+
         event = BombThrownEvent(
             attacker_color=self.color,
             target_color=target_color,
             row=row,
             col=col,
+            shielded=shielded,
         )
 
         await save_event(db, event, game_uuid)

@@ -27,6 +27,9 @@ SPECIALS: dict[str, dict[str, Any]] = {
 # Specials that are consumable bomb types (usable via the bomb command).
 BOMB_TYPE_SPECIALS: tuple[str, ...] = ("torpedo", "anonymous_bomb", "area_bomb")
 
+# Specials with consumable ammo the GM can grant (bomb types + defensive/utility).
+GRANTABLE_SPECIALS: tuple[str, ...] = BOMB_TYPE_SPECIALS + ("armor", "deactivate")
+
 # Valid keys for a treasure chest's reward (per-chest contents set by the GM).
 CHEST_REWARD_KEYS: tuple[str, ...] = ("bombs",) + BOMB_TYPE_SPECIALS
 CHEST_MAX_BOMBS = 20
@@ -48,6 +51,9 @@ def filter_chest_reward(raw: Any) -> dict[str, int]:
 
 # Specials that are consumable bomb types (usable via the bomb command).
 BOMB_TYPE_SPECIALS: tuple[str, ...] = ("torpedo", "anonymous_bomb", "area_bomb")
+
+# Specials with consumable ammo the GM can grant (bomb types + defensive/utility).
+GRANTABLE_SPECIALS: tuple[str, ...] = BOMB_TYPE_SPECIALS + ("armor", "deactivate")
 
 
 async def grant_enabled_special_ammo(
