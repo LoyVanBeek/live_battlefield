@@ -6,6 +6,7 @@ class ShipDict(TypedDict):
     cells: list[tuple[int, int]]
     hits: int
     is_sunk: bool
+    traits: NotRequired[list[str]]
 
 
 class TeamStateDict(TypedDict):

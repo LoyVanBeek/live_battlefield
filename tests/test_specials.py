@@ -679,3 +679,121 @@ class TestDeactivateCommand:
         assert state.teams["blue"].is_deactivated(datetime.now(timezone.utc)) is True
         saved_event = mock_save.await_args_list[0].args[1]
         assert saved_event.by_color is None
+
+
+class TestAssignTrait:
+    def _setup(self, trait="radar", enabled=True):
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState, GameStatusField, TeamState, Ship
+
+        state = GameState()
+        state.status = GameStatusField.STARTED
+        red = TeamState(name="Red", color="red", chat_id=1, bombs=5)
+        red.ships.append(Ship(ship_type="battleship", cells=[(5, 5), (5, 6), (5, 7), (5, 8)]))
+        blue = TeamState(name="Blue", color="blue", chat_id=2, bombs=1)
+        state.teams = {"red": red, "blue": blue}
+
+        game = MagicMock()
+        game.specials = {f"{trait}_ship": {"enabled": enabled}}
+        game.paused_until = None
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {
+            "role": "team", "game_id": "00000000-0000-0000-0000-000000000000", "color": "red"
+        }
+        return app, state, game
+
+    def _post(self, app, trait="radar", ship_type="battleship"):
+        with patch("app.api.routes.GameState.from_events") as mock_from_events:
+            # retrieve state from the patch closure is not possible; use module-level holder
+            pass
+        # placeholder replaced below
+
+    def test_assign_radar_trait_success(self):
+        from app.api.routes import app
+        from unittest.mock import AsyncMock
+
+        app_ref, state, game = self._setup()
+        captured = {}
+        original = state
+
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state) as mf:
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                        with patch("app.api.routes.save_event", new_callable=AsyncMock) as mock_save:
+                            with patch("app.api.routes._check_game_paused", new_callable=AsyncMock, return_value=None):
+                                client = TestClient(app_ref)
+                                response = client.post(
+                                    "/api/execute",
+                                    json={
+                                        "team_color": "red", "command": "assign_trait",
+                                        "args": {"trait": "radar", "ship_type": "battleship"},
+                                    },
+                                )
+                                captured["state"] = mf.return_value
+        finally:
+            app.dependency_overrides.clear()
+
+        data = response.json()
+        assert data["success"] is True
+        assert "radar ship" in data["message"]
+        assert mock_save.await_count == 1
+        saved_event = mock_save.await_args_list[0].args[1]
+        assert saved_event.event_type.value == "trait_assigned"
+        # live state mutated: first battleship carries the radar trait
+        assert state.teams["red"].ships[0].has_trait("radar") is True
+
+    def test_assign_trait_disabled_rejected(self):
+        from app.api.routes import app
+        from unittest.mock import AsyncMock
+
+        app_ref, state, game = self._setup(enabled=False)
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                        client = TestClient(app_ref)
+                        response = client.post(
+                            "/api/execute",
+                            json={
+                                "team_color": "red", "command": "assign_trait",
+                                "args": {"trait": "radar", "ship_type": "battleship"},
+                            },
+                        )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.json()["error_key"] == "special_disabled"
+
+    def test_assign_same_trait_twice_rejected(self):
+        from app.api.routes import app
+        from unittest.mock import AsyncMock
+
+        app_ref, state, game = self._setup()
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                        with patch("app.api.routes.save_event", new_callable=AsyncMock):
+                            with patch("app.api.routes._check_game_paused", new_callable=AsyncMock, return_value=None):
+                                client = TestClient(app_ref)
+                                first = client.post(
+                                    "/api/execute",
+                                    json={
+                                        "team_color": "red", "command": "assign_trait",
+                                        "args": {"trait": "radar", "ship_type": "battleship"},
+                                    },
+                                )
+                                second = client.post(
+                                    "/api/execute",
+                                    json={
+                                        "team_color": "red", "command": "assign_trait",
+                                        "args": {"trait": "radar", "ship_type": "patrol_boat"},
+                                    },
+                                )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert first.json()["success"] is True
+        assert second.json()["success"] is False
+        assert "already have" in second.json()["message"]

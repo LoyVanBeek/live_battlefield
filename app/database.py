@@ -81,6 +81,7 @@ class EventType(str, enum.Enum):
     SPECIAL_AMMO_GRANTED = "special_ammo_granted"
     SHIELD_ACTIVATED = "shield_activated"
     TEAM_DEACTIVATED = "team_deactivated"
+    TRAIT_ASSIGNED = "trait_assigned"
 
 
 class GameEvent(Base):

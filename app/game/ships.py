@@ -18,6 +18,9 @@ VALID_DIRECTIONS = ["horizontal", "vertical"]
 BOARD_SIZE = 10
 COLS = "ABCDEFGHIJ"
 
+# Ship traits (assigned after placement; each gated by its special).
+SHIP_TRAITS = ("radar", "zombie")
+
 
 def parse_coordinate(coord: str) -> tuple[int, int]:
     coord = coord.strip().upper()

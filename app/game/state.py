@@ -42,9 +42,14 @@ class Ship:
     ship_type: str
     cells: list[tuple[int, int]]
     hits: int = 0
+    traits: list[str] = field(default_factory=list)
+    revived: bool = False
 
     def is_sunk(self) -> bool:
         return self.hits >= len(self.cells)
+
+    def has_trait(self, trait: str) -> bool:
+        return trait in self.traits
 
     def with_hits(self, hits: int) -> "Ship":
         return replace(self, hits=hits)
@@ -55,6 +60,7 @@ class Ship:
             "cells": self.cells,
             "hits": self.hits,
             "is_sunk": self.is_sunk(),
+            "traits": self.traits,
         }
 
 
@@ -129,7 +135,8 @@ class TeamState:
         return placed < SHIP_COUNTS[ship_type]
 
     def place_ship(
-        self, ship_type: str, row: int, col: int, direction: str
+        self, ship_type: str, row: int, col: int, direction: str,
+        traits: Optional[list[str]] = None,
     ) -> tuple[bool, "TeamState"]:
         if not self.can_place_ship(ship_type):
             return False, self
@@ -141,7 +148,7 @@ class TeamState:
             return False, self
 
         cells = get_ship_cells(row, col, size, direction)
-        new_ship = Ship(ship_type=ship_type, cells=cells)
+        new_ship = Ship(ship_type=ship_type, cells=cells, traits=list(traits or []))
         self.ships.append(new_ship)
 
         for r, c in cells:

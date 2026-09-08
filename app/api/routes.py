@@ -1745,6 +1745,59 @@ async def execute_command(
             result["winner"] = winner.name
             result["message"] += f" 🏆 {winner.name} ({winner.color}) wins!"
 
+    elif cmd.command == "assign_trait":
+        if state.status != GameStatusField.STARTED:
+            result["message"] = "Cannot assign traits - game hasn't started yet!"
+            return result
+
+        paused_check = await _check_game_paused(db, game_id)
+        if paused_check:
+            return paused_check
+
+        deactivated_check = _check_team_deactivated(state, cmd.team_color)
+        if deactivated_check:
+            return deactivated_check
+
+        from app.game.ships import SHIP_TRAITS
+        from app.game.specials import SpecialsConfig
+
+        trait = str(cmd.args.get("trait", ""))
+        ship_type = str(cmd.args.get("ship_type", ""))
+
+        if trait not in SHIP_TRAITS:
+            result["message"] = f"Unknown trait: {trait}"
+            return result
+
+        game = await get_game(db, game_uuid)
+        config = SpecialsConfig(game.specials if game else None)
+        if not config.is_enabled(f"{trait}_ship"):
+            result["message"] = f"The {trait} ship special is not enabled for this game!"
+            result["error_key"] = "special_disabled"
+            return result
+
+        if ship_type not in SHIP_COUNTS:
+            result["message"] = f"Unknown ship type: {ship_type}"
+            return result
+
+        team = state.teams[cmd.team_color]
+        if any(ship.has_trait(trait) for ship in team.ships):
+            result["message"] = f"You already have a {trait} ship!"
+            return result
+
+        from app.events.models import ShipTraitAssignedEvent
+
+        event = ShipTraitAssignedEvent(
+            color=cmd.team_color, ship_type=ship_type, trait=trait
+        )
+        state, saved_event = event.apply(state)
+        if not saved_event.success:
+            result["message"] = f"No available {ship_type} to assign the {trait} trait to!"
+            return result
+
+        await save_event(db, saved_event, game_uuid)
+        result["success"] = True
+        result["message"] = f"Your {ship_type} is now your {trait} ship!"
+
     elif cmd.command == "deactivate":
         if state.status != GameStatusField.STARTED:
             result["message"] = "Cannot deactivate - game hasn't started yet!"

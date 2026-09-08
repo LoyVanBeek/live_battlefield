@@ -1,7 +1,7 @@
 import secrets
 import string
 import uuid
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Optional, Union, TYPE_CHECKING, Any
 from app.events.types import EventType
 from app.database import GameEvent
@@ -103,6 +103,7 @@ class ShipPlacedEvent:
     col: int = 0
     direction: str = ""
     success: bool = False
+    traits: list = field(default_factory=list)
 
     def apply(self, state: "GameState") -> tuple["GameState", "ShipPlacedEvent"]:
         from app.game.state import TeamState
@@ -113,7 +114,7 @@ class ShipPlacedEvent:
 
         team = state.teams[color]
         success, new_team = team.place_ship(
-            self.ship_type, self.row, self.col, self.direction
+            self.ship_type, self.row, self.col, self.direction, traits=self.traits
         )
 
         if not success:
@@ -132,6 +133,7 @@ class ShipPlacedEvent:
                 "col": self.col,
                 "direction": self.direction,
                 "success": self.success,
+                "traits": self.traits,
             },
             player_id=player_id,
             game_id=game_id,
@@ -775,6 +777,50 @@ class DeactivateTeamEvent:
         )
 
 
+@dataclass
+class ShipTraitAssignedEvent:
+    """Assigns a trait (radar, zombie, ...) to a team's placed ship."""
+
+    event_type: EventType = EventType.TRAIT_ASSIGNED
+    color: str = ""
+    ship_type: str = ""
+    trait: str = ""
+    success: bool = False
+
+    def apply(self, state: "GameState") -> tuple["GameState", "ShipTraitAssignedEvent"]:
+        if self.color not in state.teams:
+            return state, replace(self, success=False)
+
+        team = state.teams[self.color]
+
+        # One trait assignment per team: reject if any ship already has it.
+        if any(ship.has_trait(self.trait) for ship in team.ships):
+            return state, replace(self, success=False)
+
+        target_ship = next(
+            (ship for ship in team.ships if ship.ship_type == self.ship_type and not ship.is_sunk()),
+            None,
+        )
+        if target_ship is None:
+            return state, replace(self, success=False)
+
+        target_ship.traits = [*target_ship.traits, self.trait]
+        return replace(state, teams=state.teams), replace(self, success=True)
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.TRAIT_ASSIGNED,
+            payload={
+                "color": self.color,
+                "ship_type": self.ship_type,
+                "trait": self.trait,
+                "success": self.success,
+            },
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
 AnyEvent = Union[
     "TeamJoinedEvent",
     "TeamRenamedEvent",
@@ -795,4 +841,5 @@ AnyEvent = Union[
     "SpecialAmmoGrantedEvent",
     "ShieldActivatedEvent",
     "DeactivateTeamEvent",
+    "ShipTraitAssignedEvent",
 ]
