@@ -226,6 +226,7 @@ class BombThrownEvent:
     bomb_type: str = "normal"
     radius: int = 0
     shielded: bool = False
+    zombie_revived: bool = False
 
     def apply(self, state: "GameState") -> tuple["GameState", "BombThrownEvent"]:
         from app.game.state import TeamState, BombResult
@@ -262,6 +263,14 @@ class BombThrownEvent:
                 self.row, self.col, attacker_color, self.bomb_type
             )
 
+        from app.game.state import maybe_revive_zombie
+
+        revive_team = new_target if self.radius <= 0 else target
+        zombie_revived = maybe_revive_zombie(revive_team, ship)
+        if self.radius > 0:
+            for s in (ship,):
+                maybe_revive_zombie(target, s)
+
         new_ammo = dict(attacker.special_ammo)
         if self.bomb_type != "normal":
             new_ammo[self.bomb_type] = max(0, new_ammo.get(self.bomb_type, 0) - 1)
@@ -285,6 +294,7 @@ class BombThrownEvent:
             result=result.value,
             ship_type=ship.ship_type if ship else None,
             ship_sunk=ship.is_sunk() if ship else None,
+            zombie_revived=zombie_revived,
         )
 
         return replace(state, teams=new_teams), updated_event
@@ -303,6 +313,7 @@ class BombThrownEvent:
                 "bomb_type": self.bomb_type,
                 "radius": self.radius,
                 "shielded": self.shielded,
+                "zombie_revived": self.zombie_revived,
             },
             player_id=player_id,
             game_id=game_id,

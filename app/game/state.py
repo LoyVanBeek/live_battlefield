@@ -401,6 +401,26 @@ class BombRejected:
     coord: Optional[str] = None
 
 
+def maybe_revive_zombie(team: "TeamState", ship: Optional[Ship]) -> bool:
+    """Revive a zombie-trait ship that just sank (once per game).
+
+    The wreck reassembles: damage resets and the ship's cells are cleared of
+    bombs/markers so it can be hit again. The revived flag makes the next
+    sinking final. Mutates team/ship in place; returns True on revival.
+    """
+    if ship is None or not ship.has_trait("zombie") or ship.revived:
+        return False
+    if not ship.is_sunk():
+        return False
+    ship.revived = True
+    ship.hits = 0
+    for r, c in ship.cells:
+        if (r, c) in team.bombed_cells:
+            team.bombed_cells.remove((r, c))
+        team.public_board[r][c] = None
+    return True
+
+
 @dataclass
 class BombApplied:
     """Successful bomb application on the live state."""
@@ -418,6 +438,7 @@ class BombApplied:
     ship_type: Optional[str]
     winner: Optional[TeamState]
     shielded: bool = False
+    zombie_revived: bool = False
 
 
 def resolve_bomb(
@@ -517,12 +538,16 @@ def resolve_bomb(
         state.teams[target_color] = _copy_team(target)
         primary_ship = ships_hit[0] if ships_hit else None
         sunk_ships = [s for s in ships_hit if s.is_sunk()]
+        revived = [s for s in sunk_ships if maybe_revive_zombie(target, s)]
+        sunk_ships = [s for s in sunk_ships if s.is_sunk()]
         if hits > 0:
             msg = f"Area bomb at {coord}: {hits} hit(s)"
             if sunk_ships:
                 msg += f", sunk {', '.join(s.ship_type for s in sunk_ships)}!"
             else:
                 msg += "!"
+            if revived:
+                msg += " 🧟 The zombie ship rises again!"
         else:
             msg = f"Area bomb at {coord}: all miss!"
         bombs_left = state.teams[attacker_color].bombs
@@ -539,6 +564,7 @@ def resolve_bomb(
             sunk=bool(sunk_ships),
             ship_type=primary_ship.ship_type if primary_ship else None,
             winner=state.get_winner(),
+            zombie_revived=bool(revived),
         )
 
     if target.is_shielded(_datetime.now(_timezone.utc)):
@@ -571,12 +597,16 @@ def resolve_bomb(
     )
     state.teams[target_color] = new_target
 
+    zombie_revived = maybe_revive_zombie(new_target, ship)
+
     if bomb_result == BombResult.HIT:
         msg = f"HIT at {coord}!"
         if ship and ship.is_sunk():
             msg += f" Sunk {ship.ship_type}!"
     else:
         msg = f"MISS at {coord}!"
+    if zombie_revived:
+        msg += " 🧟 The zombie ship rises again!"
 
     bombs_left = state.teams[attacker_color].bombs
 
@@ -593,4 +623,5 @@ def resolve_bomb(
         sunk=bool(ship and ship.is_sunk()),
         ship_type=ship.ship_type if ship else None,
         winner=state.get_winner(),
+        zombie_revived=zombie_revived,
     )

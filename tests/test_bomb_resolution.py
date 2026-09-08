@@ -410,3 +410,83 @@ class TestShieldBomb:
         )
         replayed, _ = event.apply(replayed)
         assert replayed.teams["blue"].public_board[0][0] == ("anon", True)
+
+
+class TestZombieShip:
+    def _zombie_state(self) -> GameState:
+        state = _started_state()
+        state.teams["blue"].ships[0] = Ship(
+            ship_type="patrol_boat", cells=[(0, 0), (0, 1)], traits=["zombie"]
+        )
+        return state
+
+    def test_zombie_ship_sinks_then_reassembles(self):
+        state = self._zombie_state()
+        first = resolve_bomb(state, "red", "blue", "A1")
+        assert isinstance(first, BombApplied)
+        assert first.hit is True and first.sunk is False  # 1/2 damage
+
+        second = resolve_bomb(state, "red", "blue", "B1")
+        assert isinstance(second, BombApplied)
+        assert second.zombie_revived is True
+        assert second.sunk is False  # reassembled, not finally sunk
+        assert "rises again" in second.message
+
+        ship = state.teams["blue"].ships[0]
+        assert ship.revived is True
+        assert ship.hits == 0  # wreck reassembled at full health
+        assert ship.is_sunk() is False
+        # the wreck clears its own cells: re-bombable
+        assert (0, 0) not in state.teams["blue"].bombed_cells
+        assert (0, 1) not in state.teams["blue"].bombed_cells
+        assert state.teams["blue"].public_board[0][0] is None
+        assert state.teams["red"].bombs == 3  # 5 - 2 bombs fired
+
+    def test_second_sinking_is_final(self):
+        state = self._zombie_state()
+        resolve_bomb(state, "red", "blue", "A1")
+        resolve_bomb(state, "red", "blue", "B1")  # sink -> revive
+        resolve_bomb(state, "red", "blue", "A1")  # 1/2 again
+        final = resolve_bomb(state, "red", "blue", "B1")  # 2/2 -> final
+
+        assert isinstance(final, BombApplied)
+        assert final.sunk is True
+        assert final.zombie_revived is False  # already used
+        assert state.teams["blue"].ships[0].is_sunk() is True
+
+    def test_zombie_team_survives_until_final_death(self):
+        state = self._zombie_state()
+        resolve_bomb(state, "red", "blue", "A1")
+        mid = resolve_bomb(state, "red", "blue", "B1")  # revive moment
+        assert isinstance(mid, BombApplied)
+        assert mid.winner is None  # blue still in the fight
+
+        final = resolve_bomb(state, "red", "blue", "A1")
+        final2 = resolve_bomb(state, "red", "blue", "B1")
+        assert isinstance(final2, BombApplied)
+        assert final2.winner is not None
+        assert final2.winner.color == "red"
+
+    def test_zombie_revive_replay_deterministic(self):
+        from app.events.models import BombThrownEvent
+
+        live = self._zombie_state()
+        replayed = GameState(teams=dict(live.teams))
+
+        resolve_bomb(live, "red", "blue", "A1", bomb_type="torpedo")
+        event = BombThrownEvent(attacker_color="red", target_color="blue", row=0, col=0, bomb_type="torpedo")
+        replayed, updated = event.apply(replayed)
+
+        ship_live = live.teams["blue"].ships[0]
+        ship_replay = replayed.teams["blue"].ships[0]
+        assert updated.zombie_revived is True
+        assert ship_replay.revived is True
+        assert ship_replay.hits == 0
+        assert ship_replay.is_sunk() == ship_live.is_sunk()
+        assert replayed.teams["blue"].bombed_cells == live.teams["blue"].bombed_cells
+
+    def test_non_zombie_ship_stays_sunk(self):
+        state = _started_state()
+        resolution = resolve_bomb(state, "red", "blue", "A1")
+        assert isinstance(resolution, BombApplied)
+        assert resolution.zombie_revived is False
