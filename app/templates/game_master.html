@@ -351,6 +351,7 @@
             <div class="buttons">
                 <button class="btn btn-success" id="btn-start" onclick="startGame()">{{ tr.gm.start_game }}</button>
                 <button class="btn btn-danger" id="btn-end" onclick="endGame()">{{ tr.gm.end_game }}</button>
+                <button class="btn btn-warning" id="btn-tsunami" onclick="triggerTsunami()" style="display:none;">{{ tr.gm.tsunami_trigger }}</button>
                 <select id="pause-duration" style="padding:8px;font-size:13px;border-radius:5px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
                     <option value="0">{{ tr.gm.pause_indefinite }}</option>
                     <option value="1">1m</option>
@@ -908,6 +909,13 @@
             }
             aiColorSelect.value = aiSelectedValue;
 
+            // Show the tsunami button only while the special is enabled
+            const tsunamiBtn = document.getElementById('btn-tsunami');
+            if (tsunamiBtn) {
+                const tsunamiEnabled = (state.specials || {}).tsunami;
+                tsunamiBtn.style.display = tsunamiEnabled && tsunamiEnabled.enabled && gameStatus === 'started' ? 'inline-block' : 'none';
+            }
+
             // Populate special-ammo grant widgets (preserve selections)
             const specialTeamSelect = document.getElementById('special-team');
             if (specialTeamSelect) {
@@ -1264,6 +1272,12 @@
                 document.getElementById('ai-name').value = '';
             }
             loadTeams();
+        }
+
+        async function triggerTsunami() {
+            if (!confirm('🌊 Trigger a tsunami? Random ships will be washed away!')) return;
+            const result = await apiCall('/api/quick/trigger_tsunami', 'POST', {});
+            showToast(result.message, result.success ? 'success' : 'error');
         }
 
         async function grantSpecial() {

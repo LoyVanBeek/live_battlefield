@@ -187,6 +187,7 @@ async def verify_team_or_gm(
 async def lifespan(app: FastAPI):
     stop_event = asyncio.Event()
     trickle_task = None
+    tsunami_task = None
     try:
         async with api_session_maker() as db:
             from app.models import get_or_create_admin
@@ -194,8 +195,10 @@ async def lifespan(app: FastAPI):
             logger.info("Admin panel available (configure ADMIN_TOKEN to set the admin URL).")
 
         from app.services.trickle import trickle_loop
+        from app.services.tsunami import tsunami_loop
         from app.services.game_scheduler import resume_scheduled_starts
         trickle_task = asyncio.create_task(trickle_loop(stop_event))
+        tsunami_task = asyncio.create_task(tsunami_loop(stop_event))
         await resume_scheduled_starts()
     except Exception:
         logger.warning("Could not check super admin token on startup")
@@ -207,6 +210,12 @@ async def lifespan(app: FastAPI):
         trickle_task.cancel()
         try:
             await trickle_task
+        except asyncio.CancelledError:
+            pass
+    if tsunami_task:
+        tsunami_task.cancel()
+        try:
+            await tsunami_task
         except asyncio.CancelledError:
             pass
     from app.services.game_scheduler import shutdown_schedules
@@ -2229,6 +2238,25 @@ async def quick_deactivate_team(
         "success": True,
         "message": f"🚫 {action.team_color} deactivated for {action.minutes} minutes!",
     }
+
+
+@app.post("/api/quick/trigger_tsunami")
+async def quick_trigger_tsunami(
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.game.specials import SpecialsConfig
+    from app.services.tsunami import trigger_tsunami_for_game
+    from app.models import get_game
+
+    game_uuid = uuid.UUID(game_id)
+    game = await get_game(db, game_uuid)
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    config = SpecialsConfig(game.specials if game.specials else None)
+    result = await trigger_tsunami_for_game(db, game, config)
+    return result
 
 
 @app.post("/api/quick/add_bombs")

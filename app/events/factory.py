@@ -23,6 +23,7 @@ from app.events.models import (
     ShieldActivatedEvent,
     DeactivateTeamEvent,
     ShipTraitAssignedEvent,
+    TsunamiEvent,
 )
 
 
@@ -98,6 +99,9 @@ def create_event(db_event: GameEvent) -> Optional[AnyEvent]:
 
     elif event_type_value == "trait_assigned":
         return ShipTraitAssignedEvent(**payload_dict)
+
+    elif event_type_value == "tsunami":
+        return TsunamiEvent(**payload_dict)
 
     return None
 

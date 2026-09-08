@@ -19,6 +19,7 @@ from app.events.models import (
     ShieldActivatedEvent,
     DeactivateTeamEvent,
     ShipTraitAssignedEvent,
+    TsunamiEvent,
 )
 from app.events.factory import create_event, create_events
 from app.events.saver import save_event

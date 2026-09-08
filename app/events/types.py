@@ -22,3 +22,4 @@ class EventType(str, Enum):
     SHIELD_ACTIVATED = "shield_activated"
     TEAM_DEACTIVATED = "team_deactivated"
     TRAIT_ASSIGNED = "trait_assigned"
+    TSUNAMI = "tsunami"

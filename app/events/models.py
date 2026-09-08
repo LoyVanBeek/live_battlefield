@@ -832,6 +832,51 @@ class ShipTraitAssignedEvent:
         )
 
 
+@dataclass
+class TsunamiEvent:
+    """A world event washing away ships; victims are chosen once at creation
+    (randomness baked into the payload) so replay stays deterministic."""
+
+    event_type: EventType = EventType.TSUNAMI
+    destroyed: list = field(default_factory=list)  # [{color, ship_type, cells}]
+    success: bool = False
+
+    def apply(self, state: "GameState") -> tuple["GameState", "TsunamiEvent"]:
+        from app.game.state import maybe_revive_zombie
+
+        for entry in self.destroyed:
+            color = entry.get("color")
+            if color not in state.teams:
+                continue
+            team = state.teams[color]
+            cells = [tuple(c) for c in entry.get("cells", [])]
+            ship = next(
+                (
+                    s
+                    for s in team.ships
+                    if s.ship_type == entry.get("ship_type") and s.cells == cells
+                ),
+                None,
+            )
+            if ship is None or ship.is_sunk():
+                continue
+            ship.hits = len(ship.cells)
+            maybe_revive_zombie(team, ship)
+
+        return replace(state, teams=state.teams), replace(self, success=True)
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.TSUNAMI,
+            payload={
+                "destroyed": self.destroyed,
+                "success": self.success,
+            },
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
 AnyEvent = Union[
     "TeamJoinedEvent",
     "TeamRenamedEvent",
@@ -853,4 +898,5 @@ AnyEvent = Union[
     "ShieldActivatedEvent",
     "DeactivateTeamEvent",
     "ShipTraitAssignedEvent",
+    "TsunamiEvent",
 ]

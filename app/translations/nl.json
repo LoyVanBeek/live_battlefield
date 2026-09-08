@@ -95,7 +95,8 @@
     "special_ammo_heading": "🎁 Speciale munitie",
     "special_select_team": "Selecteer team...",
     "special_select_type": "Selecteer special...",
-    "special_grant": "Toekennen"
+    "special_grant": "Toekennen",
+    "tsunami_trigger": "🌊 Tsunami"
   },
   "action": {
     "loading": "Acties laden...",

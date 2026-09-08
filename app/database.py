@@ -82,6 +82,7 @@ class EventType(str, enum.Enum):
     SHIELD_ACTIVATED = "shield_activated"
     TEAM_DEACTIVATED = "team_deactivated"
     TRAIT_ASSIGNED = "trait_assigned"
+    TSUNAMI = "tsunami"
 
 
 class GameEvent(Base):
@@ -168,6 +169,7 @@ class Game(Base):
     quiz_total_bombs: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     specials: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
+    last_tsunami_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class TeamToken(Base):

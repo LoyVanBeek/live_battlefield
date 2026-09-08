@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,7 +13,7 @@ from app.events.models import (
     TeamJoinedEvent,
 )
 from app.game.specials import SPECIALS, SpecialsConfig, filter_specials, grant_enabled_special_ammo
-from app.game.state import GameState
+from app.game.state import GameState, GameStatusField
 
 
 class TestFilterSpecials:
@@ -797,3 +799,142 @@ class TestAssignTrait:
         assert first.json()["success"] is True
         assert second.json()["success"] is False
         assert "already have" in second.json()["message"]
+
+
+class TestTsunami:
+    def _tsunami_state(self):
+        from app.game.state import GameState, TeamState, Ship
+
+        state = GameState()
+        state.status = GameStatusField.STARTED
+        red = TeamState(name="Red", color="red", chat_id=1, bombs=5)
+        red.ships.append(Ship(ship_type="patrol_boat", cells=[(0, 0), (0, 1)]))
+        blue = TeamState(name="Blue", color="blue", chat_id=2, bombs=1)
+        blue.ships.append(Ship(ship_type="battleship", cells=[(5, 5), (5, 6), (5, 7), (5, 8)]))
+        state.teams = {"red": red, "blue": blue}
+        return state
+
+    def test_pick_victims_returns_distinct_alive_ships(self):
+        from app.services.tsunami import pick_tsunami_victims
+
+        state = self._tsunami_state()
+        victims = pick_tsunami_victims(state, 5)
+        assert len(victims) == 2  # only 2 alive ships exist
+        keys = {(v["color"], v["ship_type"]) for v in victims}
+        assert len(keys) == len(victims)
+
+    def test_event_apply_sinks_ships(self):
+        from app.events.models import TsunamiEvent
+
+        state = self._tsunami_state()
+        event = TsunamiEvent(
+            destroyed=[
+                {"color": "red", "ship_type": "patrol_boat", "cells": [[0, 0], [0, 1]]},
+            ],
+            success=True,
+        )
+        state, applied = event.apply(state)
+        assert applied.success is True
+        assert state.teams["red"].ships[0].is_sunk() is True
+        assert state.teams["blue"].ships[0].is_sunk() is False
+
+    def test_tsunami_revives_zombie_ship(self):
+        from app.events.models import TsunamiEvent
+        from app.game.state import Ship
+
+        state = self._tsunami_state()
+        state.teams["red"].ships[0] = Ship(
+            ship_type="patrol_boat", cells=[(0, 0), (0, 1)], traits=["zombie"]
+        )
+        event = TsunamiEvent(
+            destroyed=[
+                {"color": "red", "ship_type": "patrol_boat", "cells": [[0, 0], [0, 1]]},
+            ],
+            success=True,
+        )
+        state, _ = event.apply(state)
+        ship = state.teams["red"].ships[0]
+        assert ship.revived is True
+        assert ship.is_sunk() is False
+
+    def test_trigger_endpoint_washes_ships_away(self):
+        from app.api.routes import app, verify_gm_token
+        from app.services.tsunami import trigger_tsunami_for_game
+        from app.game.specials import SpecialsConfig
+        from unittest.mock import AsyncMock
+
+        state = self._tsunami_state()
+        game = MagicMock()
+        game.id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+        game.status.value = "started"
+        game.specials = {"tsunami": {"enabled": True, "ships_destroyed": 1}}
+        game.last_tsunami_at = None
+
+        config = SpecialsConfig(game.specials)
+
+        with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+            with patch("app.services.tsunami.GameState") as mock_gs:
+                mock_gs.from_events.return_value = state
+                with patch("app.services.tsunami.save_event", new_callable=AsyncMock) as mock_save:
+                    import asyncio
+                    result = asyncio.run(trigger_tsunami_for_game(AsyncMock(), game, config))
+
+        assert result["success"] is True
+        assert "Tsunami" in result["message"]
+        assert len(result["destroyed"]) == 1
+        assert mock_save.await_count == 1
+        # exactly one ship sunk on the live state
+        sunk = [
+            (color, s.ship_type)
+            for color, team in state.teams.items()
+            for s in team.ships if s.is_sunk()
+        ]
+        assert len(sunk) == 1
+        assert game.last_tsunami_at is not None
+
+    def test_trigger_endpoint_disabled_rejected(self):
+        from app.services.tsunami import trigger_tsunami_for_game
+        from app.game.specials import SpecialsConfig
+        from unittest.mock import AsyncMock
+
+        game = MagicMock()
+        game.status.value = "started"
+        game.specials = {}
+        config = SpecialsConfig(game.specials)
+        import asyncio
+        result = asyncio.run(trigger_tsunami_for_game(AsyncMock(), game, config))
+        assert result["success"] is False
+        assert "not enabled" in result["message"]
+
+    def test_trigger_endpoint_requires_started_game(self):
+        from app.services.tsunami import trigger_tsunami_for_game
+        from app.game.specials import SpecialsConfig
+        from unittest.mock import AsyncMock
+
+        game = MagicMock()
+        game.status.value = "preparing"
+        game.specials = {"tsunami": {"enabled": True}}
+        config = SpecialsConfig(game.specials)
+        import asyncio
+        result = asyncio.run(trigger_tsunami_for_game(AsyncMock(), game, config))
+        assert result["success"] is False
+        assert "during a game" in result["message"]
+
+    def test_replay_deterministic(self):
+        from app.services.tsunami import pick_tsunami_victims, apply_tsunami_live
+        from app.events.models import TsunamiEvent
+
+        state = self._tsunami_state()
+        destroyed = pick_tsunami_victims(state, 2)
+        descriptions = apply_tsunami_live(state, destroyed)
+
+        replayed = self._tsunami_state()
+        event = TsunamiEvent(destroyed=destroyed, success=True)
+        replayed, _ = event.apply(replayed)
+
+        for team_color in ("red", "blue"):
+            for live_ship, replay_ship in zip(
+                state.teams[team_color].ships, replayed.teams[team_color].ships
+            ):
+                assert live_ship.is_sunk() == replay_ship.is_sunk()
+                assert live_ship.hits == replay_ship.hits

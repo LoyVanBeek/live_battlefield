@@ -25,6 +25,7 @@ from app.events.models import (
     ShieldActivatedEvent,
     DeactivateTeamEvent,
     ShipTraitAssignedEvent,
+    TsunamiEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ async def save_event(
         ShieldActivatedEvent,
         DeactivateTeamEvent,
         ShipTraitAssignedEvent,
+        TsunamiEvent,
     ],
     game_id: uuid.UUID,
 ) -> GameEvent:
