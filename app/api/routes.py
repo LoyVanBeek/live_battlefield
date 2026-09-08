@@ -1789,6 +1789,10 @@ async def execute_command(
             result["message"] = "Invalid question!"
             return result
 
+        if answer_row.question_id != question_row.id:
+            result["message"] = "Invalid answer!"
+            return result
+
         # Check this team hasn't already answered this question
         from app.models import get_game_events as get_ge
         all_events = await get_ge(db, game_uuid)

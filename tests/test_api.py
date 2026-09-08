@@ -1106,7 +1106,8 @@ class TestQuizMode:
                             # First execute returns the answer, second returns the question
                             mock_question = MagicMock()
                             mock_question.game_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
-                            mock_answer_row = MagicMock(bomb_value=5)
+                            mock_question.id = 1
+                            mock_answer_row = MagicMock(bomb_value=5, question_id=1)
                             mock_execute.side_effect = [
                                 MagicMock(scalar_one_or_none=MagicMock(return_value=mock_answer_row)),
                                 MagicMock(scalar_one_or_none=MagicMock(return_value=mock_question)),
@@ -1128,6 +1129,48 @@ class TestQuizMode:
             data = response.json()
             assert data["success"] is True
             assert data["message"] == "Correct! +5 bombs."
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_quiz_command_rejects_answer_from_other_question(self):
+        import uuid
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState, GameStatusField
+        from unittest.mock import AsyncMock
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {"role": "team", "game_id": "00000000-0000-0000-0000-000000000000", "color": "red"}
+        try:
+            state = GameState()
+            state.status = GameStatusField.STARTED
+            state.teams["red"] = create_mock_team(name="Red", color="red", bombs=0)
+
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", return_value=[]):
+                    with patch("app.models.get_game") as mock_get_game:
+                        mock_game = MagicMock()
+                        mock_game.paused_until = None
+                        mock_get_game.return_value = mock_game
+                        with patch("sqlalchemy.ext.asyncio.AsyncSession.execute") as mock_execute:
+                            mock_question = MagicMock()
+                            mock_question.game_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
+                            mock_question.id = 1
+                            mock_answer_row = MagicMock(bomb_value=5, question_id=999)
+                            mock_execute.side_effect = [
+                                MagicMock(scalar_one_or_none=MagicMock(return_value=mock_answer_row)),
+                                MagicMock(scalar_one_or_none=MagicMock(return_value=mock_question)),
+                            ]
+
+                            client = TestClient(app)
+                            response = client.post("/api/execute", json={
+                                "team_color": "red",
+                                "command": "quiz",
+                                "args": {"question_id": 1, "answer_id": 999}
+                            })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is False
+            assert data["message"] == "Invalid answer!"
         finally:
             app.dependency_overrides.clear()
 
