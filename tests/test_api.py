@@ -858,6 +858,50 @@ class TestBoardJson:
         finally:
             app.dependency_overrides.clear()
 
+    def test_replay_gif_requires_valid_team_token(self):
+        from app.api.routes import app
+
+        with patch("app.models.lookup_team_token", new_callable=AsyncMock, return_value=None):
+            client = TestClient(app)
+            response = client.get(
+                "/api/board/blue/replay.gif",
+                params={"team_token": "garbage", "game_id": "00000000-0000-0000-0000-000000000000"},
+            )
+
+        assert response.status_code == 401
+
+    def test_replay_gif_rejects_token_from_other_game(self):
+        from app.api.routes import app
+        from unittest.mock import AsyncMock
+
+        token_game = "00000000-0000-0000-0000-000000000001"
+        with patch("app.models.lookup_team_token", new_callable=AsyncMock, return_value=(token_game, "blue")):
+            with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]) as mock_events:
+                client = TestClient(app)
+                response = client.get(
+                    "/api/board/blue/replay.gif",
+                    params={"team_token": "tok", "game_id": "00000000-0000-0000-0000-000000000002"},
+                )
+
+        assert response.status_code == 401
+        mock_events.assert_not_called()
+
+    def test_replay_gif_valid_token_allowed(self):
+        from app.api.routes import app
+        from unittest.mock import AsyncMock
+
+        with patch("app.models.lookup_team_token", new_callable=AsyncMock, return_value=("00000000-0000-0000-0000-000000000001", "blue")):
+            with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                with patch("app.api.routes.create_public_board_gif", return_value=b"gif-bytes"):
+                    client = TestClient(app)
+                    response = client.get(
+                        "/api/board/blue/replay.gif",
+                        params={"team_token": "tok"},
+                    )
+
+        assert response.status_code == 200
+        assert response.content == b"gif-bytes"
+
     def test_api_board_json_team_not_found(self):
         from app.api.routes import app, get_api_db, verify_gm_token
         from app.game.state import GameState

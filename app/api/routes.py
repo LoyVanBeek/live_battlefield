@@ -1302,21 +1302,16 @@ async def get_board_replay_gif(
 ):
     from app.models import lookup_team_token, get_game_events
 
-    actual_game_id = game_id
-    if team_token:
-        result = await lookup_team_token(db, team_token)
-        if result:
-            actual_game_id, _ = result
-
-    if actual_game_id is None:
+    result = await lookup_team_token(db, team_token)
+    if not result:
         return Response("Unauthorized", status_code=401)
 
-    game_uuid = uuid.UUID(actual_game_id)
-    events = await get_game_events(db, game_uuid)
-    state = GameState.from_events(events)
+    actual_game_id, _ = result
 
-    if state.team_tokens.get(team_token) is None and game_id is None:
+    if game_id and game_id != actual_game_id:
         return Response("Unauthorized", status_code=401)
+
+    events = await get_game_events(db, uuid.UUID(actual_game_id))
 
     gif_bytes = create_public_board_gif(events, team_color)
     if not gif_bytes:
