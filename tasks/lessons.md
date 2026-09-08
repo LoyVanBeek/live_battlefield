@@ -49,3 +49,13 @@
 
 ## Stale E2E POM vs redesigned GM UI
 - `gm_page.py` `join_color_select` targets `#join-color`, which no longer exists (replaced by click-to-join per-color inputs). 7 E2E tests (`test_full_flow`, most of `test_gm_page`) fail on this pre-existing debt — reproduce on baseline, do not attribute to new changes
+
+## Piped commands mask exit codes in `&&` chains
+- `uv run pytest ... | tail -2 && git commit ...` commits on test failure — the chain sees `tail`'s exit status (0), not pytest's
+- Bit me once: committed a failing test and had to amend (commit `5128d4b` era, quiz scoping test)
+- Rule: run pytest as its own command and check the result before composing; when piping is unavoidable, use `set -o pipefail` or capture output to a file and echo the real exit status
+- Same applies to audit/lint tools whose summary lines hide a non-zero exit
+
+## piped audit output truncation hides remaining findings
+- `pip-audit | tail -N` showed only the last findings — fixing one package revealed the next (pillow → idna → mako → click needed FOUR rounds)
+- Rule: write audit output to a file and inspect it fully; trust the exit code, not the visible tail

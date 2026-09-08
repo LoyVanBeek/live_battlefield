@@ -207,3 +207,29 @@
 - Commits: `d916bd6` feat, `1eab14c` test.
 - Copy reflects actual mechanics (from ships.py/state.py/routes.py): join link, 10 ships on 10×10 no-touch fleet, real-world code redemption, 1 bomb per shot, last fleet standing wins.
 - Live: `/` en (5 bullets + tagline), `/?lang=nl` Dutch, `/?lang=fr`→en fallback, `Accept-Language: nl`→nl, `Referrer-Policy: no-referrer` intact, `lang` cookie set.
+
+---
+
+# Security hardening pass 3 + process debt (session)
+
+## Plan
+1. Address residual findings from security review passes: log secrets, SSE cap, limiter memory, docs exposure, docker hardening, e2e CI.
+2. Add dependency audit to CI (pip-audit via uv export).
+3. Record lessons, close out the session.
+
+## Tasks
+- [x] Security fixes: replay.gif auth, docs off unless DEV_MODE, game-name sanitize/escape, secrets out of logs, quiz answer game-scoping, create_locations guards
+- [x] Admin-only global DB reset (GM keeps per-game reset); team-color validation on join endpoints; auth-failure rate limiter (per-IP, fail-closed 429)
+- [x] Docker hardening: .dockerignore (root + Dockerfile.e2e variant), app HEALTHCHECK, restart policies, log rotation, pgAdmin env override
+- [x] E2E CI repair: Dockerfile.e2e.dockerignore (BuildKit per-Dockerfile ignore), playwright browsers as runtime user
+- [x] E2E POM migration to current GM/team UI — suite green 32/32 (was 7 failed baseline)
+- [x] Rate limiter bounded key storage; SSE per-game connection cap (429 at 30)
+- [x] Dependency audit: upgraded pillow 12.3.0, starlette 1.3.1, pydantic-settings 2.15.0, python-dotenv 1.2.3, idna 3.19, mako 1.4.1, click 8.5.0 → pip-audit clean
+- [x] CI: audit step after unit tests
+- [x] Lessons: piped exit codes, audit truncation
+
+## Review
+- Commits this session (security/deps/ci): 83757c9, d238949, 91f0e8c, 732bc29, 5128d4b, e0cf350, 291de32, bd0a7b4, b24121d, c6f92a4, 15deb19, a7c78c2 + deps/ci/docs commits.
+- 191 unit tests passing, ty clean (full project), e2e 32/32, pip-audit "No known vulnerabilities", app healthy in Docker.
+- Accepted residuals: tokens in uvicorn access logs (user decision), 54-bit human-typeable tokens, XFF trust on LAN, no CSP (deferred), trickle interval=0 GM self-DoS.
+- Open for user: set PGADMIN_PASSWORD + NGROK_AUTHTOKEN in .env; push feature/hosting (~19 commits ahead of origin).
