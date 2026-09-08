@@ -278,3 +278,13 @@
 - `3eec963` zombie ship: sinking a zombie ship reassembles it once (hits reset, its cells cleared of bombs/markers so it can be re-attacked; revived flag makes the next sinking final). Revival derived deterministically in resolve_bomb and BombThrownEvent.apply; announced in messages.
 - 291 unit tests passing, ty clean.
 - Next: Phase 5 (tsunami, turn-based mode) — tsunami first; turn-based only if wanted.
+
+---
+
+# Specials Phase 5 (feature/specials)
+
+## Review
+- `d600bfe` tsunami: TsunamiEvent (migration 015: event type + games.last_tsunami_at) with victims picked once at creation (deterministic replay), zombie revivals derived in apply; shared trigger_tsunami_for_game used by both the GM panel button (🌊, shown while the special is enabled and the game is started) and an automatic scheduler loop (tsunami interval_minutes, mirrors the trickle scheduler, wired into lifespan).
+- Turn-based mode deliberately deferred (user decision).
+- 298 unit tests passing, ty clean, template JS node-checked.
+- Specials roadmap complete: torpedo, anonymous bomb, area bomb, armor, deactivate, radar ship, zombie ship, tsunami, treasure chest, reward-per-sunk — all GM-toggleable via the specials settings, each with per-feature commits and coverage.
