@@ -1584,10 +1584,28 @@ async def execute_command(
 
         target_color = str(cmd.args.get("target"))
         coord = cmd.args.get("coordinate", "A1")
+        bomb_type = str(cmd.args.get("bomb_type", "normal"))
+
+        from app.game.specials import BOMB_TYPE_SPECIALS, SpecialsConfig
+
+        if bomb_type != "normal":
+            if bomb_type not in BOMB_TYPE_SPECIALS:
+                result["message"] = f"Unknown bomb type: {bomb_type}"
+                result["error_key"] = "special_unknown"
+                return result
+
+            game = await get_game(db, game_uuid)
+            config = SpecialsConfig(game.specials if game else None)
+            if not config.is_enabled(bomb_type):
+                result["message"] = f"{bomb_type} is not enabled for this game!"
+                result["error_key"] = "special_disabled"
+                return result
 
         from app.game.state import resolve_bomb
 
-        resolution = resolve_bomb(state, cmd.team_color, target_color, coord)
+        resolution = resolve_bomb(
+            state, cmd.team_color, target_color, coord, bomb_type=bomb_type
+        )
 
         if isinstance(resolution, BombRejected):
             result["message"] = resolution.message
@@ -1616,6 +1634,7 @@ async def execute_command(
             row=resolution.row,
             col=resolution.col,
             result=resolution.bomb_result.value,
+            bomb_type=bomb_type,
         )
         await save_event(db, event, game_uuid)
 

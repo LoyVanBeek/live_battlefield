@@ -150,3 +150,65 @@ class TestResolveBombRejections:
         assert resolution.error_key == "self_bomb"
         assert "cannot bomb yourself" in resolution.message.lower()
         assert state.teams["blue"].bombs == 3  # unchanged
+
+
+class TestTorpedoBomb:
+    def _torpedo_state(self) -> GameState:
+        state = _started_state()
+        state.teams["red"].special_ammo = {"torpedo": 1}
+        return state
+
+    def test_torpedo_sinks_full_ship_in_one_hit(self):
+        state = self._torpedo_state()
+        # Blue patrol boat has 2 cells; a single torpedo must sink it
+        resolution = resolve_bomb(state, "red", "blue", "A1", bomb_type="torpedo")
+
+        assert isinstance(resolution, BombApplied)
+        assert resolution.hit is True
+        assert resolution.sunk is True
+        assert state.teams["blue"].ships[0].is_sunk() is True
+
+    def test_torpedo_consumes_ammo_and_bomb(self):
+        state = self._torpedo_state()
+        resolution = resolve_bomb(state, "red", "blue", "A1", bomb_type="torpedo")
+
+        assert isinstance(resolution, BombApplied)
+        assert state.teams["red"].special_ammo["torpedo"] == 0
+        assert state.teams["red"].bombs == 4  # 5 - 1
+
+    def test_torpedo_without_ammo_rejected(self):
+        state = _started_state()
+        resolution = resolve_bomb(state, "red", "blue", "A1", bomb_type="torpedo")
+
+        assert isinstance(resolution, BombRejected)
+        assert resolution.error_key == "no_special_ammo"
+        assert state.teams["red"].bombs == 5  # unchanged
+
+    def test_torpedo_miss_still_consumes_ammo(self):
+        state = self._torpedo_state()
+        resolution = resolve_bomb(state, "red", "blue", "J10", bomb_type="torpedo")
+
+        assert isinstance(resolution, BombApplied)
+        assert resolution.hit is False
+        assert state.teams["red"].special_ammo["torpedo"] == 0
+
+    def test_torpedo_replay_matches_live_state(self):
+        from app.events.models import BombThrownEvent
+
+        state = self._torpedo_state()
+        live = _started_state()
+        live.teams["red"].special_ammo = {"torpedo": 1}
+
+        resolve_bomb(state, "red", "blue", "A1", bomb_type="torpedo")
+        replayed = GameState(teams=dict(live.teams))
+        event = BombThrownEvent(
+            attacker_color="red", target_color="blue", row=0, col=0,
+            bomb_type="torpedo",
+        )
+        replayed, updated = event.apply(replayed)
+
+        assert replayed.teams["blue"].ships[0].is_sunk()
+        assert replayed.teams["blue"].ships[0].hits == state.teams["blue"].ships[0].hits
+        assert replayed.teams["red"].special_ammo["torpedo"] == 0
+        assert replayed.teams["red"].bombs == 4
+        assert updated.ship_sunk is True

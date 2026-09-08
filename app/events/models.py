@@ -221,6 +221,7 @@ class BombThrownEvent:
     result: Optional[str] = None
     ship_type: Optional[str] = None
     ship_sunk: Optional[bool] = None
+    bomb_type: str = "normal"
 
     def apply(self, state: "GameState") -> tuple["GameState", "BombThrownEvent"]:
         from app.game.state import TeamState, BombResult
@@ -240,14 +241,18 @@ class BombThrownEvent:
             return state, self
 
         result, ship, new_target = target.receive_bomb(
-            self.row, self.col, attacker_color
+            self.row, self.col, attacker_color, self.bomb_type
         )
 
+        new_ammo = dict(attacker.special_ammo)
+        if self.bomb_type != "normal":
+            new_ammo[self.bomb_type] = max(0, new_ammo.get(self.bomb_type, 0) - 1)
+
         new_teams = dict(state.teams)
+        new_attacker = attacker.with_bombs(attacker.bombs - 1).with_special_ammo(new_ammo)
         if target_color == attacker_color:
-            new_teams[attacker_color] = new_target.with_bombs(attacker.bombs - 1)
+            new_teams[attacker_color] = new_target.with_bombs(new_attacker.bombs).with_special_ammo(new_ammo)
         else:
-            new_attacker = attacker.with_bombs(attacker.bombs - 1)
             new_teams[attacker_color] = new_attacker
             new_teams[target_color] = new_target
 
@@ -271,6 +276,7 @@ class BombThrownEvent:
                 "result": self.result,
                 "ship_type": self.ship_type,
                 "ship_sunk": self.ship_sunk,
+                "bomb_type": self.bomb_type,
             },
             player_id=player_id,
             game_id=game_id,

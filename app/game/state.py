@@ -149,7 +149,7 @@ class TeamState:
         return True
 
     def receive_bomb(
-        self, row: int, col: int, attacker_color: str
+        self, row: int, col: int, attacker_color: str, bomb_type: str = "normal"
     ) -> tuple[BombResult, Optional[Ship], "TeamState"]:
         cell = (row, col)
         if cell in self.bombed_cells:
@@ -159,7 +159,10 @@ class TeamState:
 
         ship = self.get_ship_at(row, col)
         if ship:
-            ship.hits += 1
+            if bomb_type == "torpedo":
+                ship.hits = len(ship.cells)  # a torpedo sinks in one hit
+            else:
+                ship.hits += 1
             self.public_board[row][col] = (attacker_color, True)
             return BombResult.HIT, ship, _copy_team(self)
 
@@ -366,6 +369,7 @@ def resolve_bomb(
     target_color: str,
     coord: str,
     allow_self_bomb: bool = True,
+    bomb_type: str = "normal",
 ) -> "BombApplied | BombRejected":
     """Validate and apply a bomb on the live state.
 
@@ -432,8 +436,22 @@ def resolve_bomb(
             coord=coord,
         )
 
+    if bomb_type != "normal" and team.special_ammo.get(bomb_type, 0) <= 0:
+        return BombRejected(
+            message=f"No {bomb_type} ammo left!",
+            error_key="no_special_ammo",
+            color=attacker_color,
+        )
+
     team.bombs -= 1
-    bomb_result, ship, new_target = target.receive_bomb(row, col, attacker_color)
+    if bomb_type != "normal":
+        team.special_ammo = {
+            **team.special_ammo,
+            bomb_type: team.special_ammo.get(bomb_type, 0) - 1,
+        }
+    bomb_result, ship, new_target = target.receive_bomb(
+        row, col, attacker_color, bomb_type
+    )
     state.teams[target_color] = new_target
 
     if bomb_result == BombResult.HIT:

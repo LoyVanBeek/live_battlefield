@@ -1447,3 +1447,75 @@ class TestSpecialsSettings:
         assert specials["area_bomb"]["enabled"] is True
         assert specials["area_bomb"]["size"] == 5
         assert specials["armor"]["enabled"] is False  # defaults merged in
+
+
+class TestSpecialBombValidation:
+    """Bomb command bomb_type validation against specials config + ammo."""
+
+    def _post_bomb(self, bomb_type=None, specials=None, ammo=0):
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState, GameStatusField, TeamState, Ship
+
+        state = GameState()
+        state.status = GameStatusField.STARTED
+        red = TeamState(name="Red", color="red", chat_id=1, bombs=5)
+        red.special_ammo = {"torpedo": ammo}
+        blue = TeamState(name="Blue", color="blue", chat_id=2, bombs=1)
+        blue.ships.append(Ship(ship_type="patrol_boat", cells=[(0, 0), (0, 1)]))
+        state.teams = {"red": red, "blue": blue}
+
+        game = MagicMock()
+        game.specials = specials or {}
+
+        args = {"target": "blue", "coordinate": "A1"}
+        if bomb_type:
+            args["bomb_type"] = bomb_type
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {
+            "role": "team", "game_id": "00000000-0000-0000-0000-000000000000", "color": "red"
+        }
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                        with patch("app.api.routes.save_event", new_callable=AsyncMock):
+                            with patch("app.api.routes._check_game_paused", new_callable=AsyncMock, return_value=None):
+                                with patch("app.models.get_player_by_color_in_game", new_callable=AsyncMock, return_value=None):
+                                    client = TestClient(app)
+                                    return client.post(
+                                        "/api/execute",
+                                        json={"team_color": "red", "command": "bomb", "args": args},
+                                    )
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_unknown_bomb_type_rejected(self):
+        response = self._post_bomb(bomb_type="nuke")
+        data = response.json()
+        assert data["success"] is False
+        assert data["error_key"] == "special_unknown"
+
+    def test_disabled_special_rejected(self):
+        response = self._post_bomb(bomb_type="torpedo", specials={"torpedo": {"enabled": False}})
+        data = response.json()
+        assert data["success"] is False
+        assert data["error_key"] == "special_disabled"
+
+    def test_bomb_without_ammo_rejected(self):
+        response = self._post_bomb(bomb_type="torpedo", specials={"torpedo": {"enabled": True}}, ammo=0)
+        data = response.json()
+        assert data["success"] is False
+        assert data["error_key"] == "no_special_ammo"
+
+    def test_torpedo_with_ammo_sinks(self):
+        # torpedo on the 2-cell patrol boat at A1 sinks it in one hit
+        response = self._post_bomb(
+            bomb_type="torpedo",
+            specials={"torpedo": {"enabled": True}},
+            ammo=1,
+        )
+        data = response.json()
+        assert data["success"] is True
+        assert data["hit"] is True
+        assert data["sunk"] is True
+        assert data["ship_type"] == "patrol_boat"
