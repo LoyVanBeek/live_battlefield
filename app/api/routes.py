@@ -35,7 +35,7 @@ from app.game.ships import (
     VALID_SHIP_TYPES,
     coordinate_to_string,
 )
-from app.game.state import BombResult, GameState, GameStatusField
+from app.game.state import BombResult, GameState, GameStatusField, BombRejected
 from app.events import (
     EventType,
     TeamJoinedEvent,
@@ -1574,77 +1574,40 @@ async def execute_command(
         if paused_check:
             return paused_check
 
-        if cmd.team_color not in state.teams:
-            result["message"] = f"Team {cmd.team_color} doesn't exist!"
-            result["error_key"] = "team_doesnt_exist"
-            result["color"] = cmd.team_color
-            return result
-
-        team = state.teams[cmd.team_color]
-        target_color = cmd.args.get("target")
+        target_color = str(cmd.args.get("target"))
         coord = cmd.args.get("coordinate", "A1")
 
-        if target_color not in state.teams:
-            result["message"] = f"Target team {target_color} doesn't exist!"
-            result["error_key"] = "target_doesnt_exist"
-            result["color"] = target_color
-            return result
+        from app.game.state import resolve_bomb
 
-        if team.bombs <= 0:
-            result["message"] = "No bombs left!"
-            result["error_key"] = "no_bombs"
-            return result
+        resolution = resolve_bomb(state, cmd.team_color, target_color, coord)
 
-        from app.game.ships import parse_coordinate
-
-        try:
-            row, col = parse_coordinate(coord)
-        except ValueError as e:
-            result["message"] = str(e)
-            result["error_key"] = "invalid_coord"
+        if isinstance(resolution, BombRejected):
+            result["message"] = resolution.message
+            result["error_key"] = resolution.error_key
+            if resolution.color:
+                result["color"] = resolution.color
+            if resolution.error_key == "already_bombed":
+                result["coord"] = resolution.coord
             return result
 
         target = state.teams[target_color]
-        if target.is_destroyed():
-            result["message"] = f"Team {target_color} is already destroyed!"
-            result["error_key"] = "target_destroyed"
-            result["color"] = target_color
-            return result
-
-        if (row, col) in target.bombed_cells:
-            result["message"] = f"{coord} already bombed!"
-            result["error_key"] = "already_bombed"
-            result["coord"] = coord
-            return result
-
-        team.bombs -= 1
-        bomb_result, ship, _ = target.receive_bomb(row, col, cmd.team_color)
-
-        if bomb_result == BombResult.HIT:
-            msg = f"HIT at {coord}!"
-            if ship and ship.is_sunk():
-                msg += f" Sunk {ship.ship_type}!"
-        else:
-            msg = f"MISS at {coord}!"
 
         result["success"] = True
-        result["hit"] = bomb_result == BombResult.HIT
-        result["sunk"] = bool(ship and ship.is_sunk())
-        if ship:
-            result["ship_type"] = ship.ship_type
-        result["target_name"] = target.name
-        result["coord"] = coord
-        result["bombs_left"] = team.bombs
-        result["message"] = (
-            f"Bombed {target_color} at {coord}: {msg}. Bombs left: {team.bombs}"
-        )
+        result["hit"] = resolution.hit
+        result["sunk"] = resolution.sunk
+        if resolution.ship:
+            result["ship_type"] = resolution.ship_type
+        result["target_name"] = resolution.target_name
+        result["coord"] = resolution.coord
+        result["bombs_left"] = resolution.bombs_left
+        result["message"] = resolution.message
 
         event = BombThrownEvent(
             attacker_color=cmd.team_color,
             target_color=target_color,
-            row=row,
-            col=col,
-            result=bomb_result.value,
+            row=resolution.row,
+            col=resolution.col,
+            result=resolution.bomb_result.value,
         )
         await save_event(db, event, game_uuid)
 
@@ -1655,16 +1618,16 @@ async def execute_command(
             if target_player and target_player.chat_id:
                 try:
                     bot = Bot(token=settings.telegram_bot_token)
-                    coord_display = coordinate_to_string(row, col)
+                    coord_display = coordinate_to_string(resolution.row, resolution.col)
 
-                    if bomb_result == BombResult.HIT:
-                        notify_msg = f"💥 HIT! {team.name} ({cmd.team_color}) bombed you at {coord_display}!"
-                        if ship:
-                            notify_msg += f" Your {ship.ship_type} was hit!"
-                            if ship.is_sunk():
+                    if resolution.bomb_result == BombResult.HIT:
+                        notify_msg = f"💥 HIT! {state.teams[cmd.team_color].name} ({cmd.team_color}) bombed you at {coord_display}!"
+                        if resolution.ship:
+                            notify_msg += f" Your {resolution.ship_type} was hit!"
+                            if resolution.ship.is_sunk():
                                 notify_msg = notify_msg.replace("was hit!", "was SUNK!")
                     else:
-                        notify_msg = f"💨 MISS! {team.name} ({cmd.team_color}) missed at {coord_display}!"
+                        notify_msg = f"💨 MISS! {state.teams[cmd.team_color].name} ({cmd.team_color}) missed at {coord_display}!"
 
                     await bot.send_message(
                         chat_id=target_player.chat_id, text=notify_msg
@@ -1672,7 +1635,7 @@ async def execute_command(
                 except Exception as e:
                     print(f"Failed to send notification: {e}")
 
-        winner = state.get_winner()
+        winner = resolution.winner
         if winner is not None and state.status == GameStatusField.STARTED:
             from app.database import GameStatus
 

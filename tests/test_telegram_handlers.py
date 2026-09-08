@@ -324,32 +324,37 @@ class TestHandleBomb:
             with patch(
                 "app.bot.handlers.get_game_events", new_callable=AsyncMock
             ) as mock_events:
-                with patch.object(
-                    GameState, "from_events", return_value=GameState()
-                ) as mock_from_events:
-                    mock_player = MagicMock()
-                    mock_player.color = "blue"
-                    mock_get_player.return_value = mock_player
+                with patch(
+                    "app.models.is_game_paused",
+                    new_callable=AsyncMock,
+                    return_value=(False, None),
+                ):
+                    with patch.object(
+                        GameState, "from_events", return_value=GameState()
+                    ) as mock_from_events:
+                        mock_player = MagicMock()
+                        mock_player.color = "blue"
+                        mock_get_player.return_value = mock_player
 
-                    from app.game.state import GameStatusField
+                        from app.game.state import GameStatusField
 
-                    mock_team = TeamState(
-                        name="Blue", color="blue", bombs=3, chat_id=123
-                    )
-                    mock_state = GameState()
-                    mock_state.status = GameStatusField.STARTED
-                    mock_state.teams = {"blue": mock_team}
-                    mock_from_events.return_value = mock_state
-                    mock_events.return_value = []
+                        mock_team = TeamState(
+                            name="Blue", color="blue", bombs=3, chat_id=123
+                        )
+                        mock_state = GameState()
+                        mock_state.status = GameStatusField.STARTED
+                        mock_state.teams = {"blue": mock_team}
+                        mock_from_events.return_value = mock_state
+                        mock_events.return_value = []
 
-                    result = await handle_bomb(
-                        mock_db, mock_update, mock_context, "blue", "A1"
-                    )
+                        result = await handle_bomb(
+                            mock_db, mock_update, mock_context, "blue", "A1"
+                        )
 
-                    assert (
-                        result is not None
-                        and "cannot bomb yourself" in result.lower()
-                    )
+                        assert (
+                            result is not None
+                            and "cannot bomb yourself" in result.lower()
+                        )
 
 
 class TestHandleCode:
@@ -696,3 +701,110 @@ class TestHandleOverview:
                         first_call = mock_send_photo.call_args_list[0]
                         caption = first_call.kwargs.get("caption", "")
                         assert "Sunk ships: 1" in caption
+
+
+class TestHandleBombPauseGate:
+    """The bot bomb path must respect the game pause."""
+
+    @pytest.mark.asyncio
+    async def test_paused_game_rejects_bomb(self):
+        import uuid
+        from app.bot.handlers import handle_bomb
+        from app.game.state import GameState, GameStatusField, TeamState
+
+        mock_update = create_mock_update(123)
+        mock_context = create_mock_context()
+        mock_db = MagicMock()
+
+        mock_player = MagicMock()
+        mock_player.color = "red"
+        mock_player.game_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+        mock_state = GameState()
+        mock_state.status = GameStatusField.STARTED
+        mock_state.teams = {
+            "red": TeamState(name="Red", color="red", chat_id=1, bombs=3),
+            "blue": TeamState(name="Blue", color="blue", chat_id=2, bombs=3),
+        }
+
+        with patch(
+            "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
+        ) as mock_get_player:
+            with patch(
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock, return_value=[]
+            ):
+                with patch(
+                    "app.models.is_game_paused",
+                    new_callable=AsyncMock,
+                    return_value=(True, None),
+                ):
+                    mock_get_player.return_value = mock_player
+                    with patch.object(GameState, "from_events", return_value=mock_state):
+                        result = await handle_bomb(
+                            mock_db, mock_update, mock_context, "blue", "A1"
+                        )
+
+        assert result is not None and "paused" in result.lower()
+
+
+class TestHandleBombWinnerPersistence:
+    """Sinking the last fleet must persist the game end (parity with REST)."""
+
+    @pytest.mark.asyncio
+    async def test_winner_persists_game_ended_event(self):
+        import uuid
+        from app.bot.handlers import handle_bomb
+        from app.game.state import GameState, GameStatusField, TeamState, Ship
+
+        mock_update = create_mock_update(123)
+        mock_context = create_mock_context()
+        mock_db = MagicMock()
+
+        mock_player = MagicMock()
+        mock_player.color = "red"
+        mock_player.game_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+        mock_state = GameState()
+        mock_state.status = GameStatusField.STARTED
+        red = TeamState(name="Red", color="red", chat_id=1, bombs=5)
+        red.ships.append(Ship(ship_type="patrol_boat", cells=[(9, 0)]))
+        blue = TeamState(name="Blue", color="blue", chat_id=2, bombs=1)
+        blue.ships.append(Ship(ship_type="patrol_boat", cells=[(0, 0)]))
+        mock_state.teams = {"red": red, "blue": blue}
+
+        with patch(
+            "app.bot.handlers.get_player_by_chat", new_callable=AsyncMock
+        ) as mock_get_player:
+            with patch(
+                "app.bot.handlers.get_game_events", new_callable=AsyncMock, return_value=[]
+            ):
+                with patch(
+                    "app.models.is_game_paused",
+                    new_callable=AsyncMock,
+                    return_value=(False, None),
+                ):
+                    with patch(
+                        "app.bot.handlers.get_player_by_color_in_game",
+                        new_callable=AsyncMock,
+                        return_value=None,
+                    ):
+                        with patch(
+                            "app.bot.handlers.save_event", new_callable=AsyncMock
+                        ) as mock_save:
+                            with patch(
+                                "app.models.update_game_status", new_callable=AsyncMock
+                            ) as mock_update_status:
+                                mock_get_player.return_value = mock_player
+                                with patch.object(
+                                    GameState, "from_events", return_value=mock_state
+                                ):
+                                    result = await handle_bomb(
+                                        mock_db, mock_update, mock_context, "blue", "A1"
+                                    )
+
+        assert mock_save.await_count == 2  # BombThrownEvent + GameEndedEvent
+        second_event = mock_save.await_args_list[1].args[1]
+        assert second_event.event_type.value == "game_ended"
+        assert second_event.winner == "Red"
+        mock_update_status.assert_awaited_once()
+        assert "WINS" in result

@@ -43,6 +43,7 @@ from app.events import (
     BombsAddedEvent,
     TeamResetEvent,
     GameStartedEvent,
+    GameEndedEvent,
     save_event,
 )
 from app.bot.helpers import send_message, send_photo
@@ -275,60 +276,45 @@ async def handle_bomb(
     if not player:
         return "You need to join the game first! Use /join <team name>"
 
-    try:
-        row, col = parse_coordinate(coord)
-    except ValueError as e:
-        return str(e)
-
     game_id = player.game_id
     events = await get_game_events(db, game_id)
     state = GameState.from_events(events)
 
-    if state.status.value != "started":
-        return "The game hasn't started yet! Waiting for all ships and locations to be ready."
+    from app.models import is_game_paused
 
-    if player.color not in state.teams:
-        return "You are not in the game yet!"
+    paused, _paused_until = await is_game_paused(db, game_id)
+    if paused:
+        return "The game is paused! Try again later."
+
+    from app.game.state import resolve_bomb, BombRejected
+
+    resolution = resolve_bomb(
+        state, player.color, target_color, coord, allow_self_bomb=False
+    )
+    if isinstance(resolution, BombRejected):
+        return _bot_bomb_error_message(resolution, target_color)
 
     attacker = state.teams[player.color]
-
-    if attacker.bombs <= 0:
-        return "You have no bombs! Visit locations to earn more."
-
-    if target_color not in state.teams:
-        return f"Team '{target_color}' does not exist!"
-
-    if target_color == player.color:
-        return "You cannot bomb yourself!"
-
-    target = state.teams[target_color]
-
-    if (row, col) in target.bombed_cells:
-        return f"That coordinate has already been bombed!"
-
-    attacker.bombs -= 1
-    result, ship, new_target = target.receive_bomb(row, col, player.color)
-    state.teams[target_color] = new_target
 
     event = BombThrownEvent(
         attacker_color=player.color,
         target_color=target_color,
-        row=row,
-        col=col,
-        result=result.value,
+        row=resolution.row,
+        col=resolution.col,
+        result=resolution.bomb_result.value,
     )
     await save_event(db, event, game_id=game_id)
 
     target_player = await get_player_by_color_in_game(db, game_id, target_color)
     if target_player and target_player.chat_id:
-        coord_str = coordinate_to_string(row, col)
-        if result == BombResult.HIT:
+        coord_str = coordinate_to_string(resolution.row, resolution.col)
+        if resolution.bomb_result == BombResult.HIT:
             hit_msg = (
                 f"💥 HIT! {attacker.name} ({attacker.color}) bombed you at {coord_str}!"
             )
-            if ship:
-                hit_msg += f" Your {ship.ship_type} was hit!"
-                if ship.is_sunk():
+            if resolution.ship:
+                hit_msg += f" Your {resolution.ship_type} was hit!"
+                if resolution.ship.is_sunk():
                     hit_msg = hit_msg.replace("was hit!", "was SUNK!")
         else:
             hit_msg = (
@@ -336,22 +322,47 @@ async def handle_bomb(
             )
         await send_message(context, target_player.chat_id, hit_msg)
 
-    if result == BombResult.HIT:
-        msg = f"You bombed {target.name} at {coord}! 💥 HIT!"
-        if ship:
-            msg += f" You hit their {ship.ship_type}!"
-            if ship.is_sunk():
+    if resolution.bomb_result == BombResult.HIT:
+        msg = f"You bombed {resolution.target_name} at {coord}! 💥 HIT!"
+        if resolution.ship:
+            msg += f" You hit their {resolution.ship_type}!"
+            if resolution.ship.is_sunk():
                 msg = msg.replace("You hit their", "You SUNK their")
     else:
-        msg = f"You bombed {target.name} at {coord}. 💨 MISS!"
+        msg = f"You bombed {resolution.target_name} at {coord}. 💨 MISS!"
 
     msg += f"\nBombs remaining: {attacker.bombs}"
 
-    winner = state.get_winner()
-    if winner:
+    winner = resolution.winner
+    if winner is not None and state.status == GameStatusField.STARTED:
+        from app.database import GameStatus
+        from app.models import update_game_status
+
+        end_event = GameEndedEvent(winner=winner.name)
+        await save_event(db, end_event, game_id=game_id)
+        await update_game_status(db, game_id, GameStatus.ENDED)
+        state.status = GameStatusField.ENDED
+
         msg += f"\n\n🏆 {winner.name} ({winner.color}) WINS!"
 
     return msg
+
+
+_BOT_BOMB_ERRORS = {
+    "game_not_started": "The game hasn't started yet! Waiting for all ships and locations to be ready.",
+    "team_doesnt_exist": "You are not in the game yet!",
+    "self_bomb": "You cannot bomb yourself!",
+    "no_bombs": "You have no bombs! Visit locations to earn more.",
+    "already_bombed": "That coordinate has already been bombed!",
+}
+
+
+def _bot_bomb_error_message(resolution, target_color: str) -> str:
+    if resolution.error_key in ("target_doesnt_exist", "target_destroyed"):
+        return f"Team '{target_color}' does not exist!" if resolution.error_key == "target_doesnt_exist" else f"Team '{target_color}' is already destroyed!"
+    if resolution.error_key == "invalid_coord":
+        return resolution.message
+    return _BOT_BOMB_ERRORS.get(resolution.error_key, resolution.message)
 
 
 async def handle_code(

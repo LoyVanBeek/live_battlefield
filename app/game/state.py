@@ -323,3 +323,132 @@ class GameState:
             "location_counter": self.location_counter,
             "status": self.status.value,
         }
+
+
+@dataclass
+class BombRejected:
+    """Bomb validation failure; carries user-facing message and error key."""
+
+    message: str
+    error_key: str
+    color: Optional[str] = None
+    coord: Optional[str] = None
+
+
+@dataclass
+class BombApplied:
+    """Successful bomb application on the live state."""
+
+    message: str
+    bomb_result: BombResult
+    ship: Optional[Ship]
+    target_name: str
+    coord: str
+    bombs_left: int
+    row: int
+    col: int
+    hit: bool
+    sunk: bool
+    ship_type: Optional[str]
+    winner: Optional[TeamState]
+
+
+def resolve_bomb(
+    state: GameState,
+    attacker_color: str,
+    target_color: str,
+    coord: str,
+    allow_self_bomb: bool = True,
+) -> "BombApplied | BombRejected":
+    """Validate and apply a bomb on the live state.
+
+    Pure helper shared by the REST API, the Telegram bot and (future) special
+    bomb types. Event persistence and notifications stay with the callers.
+    Returns BombRejected for validation failures, BombApplied on success.
+    """
+    if state.status != GameStatusField.STARTED:
+        return BombRejected(
+            message="Cannot bomb - game hasn't started yet!",
+            error_key="game_not_started",
+        )
+
+    if attacker_color not in state.teams:
+        return BombRejected(
+            message=f"Team {attacker_color} doesn't exist!",
+            error_key="team_doesnt_exist",
+            color=attacker_color,
+        )
+
+    if target_color not in state.teams:
+        return BombRejected(
+            message=f"Target team {target_color} doesn't exist!",
+            error_key="target_doesnt_exist",
+            color=target_color,
+        )
+
+    if not allow_self_bomb and target_color == attacker_color:
+        return BombRejected(
+            message="You cannot bomb yourself!",
+            error_key="self_bomb",
+            color=attacker_color,
+        )
+
+    team = state.teams[attacker_color]
+    if team.bombs <= 0:
+        return BombRejected(
+            message="No bombs left!",
+            error_key="no_bombs",
+            color=attacker_color,
+        )
+
+    try:
+        row, col = parse_coordinate(coord)
+    except ValueError as e:
+        return BombRejected(
+            message=str(e),
+            error_key="invalid_coord",
+        )
+
+    target = state.teams[target_color]
+    if target.is_destroyed():
+        return BombRejected(
+            message=f"Team {target_color} is already destroyed!",
+            error_key="target_destroyed",
+            color=target_color,
+        )
+
+    if (row, col) in target.bombed_cells:
+        return BombRejected(
+            message=f"{coord} already bombed!",
+            error_key="already_bombed",
+            color=target_color,
+            coord=coord,
+        )
+
+    team.bombs -= 1
+    bomb_result, ship, new_target = target.receive_bomb(row, col, attacker_color)
+    state.teams[target_color] = new_target
+
+    if bomb_result == BombResult.HIT:
+        msg = f"HIT at {coord}!"
+        if ship and ship.is_sunk():
+            msg += f" Sunk {ship.ship_type}!"
+    else:
+        msg = f"MISS at {coord}!"
+
+    bombs_left = state.teams[attacker_color].bombs
+
+    return BombApplied(
+        message=f"Bombed {target_color} at {coord}: {msg}. Bombs left: {bombs_left}",
+        bomb_result=bomb_result,
+        ship=ship,
+        target_name=target.name,
+        coord=coord,
+        bombs_left=bombs_left,
+        row=row,
+        col=col,
+        hit=bomb_result == BombResult.HIT,
+        sunk=bool(ship and ship.is_sunk()),
+        ship_type=ship.ship_type if ship else None,
+        winner=state.get_winner(),
+    )
