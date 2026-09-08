@@ -14,4 +14,6 @@ ENV PYTHONPATH=/app
 
 USER battleship
 
+RUN playwright install chromium
+
 CMD ["pytest", "tests_e2e/", "-v", "--video=on", "--output=test-results"]
