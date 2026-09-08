@@ -70,6 +70,7 @@ def _copy_team(
     private_board: Optional[list[list[bool]]] = None,
     public_board: Optional[list[list[Optional[tuple[str, bool]]]]] = None,
     bombed_cells: Optional[list[tuple[int, int]]] = None,
+    special_ammo: Optional[dict[str, int]] = None,
 ) -> "TeamState":
     return TeamState(
         name=name if name is not None else team.name,
@@ -85,6 +86,7 @@ def _copy_team(
         else team.private_board,
         public_board=public_board if public_board is not None else team.public_board,
         bombed_cells=bombed_cells if bombed_cells is not None else team.bombed_cells,
+        special_ammo=special_ammo if special_ammo is not None else team.special_ammo,
     )
 
 
@@ -103,6 +105,7 @@ class TeamState:
         default_factory=lambda: [[None] * 10 for _ in range(10)]
     )
     bombed_cells: list[tuple[int, int]] = field(default_factory=list)
+    special_ammo: dict[str, int] = field(default_factory=dict)
 
     def get_ship_at(self, row: int, col: int) -> Optional[Ship]:
         for ship in self.ships:
@@ -185,6 +188,9 @@ class TeamState:
     def with_bombs(self, bombs: int) -> "TeamState":
         return _copy_team(self, bombs=bombs)
 
+    def with_special_ammo(self, ammo: dict[str, int]) -> "TeamState":
+        return _copy_team(self, special_ammo=ammo)
+
     def with_reset(self) -> "TeamState":
         return _copy_team(
             self,
@@ -194,6 +200,7 @@ class TeamState:
             private_board=[[False] * 10 for _ in range(10)],
             public_board=[[None] * 10 for _ in range(10)],
             bombed_cells=[],
+            special_ammo={},
         )
 
 

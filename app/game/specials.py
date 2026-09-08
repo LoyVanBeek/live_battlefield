@@ -23,6 +23,33 @@ SPECIALS: dict[str, dict[str, Any]] = {
     "reward_per_sunk": {"enabled": False, "bombs": 2},
 }
 
+# Specials that are consumable bomb types (usable via the bomb command).
+BOMB_TYPE_SPECIALS: tuple[str, ...] = ("torpedo", "anonymous_bomb", "area_bomb")
+
+
+async def grant_enabled_special_ammo(
+    db, game_id, state, color: str, config: "SpecialsConfig"
+) -> list[str]:
+    """Grant +1 ammo of every enabled bomb-type special to a team.
+
+    Called after a team earns a reward (location code, quiz answer). Each
+    grant is persisted as its own SpecialAmmoGrantedEvent so replay stays
+    authoritative. Returns the granted bomb types.
+    """
+    from app.events.models import SpecialAmmoGrantedEvent
+    from app.events.saver import save_event
+
+    granted: list[str] = []
+    for bomb_type in BOMB_TYPE_SPECIALS:
+        if config.is_enabled(bomb_type):
+            await save_event(
+                db,
+                SpecialAmmoGrantedEvent(color=color, bomb_type=bomb_type, count=1),
+                game_id=game_id,
+            )
+            granted.append(bomb_type)
+    return granted
+
 
 def filter_specials(raw: Any) -> dict[str, dict[str, Any]]:
     """Keep only known special ids and their known setting keys."""

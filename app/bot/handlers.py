@@ -423,7 +423,20 @@ async def handle_code(
     )
     await save_event(db, event, game_id=game_id)
 
-    return f"Correct! +{bomb_value} bomb(s) added. You now have {team.bombs} bombs."
+    msg = f"Correct! +{bomb_value} bomb(s) added. You now have {team.bombs} bombs."
+
+    from app.models import get_game
+    from app.game.specials import SpecialsConfig, grant_enabled_special_ammo
+
+    game = await get_game(db, game_id)
+    granted = await grant_enabled_special_ammo(
+        db, game_id, state, player.color,
+        SpecialsConfig(game.specials if game else None),
+    )
+    if granted:
+        msg += f" Special ammo earned: {', '.join(granted)}."
+
+    return msg
 
 
 async def handle_overview(db, update: Update, context: ContextTypes.DEFAULT_TYPE):

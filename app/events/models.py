@@ -615,6 +615,41 @@ class GameResumedEvent:
         )
 
 
+@dataclass
+class SpecialAmmoGrantedEvent:
+    event_type: EventType = EventType.SPECIAL_AMMO_GRANTED
+    color: str = ""
+    bomb_type: str = ""
+    count: int = 1
+    success: bool = False
+
+    def apply(self, state: "GameState") -> tuple["GameState", "SpecialAmmoGrantedEvent"]:
+        color = self.color
+        if color not in state.teams:
+            return state, replace(self, success=False)
+
+        team = state.teams[color]
+        ammo = dict(team.special_ammo)
+        ammo[self.bomb_type] = ammo.get(self.bomb_type, 0) + self.count
+        new_team = team.with_special_ammo(ammo)
+
+        new_teams = {**state.teams, color: new_team}
+        return replace(state, teams=new_teams), replace(self, success=True)
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.SPECIAL_AMMO_GRANTED,
+            payload={
+                "color": self.color,
+                "bomb_type": self.bomb_type,
+                "count": self.count,
+                "success": self.success,
+            },
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
 AnyEvent = Union[
     "TeamJoinedEvent",
     "TeamRenamedEvent",
@@ -632,4 +667,5 @@ AnyEvent = Union[
     "GamePausedEvent",
     "GameResumedEvent",
     "QuizAnsweredEvent",
+    "SpecialAmmoGrantedEvent",
 ]

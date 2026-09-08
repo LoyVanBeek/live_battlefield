@@ -246,6 +246,12 @@ class ExecuteCommand(BaseModel):
     args: dict[str, Any]
 
 
+class GrantSpecialAction(BaseModel):
+    team_color: str
+    bomb_type: str
+    count: int = 1
+
+
 class QuickAction(BaseModel):
     team_color: str
     count: Optional[int] = 1
@@ -1720,6 +1726,15 @@ async def execute_command(
         result["success"] = True
         result["message"] = f"Code redeemed! +{capped} bombs. Total: {team.bombs}/{max_bombs}"
 
+        from app.game.specials import SpecialsConfig, grant_enabled_special_ammo
+
+        granted = await grant_enabled_special_ammo(
+            db, game_uuid, state, cmd.team_color,
+            SpecialsConfig(game.specials if game else None),
+        )
+        if granted:
+            result["message"] += f" Special ammo earned: {', '.join(granted)}."
+
     elif cmd.command == "quiz":
         if state.status != GameStatusField.STARTED:
             result["message"] = "Cannot answer quiz - game hasn't started yet!"
@@ -1779,6 +1794,15 @@ async def execute_command(
         if bombs_earned > 0:
             result["success"] = True
             result["message"] = f"Correct! +{bombs_earned} bombs."
+
+            from app.game.specials import SpecialsConfig, grant_enabled_special_ammo
+
+            granted = await grant_enabled_special_ammo(
+                db, game_uuid, state, cmd.team_color,
+                SpecialsConfig(game_obj.specials if game_obj else None),
+            )
+            if granted:
+                result["message"] += f" Special ammo earned: {', '.join(granted)}."
         else:
             result["success"] = False
             result["message"] = "Wrong answer! No bombs earned."
@@ -1825,6 +1849,52 @@ async def execute_command(
         await save_event(db, event, game_uuid)
 
     return result
+
+
+@app.post("/api/quick/grant_special")
+async def grant_special(
+    action: GrantSpecialAction,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.game.specials import BOMB_TYPE_SPECIALS, SpecialsConfig
+    from app.events.models import SpecialAmmoGrantedEvent
+    from app.models import get_game, get_game_events
+
+    game_uuid = uuid.UUID(game_id)
+
+    if action.bomb_type not in BOMB_TYPE_SPECIALS:
+        return {"success": False, "message": f"Unknown bomb type: {action.bomb_type}"}
+
+    if action.count <= 0:
+        return {"success": False, "message": "Count must be at least 1!"}
+
+    game = await get_game(db, game_uuid)
+    config = SpecialsConfig(game.specials if game else None)
+    if not config.is_enabled(action.bomb_type):
+        return {"success": False, "message": f"{action.bomb_type} is not enabled for this game."}
+
+    events = await get_game_events(db, game_uuid)
+    state = GameState.from_events(events)
+
+    if action.team_color not in state.teams:
+        return {"success": False, "message": f"Team {action.team_color} doesn't exist!"}
+
+    from app.events.saver import save_event
+
+    for _ in range(action.count):
+        await save_event(
+            db,
+            SpecialAmmoGrantedEvent(color=action.team_color, bomb_type=action.bomb_type, count=1),
+            game_id=game_uuid,
+        )
+
+    ammo = state.teams[action.team_color].special_ammo.get(action.bomb_type, 0) + action.count
+    return {
+        "success": True,
+        "message": f"Granted {action.count} {action.bomb_type} to {action.team_color}.",
+        "ammo": ammo,
+    }
 
 
 @app.post("/api/quick/add_bombs")

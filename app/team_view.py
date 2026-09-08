@@ -47,6 +47,8 @@ def _serialize_team(team, private: bool, status: str = "preparing") -> dict:
         "sp": sum(team.placed_ship_types.values()) if status == "preparing" else sum(SHIP_COUNTS.values()) - len(team.get_sunk_ships()),
         "sk": len(team.get_sunk_ships()),
     }
+    if private:
+        result["sa"] = dict(team.special_ammo)
     result["g"] = _serialize_grid(team, include_ships=private)
     if status == "preparing":
         result["pt"] = dict(team.placed_ship_types)

@@ -15,6 +15,7 @@ from app.events.models import (
     GamePausedEvent,
     GameResumedEvent,
     QuizAnsweredEvent,
+    SpecialAmmoGrantedEvent,
 )
 from app.events.factory import create_event, create_events
 from app.events.saver import save_event

@@ -78,6 +78,7 @@ class EventType(str, enum.Enum):
     GAME_PAUSED = "game_paused"
     GAME_RESUMED = "game_resumed"
     QUIZ_ANSWERED = "quiz_answered"
+    SPECIAL_AMMO_GRANTED = "special_ammo_granted"
 
 
 class GameEvent(Base):
