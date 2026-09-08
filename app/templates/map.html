@@ -197,28 +197,41 @@
                 if (locData.locations && locData.locations.length > 0) {
                     const bounds = [];
                     
-                    locData.locations.forEach(loc => {
-                        bounds.push([loc.latitude, loc.longitude]);
-                        
-                        const marker = L.marker([loc.latitude, loc.longitude], {
-                            title: 'Location #' + loc.number
-                        }).addTo(map);
-                        
-                        const popupContent = `
-                            <div class="popup-content">
-                                <h3>📍 Location #${loc.number}</h3>
-                                <p>💣 Worth: ${loc.bomb_value || 1} bombs</p>
-                                <p>${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}</p>
-                                <a href="https://maps.google.com/?q=${loc.latitude},${loc.longitude}" target="_blank">
-                                    Open in Google Maps
-                                </a>
-                            </div>
-                        `;
-                        
-                        marker.bindPopup(popupContent, {
-                            className: 'custom-popup'
-                        });
+                locData.locations.forEach(loc => {
+                    bounds.push([loc.latitude, loc.longitude]);
+
+                    const isChest = loc.kind === 'chest';
+                    const marker = L.marker([loc.latitude, loc.longitude], {
+                        title: (isChest ? '🎁 Treasure chest #' : '📍 Location #') + loc.number,
+                        icon: isChest ? L.divIcon({ className: 'chest-marker', html: '<div style="font-size:26px;text-align:center;line-height:30px;">🎁</div>', iconSize: [30, 30] }) : undefined
+                    }).addTo(map);
+
+                    let chestLine = '';
+                    if (isChest) {
+                        const parts = [];
+                        const r = loc.reward || {};
+                        if ((r.bombs || 0) > 0) parts.push('💣 ' + r.bombs + ' bombs');
+                        if ((r.torpedo || 0) > 0) parts.push(' torpedo ×' + r.torpedo);
+                        if ((r.anonymous_bomb || 0) > 0) parts.push(' anon ×' + r.anonymous_bomb);
+                        if ((r.area_bomb || 0) > 0) parts.push(' area ×' + r.area_bomb);
+                        chestLine = '<p>🎁 Contains: ' + (parts.length ? parts.join(', ') : 'nothing') + '</p>';
+                    }
+
+                    const popupContent = `
+                        <div class="popup-content">
+                            <h3>${isChest ? '🎁 Treasure chest' : '📍 Location'} #${loc.number}</h3>
+                            ${isChest ? chestLine : '<p>💣 Worth: ' + (loc.bomb_value || 1) + ' bombs</p>'}
+                            <p>${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}</p>
+                            <a href="https://maps.google.com/?q=${loc.latitude},${loc.longitude}" target="_blank">
+                                Open in Google Maps
+                            </a>
+                        </div>
+                    `;
+
+                    marker.bindPopup(popupContent, {
+                        className: 'custom-popup'
                     });
+                });
                     
                     if (bounds.length > 0) {
                         map.fitBounds(bounds, { padding: [50, 50] });

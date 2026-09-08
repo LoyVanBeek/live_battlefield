@@ -352,6 +352,8 @@ class LocationAddedEvent:
     longitude: float = 0.0
     code: str = ""
     bomb_value: int = 1
+    kind: Optional[str] = None
+    reward: Optional[dict] = None
 
     def apply(self, state: "GameState") -> tuple["GameState", "LocationAddedEvent"]:
         number = self.number
@@ -380,6 +382,8 @@ class LocationAddedEvent:
                 "longitude": self.longitude,
                 "code": self.code,
                 "bomb_value": self.bomb_value,
+                "kind": self.kind,
+                "reward": self.reward or {},
             },
             player_id=player_id,
             game_id=game_id,

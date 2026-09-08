@@ -84,10 +84,12 @@ async def get_next_location_number(db: AsyncSession, game_id: uuid.UUID) -> int:
 
 
 async def create_location(
-    db: AsyncSession, game_id: uuid.UUID, number: int, latitude: float, longitude: float, code: str
+    db: AsyncSession, game_id: uuid.UUID, number: int, latitude: float, longitude: float, code: str,
+    kind: str | None = None, reward: dict | None = None,
 ) -> Location:
     location = Location(
-        game_id=game_id, number=number, latitude=latitude, longitude=longitude, code=code
+        game_id=game_id, number=number, latitude=latitude, longitude=longitude, code=code,
+        kind=kind, reward=reward or {},
     )
     db.add(location)
     await db.commit()

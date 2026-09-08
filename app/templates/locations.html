@@ -197,6 +197,22 @@
                     <label style="font-size: 12px; color: #888;">Radius (km)</label>
                     <input type="number" id="loc-radius" placeholder="Radius" value="2" step="0.1" style="width: 100px;">
                 </div>
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <label style="font-size: 12px; color: #888;">Type</label>
+                    <select id="loc-kind" onchange="document.getElementById('chest-reward').style.display=this.value==='chest'?'flex':'none'" style="width: 110px;">
+                        <option value="quest">Quest</option>
+                        <option value="chest">🎁 Treasure chest</option>
+                    </select>
+                </div>
+                <div id="chest-reward" style="display: none; flex-direction: column; gap: 5px;">
+                    <label style="font-size: 12px; color: #888;">Reward contents</label>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                        <label style="font-size: 11px; color: #888;">💣 <input type="number" id="reward-bombs" value="0" min="0" max="20" style="width: 50px;"></label>
+                        <label style="font-size: 11px; color: #888;">Torpedo <input type="number" id="reward-torpedo" value="0" min="0" max="10" style="width: 50px;"></label>
+                        <label style="font-size: 11px; color: #888;">Anon <input type="number" id="reward-anonymous_bomb" value="0" min="0" max="10" style="width: 50px;"></label>
+                        <label style="font-size: 11px; color: #888;">Area <input type="number" id="reward-area_bomb" value="0" min="0" max="10" style="width: 50px;"></label>
+                    </div>
+                </div>
                 <button class="btn-add" onclick="addLocations()" style="margin-top: 18px;">Add</button>
                 <button class="btn-remove" onclick="clearAllLocations()" style="margin-top: 18px; height: fit-content;">🗑️ Clear All</button>
             </div>
@@ -263,6 +279,16 @@
             'orange': 'color-orange',
             'yellow': 'color-yellow'
         };
+
+        function chestRewardText(reward) {
+            const parts = [];
+            const r = reward || {};
+            if ((r.bombs || 0) > 0) parts.push('💣 ' + r.bombs);
+            if ((r.torpedo || 0) > 0) parts.push(' torpedo ×' + r.torpedo);
+            if ((r.anonymous_bomb || 0) > 0) parts.push(' anon ×' + r.anonymous_bomb);
+            if ((r.area_bomb || 0) > 0) parts.push(' area ×' + r.area_bomb);
+            return parts.length ? '🎁 ' + parts.join(', ') : '🎁 empty';
+        }
 
         function getColorClass(color) {
             return colorClasses[color] || 'color-red';
@@ -353,10 +379,10 @@
                     
                     return `
                         <tr>
-                            <td>${loc.number}</td>
+                            <td>${loc.number}${loc.kind === 'chest' ? ' <span title="Treasure chest">🎁</span>' : ''}</td>
                             <td class="code">${loc.code}</td>
                             <td class="coords">${lat}, ${lon}</td>
-                            <td>💣 ${loc.bomb_value || 1}</td>
+                            <td>${loc.kind === 'chest' ? chestRewardText(loc.reward) : '💣 ' + (loc.bomb_value || 1)}</td>
                             <td class="visited">${visitedHtml}</td>
                             <td><a href="${mapUrl}" target="_blank" class="map-link">Map</a></td>
                             <td><button class="btn-remove" onclick="removeLocation(${loc.number}, '${loc.code}')">Remove</button></td>
@@ -400,16 +426,29 @@
             const lon = parseFloat(document.getElementById('loc-lon').value);
             const count = parseInt(document.getElementById('loc-count').value) || 1;
             const radius = parseFloat(document.getElementById('loc-radius').value) || 2;
-            
+            const kind = document.getElementById('loc-kind').value;
+
+            let reward = {};
+            if (kind === 'chest') {
+                ['bombs', 'torpedo', 'anonymous_bomb', 'area_bomb'].forEach(key => {
+                    const value = parseInt(document.getElementById('reward-' + key).value) || 0;
+                    if (value > 0) reward[key] = value;
+                });
+                if (Object.keys(reward).length === 0) {
+                    alert('A treasure chest needs a reward (bombs and/or special ammo)!');
+                    return;
+                }
+            }
+
             if (isNaN(lat) || isNaN(lon)) {
                 alert('Please enter latitude and longitude!');
                 return;
             }
-            
+
             if (!confirm(`Create ${count} location(s) at (${lat}, ${lon})?`)) {
                 return;
             }
-            
+
             try {
                 const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getGmToken()), {
                     method: 'POST',
@@ -418,7 +457,9 @@
                         latitude: lat,
                         longitude: lon,
                         count: count,
-                        radius_km: radius
+                        radius_km: radius,
+                        kind: kind,
+                        reward: reward
                     })
                 });
                 const data = await resp.json();

@@ -434,7 +434,14 @@ async def handle_code(
             ):
                 return "You've already visited this location!"
 
-    bomb_value = location.bomb_value
+    is_chest = getattr(location, "kind", None) == "chest"
+    if is_chest:
+        from app.game.specials import filter_chest_reward
+
+        reward = filter_chest_reward(getattr(location, "reward", None) or {})
+        bomb_value = int(reward.get("bombs", 0))
+    else:
+        bomb_value = location.bomb_value
     team.bombs += bomb_value
 
     event = CodeRedeemedEvent(
@@ -445,6 +452,25 @@ async def handle_code(
         bombs_earned=bomb_value,
     )
     await save_event(db, event, game_id=game_id)
+
+    if is_chest:
+        from app.events.models import SpecialAmmoGrantedEvent
+
+        parts = []
+        if bomb_value > 0:
+            parts.append(f"+{bomb_value} bombs")
+        for special_id, amount in reward.items():
+            if special_id == "bombs" or amount <= 0:
+                continue
+            await save_event(
+                db,
+                SpecialAmmoGrantedEvent(color=player.color, bomb_type=special_id, count=amount),
+                game_id=game_id,
+            )
+            parts.append(f"+{amount} {special_id.replace('_', ' ')}")
+        return "🎁 Treasure chest opened!" + (
+            " " + ", ".join(parts) + "." if parts else " It was empty..."
+        )
 
     msg = f"Correct! +{bomb_value} bomb(s) added. You now have {team.bombs} bombs."
 

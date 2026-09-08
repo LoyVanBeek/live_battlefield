@@ -1,7 +1,9 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.events.models import SpecialAmmoGrantedEvent, TeamJoinedEvent
+from fastapi.testclient import TestClient
+
+from app.events.models import LocationAddedEvent, SpecialAmmoGrantedEvent, TeamJoinedEvent
 from app.game.specials import SPECIALS, SpecialsConfig, filter_specials, grant_enabled_special_ammo
 from app.game.state import GameState
 
@@ -141,3 +143,268 @@ class TestGrantEnabledSpecialAmmo:
 
         assert granted == []
         mock_save.assert_not_awaited()
+
+
+class TestFilterChestReward:
+    def test_keeps_known_keys_within_bounds(self):
+        from app.game.specials import filter_chest_reward
+
+        reward = filter_chest_reward({"bombs": 3, "torpedo": 2, "area_bomb": 99})
+        assert reward == {"bombs": 3, "torpedo": 2, "area_bomb": 10}
+
+    def test_drops_unknown_keys_and_bad_values(self):
+        from app.game.specials import filter_chest_reward
+
+        reward = filter_chest_reward({"bombs": 1, "warp": 5, "torpedo": -2, "armor": True})
+        assert reward == {"bombs": 1}
+
+    def test_drops_non_dict(self):
+        from app.game.specials import filter_chest_reward
+
+        assert filter_chest_reward(None) == {}
+        assert filter_chest_reward("bombs") == {}
+
+
+class TestChestRedemption:
+    def test_location_added_event_carries_kind_and_reward(self):
+        state = GameState()
+        event = LocationAddedEvent(
+            number=1, latitude=52.0, longitude=4.0, code="ABC123",
+            bomb_value=0, kind="chest", reward={"bombs": 2, "torpedo": 1},
+        )
+        state, _ = event.apply(state)
+        assert state.location_codes[1] == "ABC123"
+
+        game_event = event.to_game_event(game_id=None)
+        assert game_event.payload["kind"] == "chest"
+        assert game_event.payload["reward"] == {"bombs": 2, "torpedo": 1}
+
+    def test_redeem_chest_grants_contents(self):
+        import uuid
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState, GameStatusField, TeamState
+        from unittest.mock import AsyncMock
+
+        state = GameState()
+        state.status = GameStatusField.STARTED
+        red = TeamState(name="Red", color="red", chat_id=1, bombs=0)
+        state.teams = {"red": red}
+        state.location_codes[1] = "ABC123"
+
+        chest = MagicMock()
+        chest.kind = "chest"
+        chest.reward = {"bombs": 2, "torpedo": 1, "anonymous_bomb": 1}
+        chest.bomb_value = 0
+
+        game = MagicMock()
+        game.specials = {}
+        game.max_bombs = 100
+        game.paused_until = None
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {
+            "role": "team", "game_id": "00000000-0000-0000-0000-000000000000", "color": "red"
+        }
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_location_by_number", new_callable=AsyncMock, return_value=chest):
+                        with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                            with patch("app.api.routes.save_event", new_callable=AsyncMock) as mock_save:
+                                client = TestClient(app)
+                                response = client.post(
+                                    "/api/execute",
+                                    json={
+                                        "team_color": "red", "command": "code",
+                                        "args": {"location_number": 1, "code": "ABC123"},
+                                    },
+                                )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "Treasure chest opened" in data["message"]
+        assert "+2 bombs" in data["message"]
+        assert "+1 torpedo" in data["message"]
+
+        # code event + 2 special ammo grants (torpedo + anonymous)
+        assert mock_save.await_count == 3
+        events_saved = [call.args[1] for call in mock_save.await_args_list]
+        code_events = [e for e in events_saved if e.event_type.value == "code_redeemed"]
+        ammo_events = [e for e in events_saved if e.event_type.value == "special_ammo_granted"]
+        assert len(code_events) == 1
+        assert code_events[0].bombs_earned == 2
+        assert {e.bomb_type for e in ammo_events} == {"torpedo", "anonymous_bomb"}
+        assert state.teams["red"].bombs == 2
+
+    def test_redeem_quest_location_still_grants_normal_bombs(self):
+        from app.api.routes import app, verify_team_or_gm
+        from app.game.state import GameState, GameStatusField, TeamState
+        from unittest.mock import AsyncMock
+
+        state = GameState()
+        state.status = GameStatusField.STARTED
+        red = TeamState(name="Red", color="red", chat_id=1, bombs=0)
+        state.teams = {"red": red}
+        state.location_codes[1] = "ABC123"
+
+        quest = MagicMock()
+        quest.kind = None
+        quest.reward = {}
+        quest.bomb_value = 4
+
+        game = MagicMock()
+        game.specials = {}
+        game.max_bombs = 100
+        game.paused_until = None
+
+        app.dependency_overrides[verify_team_or_gm] = lambda: {
+            "role": "team", "game_id": "00000000-0000-0000-0000-000000000000", "color": "red"
+        }
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_location_by_number", new_callable=AsyncMock, return_value=quest):
+                        with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                            with patch("app.api.routes.save_event", new_callable=AsyncMock) as mock_save:
+                                client = TestClient(app)
+                                response = client.post(
+                                    "/api/execute",
+                                    json={
+                                        "team_color": "red", "command": "code",
+                                        "args": {"location_number": 1, "code": "ABC123"},
+                                    },
+                                )
+        finally:
+            app.dependency_overrides.clear()
+
+        data = response.json()
+        assert data["success"] is True
+        assert "Code redeemed" in data["message"]
+        assert mock_save.await_count == 1  # only the code event, no ammo grants
+        assert state.teams["red"].bombs == 4
+
+
+class TestCreateChest:
+    @staticmethod
+    def _mock_db():
+        class MockSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            def add(self, *args, **kwargs):
+                pass
+
+            async def commit(self):
+                pass
+
+            async def execute(self, *args, **kwargs):
+                return MagicMock()
+
+        return MockSession()
+
+    def test_create_chest_requires_enabled_special(self):
+        from app.api.routes import app, verify_gm_token, get_api_db
+        from app.game.state import GameState
+        from unittest.mock import AsyncMock
+
+        game = MagicMock()
+        game.specials = {}
+
+        async def override_get_db():
+            yield self._mock_db()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=GameState()):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_game_locations", new_callable=AsyncMock, return_value=[]):
+                        with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                            client = TestClient(app)
+                            response = client.post(
+                                "/api/quick/create_locations",
+                                json={"latitude": 52.0, "longitude": 4.0, "count": 1, "kind": "chest", "reward": {"bombs": 2}},
+                            )
+        finally:
+            app.dependency_overrides.clear()
+
+        data = response.json()
+        assert data["success"] is False
+        assert "not enabled" in data["message"]
+
+    def test_create_chest_with_reward(self):
+        from app.api.routes import app, verify_gm_token, get_api_db
+        from app.game.state import GameState
+        from unittest.mock import AsyncMock
+
+        game = MagicMock()
+        game.specials = {"treasure_chest": {"enabled": True}}
+
+        async def override_get_db():
+            yield self._mock_db()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=GameState()):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_game_locations", new_callable=AsyncMock, return_value=[]):
+                        with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                            with patch("app.models.get_next_location_number", new_callable=AsyncMock, return_value=1):
+                                with patch("app.api.routes.save_event", new_callable=AsyncMock) as mock_save:
+                                    client = TestClient(app)
+                                    response = client.post(
+                                        "/api/quick/create_locations",
+                                        json={
+                                            "latitude": 52.0, "longitude": 4.0, "count": 1,
+                                            "kind": "chest", "reward": {"bombs": 2, "torpedo": 1},
+                                        },
+                                    )
+        finally:
+            app.dependency_overrides.clear()
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["locations"][0]["kind"] == "chest"
+        assert data["locations"][0]["reward"] == {"bombs": 2, "torpedo": 1}
+        saved_event = mock_save.await_args_list[0].args[1]
+        assert saved_event.kind == "chest"
+        assert saved_event.reward == {"bombs": 2, "torpedo": 1}
+
+    def test_create_chest_without_reward_rejected(self):
+        from app.api.routes import app, verify_gm_token, get_api_db
+        from app.game.state import GameState
+        from unittest.mock import AsyncMock
+
+        game = MagicMock()
+        game.specials = {"treasure_chest": {"enabled": True}}
+
+        async def override_get_db():
+            yield self._mock_db()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.api.routes.GameState.from_events", return_value=GameState()):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[]):
+                    with patch("app.models.get_game_locations", new_callable=AsyncMock, return_value=[]):
+                        with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                            client = TestClient(app)
+                            response = client.post(
+                                "/api/quick/create_locations",
+                                json={"latitude": 52.0, "longitude": 4.0, "count": 1, "kind": "chest", "reward": {}},
+                            )
+        finally:
+            app.dependency_overrides.clear()
+
+        data = response.json()
+        assert data["success"] is False
+        assert "needs a reward" in data["message"]

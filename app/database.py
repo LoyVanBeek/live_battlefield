@@ -103,6 +103,8 @@ class Location(Base):
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
     code: Mapped[str] = mapped_column(String(20), nullable=False)
     bomb_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    reward: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 

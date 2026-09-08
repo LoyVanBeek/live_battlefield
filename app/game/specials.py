@@ -19,9 +19,32 @@ SPECIALS: dict[str, dict[str, Any]] = {
     "radar_ship": {"enabled": False, "radius_cells": 3},
     "zombie_ship": {"enabled": False},
     "tsunami": {"enabled": False, "interval_minutes": 45, "ships_destroyed": 1},
-    "treasure_chest": {"enabled": False, "bomb_value": 5},
+    "treasure_chest": {"enabled": False},
     "reward_per_sunk": {"enabled": False, "bombs": 2},
 }
+
+# Valid keys for a treasure chest's reward (per-chest contents set by the GM).
+# Specials that are consumable bomb types (usable via the bomb command).
+BOMB_TYPE_SPECIALS: tuple[str, ...] = ("torpedo", "anonymous_bomb", "area_bomb")
+
+# Valid keys for a treasure chest's reward (per-chest contents set by the GM).
+CHEST_REWARD_KEYS: tuple[str, ...] = ("bombs",) + BOMB_TYPE_SPECIALS
+CHEST_MAX_BOMBS = 20
+CHEST_MAX_SPECIALS = 10
+
+
+def filter_chest_reward(raw: Any) -> dict[str, int]:
+    """Sanitize a chest reward dict: known keys only, sane bounds."""
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, int] = {}
+    for key, value in raw.items():
+        if key not in CHEST_REWARD_KEYS or not isinstance(value, int) or isinstance(value, bool):
+            continue
+        if value <= 0:
+            continue
+        result[key] = min(value, CHEST_MAX_BOMBS if key == "bombs" else CHEST_MAX_SPECIALS)
+    return result
 
 # Specials that are consumable bomb types (usable via the bomb command).
 BOMB_TYPE_SPECIALS: tuple[str, ...] = ("torpedo", "anonymous_bomb", "area_bomb")

@@ -374,6 +374,8 @@ async def get_public_locations(
                 "latitude": loc.latitude,
                 "longitude": loc.longitude,
                 "bomb_value": loc.bomb_value,
+                "kind": getattr(loc, "kind", None),
+                "reward": getattr(loc, "reward", None) or {},
             }
             for loc in locations
         ]
@@ -995,6 +997,8 @@ async def get_admin_locations(
                 "latitude": loc.latitude,
                 "longitude": loc.longitude,
                 "bomb_value": loc.bomb_value,
+                "kind": getattr(loc, "kind", None),
+                "reward": getattr(loc, "reward", None) or {},
                 "visited_by": location_visits.get(loc.number, []),
             }
         )
@@ -1781,24 +1785,53 @@ async def execute_command(
         from app.models import get_location_by_number, get_game
 
         location = await get_location_by_number(db, game_uuid, location_num)
-        bomb_value = location.bomb_value if location else 1
-
         game = await get_game(db, game_uuid)
         max_bombs = game.max_bombs if game else 100
+
+        is_chest = location is not None and getattr(location, "kind", None) == "chest"
+        if is_chest:
+            from app.game.specials import filter_chest_reward
+
+            reward = filter_chest_reward(getattr(location, "reward", None) or {})
+            bomb_value = int(reward.get("bombs", 0))
+        else:
+            bomb_value = location.bomb_value if location else 1
+
         capped = min(bomb_value, max_bombs - team.bombs)
         capped = max(capped, 0)
         team.bombs += capped
-        result["success"] = True
-        result["message"] = f"Code redeemed! +{capped} bombs. Total: {team.bombs}/{max_bombs}"
 
-        from app.game.specials import SpecialsConfig, grant_enabled_special_ammo
+        if is_chest:
+            from app.events.models import SpecialAmmoGrantedEvent
 
-        granted = await grant_enabled_special_ammo(
-            db, game_uuid, state, cmd.team_color,
-            SpecialsConfig(game.specials if game else None),
-        )
-        if granted:
-            result["message"] += f" Special ammo earned: {', '.join(granted)}."
+            parts = []
+            if capped > 0:
+                parts.append(f"+{capped} bombs")
+            for special_id, amount in reward.items():
+                if special_id == "bombs" or amount <= 0:
+                    continue
+                await save_event(
+                    db,
+                    SpecialAmmoGrantedEvent(color=cmd.team_color, bomb_type=special_id, count=amount),
+                    game_uuid,
+                )
+                parts.append(f"+{amount} {special_id.replace('_', ' ')}")
+            result["success"] = True
+            result["message"] = "🎁 Treasure chest opened!" + (
+                " " + ", ".join(parts) + "." if parts else " It was empty..."
+            )
+        else:
+            result["success"] = True
+            result["message"] = f"Code redeemed! +{capped} bombs. Total: {team.bombs}/{max_bombs}"
+
+            from app.game.specials import SpecialsConfig, grant_enabled_special_ammo
+
+            granted = await grant_enabled_special_ammo(
+                db, game_uuid, state, cmd.team_color,
+                SpecialsConfig(game.specials if game else None),
+            )
+            if granted:
+                result["message"] += f" Special ammo earned: {', '.join(granted)}."
 
     elif cmd.command == "quiz":
         if state.status != GameStatusField.STARTED:
@@ -2286,6 +2319,8 @@ class CreateLocations(BaseModel):
     longitude: float
     count: int = 10
     radius_km: float = 2.0
+    kind: str = "quest"
+    reward: dict[str, int] = {}
 
 
 @app.post("/api/quick/create_locations")
@@ -2328,6 +2363,24 @@ async def create_locations(
             "message": f"Cannot create {action.count} locations! Would exceed 100 maximum. Current: {len(existing_locations)}",
         }
 
+    from app.game.specials import SpecialsConfig, filter_chest_reward
+
+    kind: str | None = None
+    reward: dict[str, int] = {}
+    if action.kind == "chest":
+        from app.models import get_game
+
+        game = await get_game(db, game_uuid)
+        config = SpecialsConfig(game.specials if game else None)
+        if not config.is_enabled("treasure_chest"):
+            return {"success": False, "message": "Treasure chests are not enabled for this game!"}
+        kind = "chest"
+        reward = filter_chest_reward(action.reward)
+        if not reward:
+            return {"success": False, "message": "A treasure chest needs a reward (bombs and/or special ammo)!"}
+    elif action.kind != "quest":
+        return {"success": False, "message": f"Unknown location kind: {action.kind}"}
+
     total_after = len(existing_locations) + action.count
     default_bomb_value = max(1, 100 // total_after)
 
@@ -2362,6 +2415,8 @@ async def create_locations(
             longitude=lon,
             code=code,
             bomb_value=default_bomb_value,
+            kind=kind,
+            reward=reward,
         )
         db.add(new_location)
 
@@ -2371,10 +2426,12 @@ async def create_locations(
             longitude=lon,
             code=code,
             bomb_value=default_bomb_value,
+            kind=kind,
+            reward=reward,
         )
         await save_event(db, event, game_uuid)
 
-        created.append({"number": number, "code": code, "lat": lat, "lon": lon})
+        created.append({"number": number, "code": code, "lat": lat, "lon": lon, "kind": kind, "reward": reward})
 
     await db.commit()
 
