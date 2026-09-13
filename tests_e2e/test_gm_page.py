@@ -104,3 +104,20 @@ def test_start_button_disabled_without_preconditions(page, app_url, seeded_game)
 
     gm.join_team("red", "Lone Team")
     assert gm.start_button().is_disabled()
+
+
+def test_special_grant_widget_lists_team_colors(page, app_url, seeded_game_with_teams):
+    """Regression: #special-team option values must be team colors, not array indices."""
+    gm = GameMasterPage(page, seeded_game_with_teams["gm_token"], app_url)
+    gm.goto()
+
+    select = page.locator("#special-team")
+    select.wait_for(state="attached")
+    page.wait_for_function(
+        "document.querySelectorAll('#special-team option').length > 0", timeout=10000
+    )
+
+    values = select.locator("option").evaluate_all("els => els.map(e => e.value)")
+    assert values, "special-team select should list the joined teams"
+    for value in values:
+        assert value in ("red", "blue"), f"option value {value!r} is not a team color"

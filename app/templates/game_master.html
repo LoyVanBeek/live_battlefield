@@ -923,10 +923,10 @@
             if (specialTeamSelect) {
                 const prevTeam = specialTeamSelect.value;
                 specialTeamSelect.innerHTML = '';
-                Object.keys(state.teams || {}).forEach(color => {
+                (state.teams || []).forEach(team => {
                     const opt = document.createElement('option');
-                    opt.value = color;
-                    opt.textContent = (state.teams[color].name || color) + ' (' + color + ')';
+                    opt.value = team.color;
+                    opt.textContent = (team.name || team.color) + ' (' + team.color + ')';
                     specialTeamSelect.appendChild(opt);
                 });
                 if (prevTeam && specialTeamSelect.querySelector('option[value="' + prevTeam + '"]')) {
