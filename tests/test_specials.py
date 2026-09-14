@@ -965,3 +965,20 @@ class TestSpecialTranslations:
         assert "anonymous" in en["specials"]["anonymous_bomb"].lower()
         assert "shield" in en["specials"]["armor"].lower() or "no damage" in en["specials"]["armor"].lower()
         assert "again" in en["specials"]["zombie_ship"].lower()
+
+
+class TestSettingsReadFiltering:
+    """Unknown keys in stored overrides never surface in the merged view."""
+
+    def test_settings_drops_unknown_override_keys(self):
+        config = SpecialsConfig(
+            {"tsunami": {"enabled": True, "interval_minutes": 45}}
+        )
+        merged = config.settings("tsunami")
+        assert merged["enabled"] is True
+        assert merged["ships_destroyed"] == 1
+        assert "interval_minutes" not in merged
+
+    def test_to_dict_hides_unknown_override_keys(self):
+        config = SpecialsConfig({"torpedo": {"enabled": True, "legacy": 9}})
+        assert "legacy" not in config.to_dict()["torpedo"]

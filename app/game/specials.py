@@ -106,11 +106,17 @@ class SpecialsConfig:
         self._overrides = overrides or {}
 
     def settings(self, special_id: str) -> dict[str, Any]:
-        """Merged defaults + overrides for one special ({} if unknown id)."""
+        """Merged defaults + overrides for one special ({} if unknown id).
+
+        Unknown override keys are dropped, so stale stored settings (e.g. a
+        removed option) can never surface in views.
+        """
         if special_id not in SPECIALS:
             return {}
         merged = dict(SPECIALS[special_id])
-        merged.update(self._overrides.get(special_id, {}))
+        for key, value in self._overrides.get(special_id, {}).items():
+            if key in merged:
+                merged[key] = value
         return merged
 
     def is_enabled(self, special_id: str) -> bool:
