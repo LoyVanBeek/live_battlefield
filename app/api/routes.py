@@ -2698,6 +2698,46 @@ async def create_locations(
     }
 
 
+class UpdateLocationReward(BaseModel):
+    location_number: int
+    reward: dict[str, int] = {}
+
+
+@app.post("/api/quick/update_location_reward")
+async def update_location_reward(
+    data: UpdateLocationReward,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.game.specials import filter_chest_reward
+    from app.models import get_location_by_number
+
+    game_uuid = uuid.UUID(game_id)
+    location = await get_location_by_number(db, game_uuid, data.location_number)
+    if not location:
+        return {"success": False, "message": f"Location {data.location_number} doesn't exist!"}
+
+    if getattr(location, "kind", None) != "chest":
+        return {"success": False, "message": "Only treasure chests have editable rewards!"}
+
+    reward = filter_chest_reward(data.reward)
+    location.reward = reward
+    await db.commit()
+
+    parts = []
+    if (reward.get("bombs") or 0) > 0:
+        parts.append(f"+{reward['bombs']} bombs")
+    for special_id, amount in reward.items():
+        if special_id != "bombs" and amount > 0:
+            parts.append(f"+{amount} {special_id.replace('_', ' ')}")
+    summary = ", ".join(parts) if parts else "empty"
+    return {
+        "success": True,
+        "reward": reward,
+        "message": f"Chest #{data.location_number} reward updated: {summary}.",
+    }
+
+
 class RemoveLocation(BaseModel):
     location_number: int
 

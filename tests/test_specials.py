@@ -982,3 +982,89 @@ class TestSettingsReadFiltering:
     def test_to_dict_hides_unknown_override_keys(self):
         config = SpecialsConfig({"torpedo": {"enabled": True, "legacy": 9}})
         assert "legacy" not in config.to_dict()["torpedo"]
+
+
+class TestUpdateLocationReward:
+    def _mock_db(self):
+        class MockSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def commit(self):
+                pass
+
+        return MockSession()
+
+    def _post(self, location, reward):
+        from app.api.routes import app, verify_gm_token, get_api_db
+        from unittest.mock import AsyncMock
+
+        game_uuid = "00000000-0000-0000-0000-000000000000"
+
+        async def override_get_db():
+            yield self._mock_db()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: game_uuid
+        try:
+            with patch("app.models.get_location_by_number", new_callable=AsyncMock, return_value=location):
+                client = TestClient(app)
+                return client.post(
+                    "/api/quick/update_location_reward",
+                    json={"location_number": 1, "reward": reward},
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_update_chest_reward_success(self):
+        from unittest.mock import MagicMock
+
+        chest = MagicMock()
+        chest.kind = "chest"
+        chest.reward = {"bombs": 1}
+
+        response = self._post(chest, {"bombs": 3, "torpedo": 2, "warp": 9})
+        data = response.json()
+
+        assert data["success"] is True
+        assert data["reward"] == {"bombs": 3, "torpedo": 2}  # unknown key dropped
+        assert chest.reward == {"bombs": 3, "torpedo": 2}
+        assert "+3 bombs" in data["message"]
+        assert "+2 torpedo" in data["message"]
+
+    def test_update_allows_empty_reward(self):
+        from unittest.mock import MagicMock
+
+        chest = MagicMock()
+        chest.kind = "chest"
+        chest.reward = {"bombs": 2}
+
+        response = self._post(chest, {})
+        data = response.json()
+        assert data["success"] is True
+        assert data["reward"] == {}
+        assert "empty" in data["message"]
+
+    def test_update_quest_location_rejected(self):
+        from unittest.mock import MagicMock
+
+        quest = MagicMock()
+        quest.kind = None
+        quest.reward = {}
+
+        response = self._post(quest, {"bombs": 5})
+        data = response.json()
+        assert data["success"] is False
+        assert "Only treasure chests" in data["message"]
+
+    def test_update_unknown_location_rejected(self):
+        from unittest.mock import AsyncMock
+
+        with patch("app.models.get_location_by_number", new_callable=AsyncMock, return_value=None):
+            response = self._post(None, {"bombs": 5})
+        data = response.json()
+        assert data["success"] is False
+        assert "doesn't exist" in data["message"]

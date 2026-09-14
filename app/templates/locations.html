@@ -280,6 +280,64 @@
             'yellow': 'color-yellow'
         };
 
+        let locationsCache = [];
+        let editingChestNumber = null;
+
+        function rewardInputValue(key) {
+            const loc = locationsCache.find(l => l.number === editingChestNumber);
+            return ((loc && loc.reward) || {})[key] || 0;
+        }
+
+        function renderChestEditRow(loc, lat, lon, mapUrl) {
+            const keys = ['bombs', 'torpedo', 'anonymous_bomb', 'area_bomb'];
+            const labels = { bombs: '💣', torpedo: 'Torpedo', anonymous_bomb: 'Anon', area_bomb: 'Area' };
+            const inputs = keys.map(key =>
+                `<label style="font-size:11px;color:#888;">${labels[key]} <input type="number" id="edit-reward-${key}" value="${rewardInputValue(key)}" min="0" max="${key === 'bombs' ? 20 : 10}" style="width:50px;"></label>`
+            ).join(' ');
+            return `
+                <tr>
+                    <td>${loc.number} <span title="Treasure chest">🎁</span></td>
+                    <td class="code">${loc.code}</td>
+                    <td class="coords">${lat}, ${lon}</td>
+                    <td>${inputs}</td>
+                    <td class="visited">${loc.visited_by && loc.visited_by.length ? '—' : '<span class="not-visited">(none yet)</span>'}</td>
+                    <td><a href="${mapUrl}" target="_blank" class="map-link">Map</a></td>
+                    <td>
+                        <button class="btn-add" onclick="saveChestReward(${loc.number})">Save</button>
+                        <button class="btn-remove" onclick="cancelChestEdit()">Cancel</button>
+                    </td>
+                </tr>`;
+        }
+
+        function editChestReward(number) {
+            editingChestNumber = number;
+            loadLocations();
+        }
+
+        function cancelChestEdit() {
+            editingChestNumber = null;
+            loadLocations();
+        }
+
+        async function saveChestReward(number) {
+            const reward = {};
+            ['bombs', 'torpedo', 'anonymous_bomb', 'area_bomb'].forEach(key => {
+                const value = parseInt(document.getElementById('edit-reward-' + key).value) || 0;
+                if (value > 0) reward[key] = value;
+            });
+            const resp = await fetch('/api/quick/update_location_reward?gm_token=' + encodeURIComponent(getGmToken()), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ location_number: number, reward: reward })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                editingChestNumber = null;
+                loadLocations();
+            }
+            alert(data.message || 'Error updating chest');
+        }
+
         function chestRewardText(reward) {
             const parts = [];
             const r = reward || {};
@@ -362,11 +420,16 @@
                 }
                 
                 updateMarkers(data.locations);
+                locationsCache = data.locations;
                 
                 tbody.innerHTML = data.locations.map(loc => {
                     const lat = loc.latitude.toFixed(4);
                     const lon = loc.longitude.toFixed(4);
                     const mapUrl = `https://maps.google.com/?q=${loc.latitude},${loc.longitude}`;
+
+                    if (editingChestNumber === loc.number) {
+                        return renderChestEditRow(loc, lat, lon, mapUrl);
+                    }
                     
                     let visitedHtml;
                     if (loc.visited_by && loc.visited_by.length > 0) {
@@ -385,7 +448,7 @@
                             <td>${loc.kind === 'chest' ? chestRewardText(loc.reward) : '💣 ' + (loc.bomb_value || 1)}</td>
                             <td class="visited">${visitedHtml}</td>
                             <td><a href="${mapUrl}" target="_blank" class="map-link">Map</a></td>
-                            <td><button class="btn-remove" onclick="removeLocation(${loc.number}, '${loc.code}')">Remove</button></td>
+                            <td>${loc.kind === 'chest' ? `<button class="btn-add" onclick="editChestReward(${loc.number})">✏️</button> ` : ''}<button class="btn-remove" onclick="removeLocation(${loc.number}, '${loc.code}')">Remove</button></td>
                         </tr>
                     `;
                 }).join('');
