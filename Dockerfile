@@ -7,8 +7,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 battleship
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir uv && uv pip install --system -r pyproject.toml
+COPY pyproject.toml uv.lock .
+RUN pip install --no-cache-dir uv \
+    && uv export --frozen --no-dev --no-emit-project -o requirements.txt \
+    && uv pip install --system -r requirements.txt \
+    && rm requirements.txt
 
 COPY app app/
 COPY migrations migrations/

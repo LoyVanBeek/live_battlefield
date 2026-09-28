@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     @property
     def database_url_sync(self) -> str:
-        return self.database_url.replace("+asyncpg", "")
+        return self.database_url.replace("+asyncpg", "+psycopg2")
 
 
 settings = Settings()
