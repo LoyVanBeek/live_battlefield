@@ -64,6 +64,15 @@ class LocationsPage:
     def bombs_cell(self, number: int):
         return self.page.locator(f"#cell-bombs-{number}")
 
+    def coords_cell(self, number: int):
+        return self.page.locator(f"#cell-coords-{number}")
+
+    def map_hint(self):
+        return self.page.locator("#map-hint")
+
+    def marker_count(self):
+        return self.page.locator(".leaflet-marker-icon").count()
+
     def edit_input(self):
         return self.page.locator("#cell-edit-input")
 
@@ -106,9 +115,9 @@ class LocationsPage:
         self.page.wait_for_load_state("networkidle")
 
     def start_cell_edit(self, field: str, number: int):
-        """Click a Code ('code') or Bombs ('bombs') cell to open the inline editor."""
-        cell = (
-            self.code_cell(number) if field == "code" else self.bombs_cell(number)
+        """Click a Code/Bombs/Coords cell to open the inline editor."""
+        cell = self.code_cell(number) if field == "code" else (
+            self.coords_cell(number) if field == "coords" else self.bombs_cell(number)
         )
         cell.click()
         self.edit_input().wait_for(state="visible")

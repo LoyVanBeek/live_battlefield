@@ -2832,6 +2832,56 @@ async def set_location_bombs(
     }
 
 
+class SetLocationCoords(BaseModel):
+    location_number: int
+    latitude: float
+    longitude: float
+
+
+@app.post("/api/quick/set_location_coords")
+async def set_location_coords(
+    data: SetLocationCoords,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_location_by_number
+
+    game_uuid = uuid.UUID(game_id)
+    location = await get_location_by_number(db, game_uuid, data.location_number)
+    if not location:
+        return {
+            "success": False,
+            "message": f"Location {data.location_number} does not exist!",
+        }
+
+    if not (math.isfinite(data.latitude) and math.isfinite(data.longitude)):
+        return {"success": False, "message": "Invalid coordinates!"}
+    if not -90 <= data.latitude <= 90:
+        return {
+            "success": False,
+            "message": "Latitude must be between -90 and 90!",
+        }
+    if not -180 <= data.longitude <= 180:
+        return {
+            "success": False,
+            "message": "Longitude must be between -180 and 180!",
+        }
+
+    # Coordinates are display-only (map, links, bot listing) — not part of
+    # GameState, so a plain DB update is all that's needed.
+    location.latitude = data.latitude
+    location.longitude = data.longitude
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": (
+            f"Location {data.location_number} moved to "
+            f"{data.latitude:.4f}, {data.longitude:.4f}!"
+        ),
+    }
+
+
 class SetLocationCode(BaseModel):
     location_number: int
     code: str

@@ -284,7 +284,7 @@
         <!-- Map -->
         <div style="position: relative;">
             <div id="map"></div>
-            <div style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(22, 33, 62, 0.9); padding: 8px 12px; border-radius: 4px; font-size: 12px; color: #00d9ff;">
+            <div id="map-hint" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(22, 33, 62, 0.9); padding: 8px 12px; border-radius: 4px; font-size: 12px; color: #00d9ff;">
                 🖱️ Click map to add location
             </div>
         </div>
@@ -356,6 +356,17 @@
             }).addTo(map);
             
             map.on('click', async function(e) {
+                // While the coords editor is open, a map click picks the new
+                // position instead of creating a location.
+                if (editing && editing.field === 'coords') {
+                    const input = document.getElementById('cell-edit-input');
+                    if (input) {
+                        input.value = `${e.latlng.lat}, ${e.latlng.lng}`;
+                        input.focus();
+                    }
+                    return;
+                }
+
                 try {
                     const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getGmToken()), {
                         method: 'POST',
@@ -375,6 +386,7 @@
                             .addTo(map)
                             .bindPopup(`<b>Location ${loc.number}</b><br>Code: ${loc.code}<br>Bombs: ${loc.bomb_value || 1}`)
                             .openPopup();
+                        marker.locationNumber = loc.number;
                         markers.push(marker);
                         loadLocations();
                     } else {
@@ -395,6 +407,7 @@
                 const marker = L.marker([loc.latitude, loc.longitude])
                     .addTo(map)
                     .bindPopup(`<b>Location ${loc.number}</b><br>Code: ${loc.code}<br>Bombs: ${loc.bomb_value || 1}`);
+                marker.locationNumber = loc.number;
                 markers.push(marker);
             });
         }
@@ -440,7 +453,7 @@
                         <tr>
                             <td>${loc.number}</td>
                             <td class="code"><span class="editable-cell" id="cell-code-${loc.number}" onclick="startEdit(${loc.number}, 'code')">${loc.code}</span></td>
-                            <td class="coords">${lat}, ${lon}</td>
+                            <td class="coords"><span class="editable-cell" id="cell-coords-${loc.number}" data-lat="${loc.latitude}" data-lon="${loc.longitude}" onclick="startEdit(${loc.number}, 'coords')">${lat}, ${lon}</span></td>
                             <td><span class="editable-cell" id="cell-bombs-${loc.number}" onclick="startEdit(${loc.number}, 'bombs')">💣 ${loc.bomb_value || 1}</span></td>
                             <td class="visited">${visitedHtml}</td>
                             <td><a href="${mapUrl}" target="_blank" class="map-link">Map</a></td>
@@ -468,6 +481,14 @@
             showToast._t = setTimeout(() => { toast.className = ''; }, 3000);
         }
 
+        function updateMapHint() {
+            const hint = document.getElementById('map-hint');
+            if (!hint) return;
+            hint.textContent = (editing && editing.field === 'coords')
+                ? '🖱️ Click map or drag marker to set position'
+                : '🖱️ Click map to add location';
+        }
+
         function cancelEdit() {
             if (!editing) return;
             const { number, field, originalHtml } = editing;
@@ -476,7 +497,9 @@
                 cell.innerHTML = originalHtml;
                 cell.onclick = () => startEdit(number, field);
             }
+            if (field === 'coords') setMarkerDraggable(number, false);
             editing = null;
+            updateMapHint();
         }
 
         function startEdit(number, field) {
@@ -489,9 +512,15 @@
             editing = { number, field, originalHtml: cell.innerHTML };
             cell.onclick = null;
 
-            const current = editing.originalHtml.replace('💣 ', '').trim();
+            const current = field === 'coords'
+                ? `${cell.dataset.lat}, ${cell.dataset.lon}`
+                : editing.originalHtml.replace('💣 ', '').trim();
             const inputType = field === 'bombs' ? 'number' : 'text';
-            const extra = field === 'bombs' ? ' min="1" step="1"' : ' maxlength="20" style="width: 110px; text-transform: uppercase;"';
+            const extra = field === 'bombs'
+                ? ' min="1" step="1"'
+                : field === 'coords'
+                    ? ' style="width: 170px;"'
+                    : ' maxlength="20" style="width: 110px; text-transform: uppercase;"';
 
             cell.innerHTML = `
                 <span style="display: inline-flex; gap: 4px; align-items: center;">
@@ -506,6 +535,29 @@
             const input = document.getElementById('cell-edit-input');
             input.focus();
             input.select();
+
+            if (field === 'coords') setMarkerDraggable(number, true);
+            updateMapHint();
+        }
+
+        // While the coords editor is open, that location's marker can be dragged
+        // (dragend fills the input; saving is still explicit via 💾).
+        function setMarkerDraggable(number, enabled) {
+            const marker = markers.find(m => m.locationNumber === number);
+            if (!marker) return;
+            if (enabled) {
+                marker.dragging.enable();
+                marker.off('dragend');
+                marker.on('dragend', function () {
+                    const input = document.getElementById('cell-edit-input');
+                    if (!input || !editing || editing.field !== 'coords') return;
+                    const ll = marker.getLatLng();
+                    input.value = `${ll.lat}, ${ll.lng}`;
+                });
+            } else {
+                marker.dragging.disable();
+                marker.off('dragend');
+            }
         }
 
         async function saveEdit() {
@@ -523,6 +575,15 @@
                 if (!/^[A-Z0-9]+$/.test(code)) { showToast('Code may only contain letters and digits!', 'error'); return; }
                 url = '/api/quick/set_location_code';
                 body = { location_number: number, code };
+            } else if (field === 'coords') {
+                const parts = input.value.split(',');
+                const lat = parts.length === 2 ? parseFloat(parts[0]) : NaN;
+                const lon = parts.length === 2 ? parseFloat(parts[1]) : NaN;
+                if (!isFinite(lat) || !isFinite(lon)) { showToast('Enter coordinates as "latitude, longitude"!', 'error'); return; }
+                if (lat < -90 || lat > 90) { showToast('Latitude must be between -90 and 90!', 'error'); return; }
+                if (lon < -180 || lon > 180) { showToast('Longitude must be between -180 and 180!', 'error'); return; }
+                url = '/api/quick/set_location_coords';
+                body = { location_number: number, latitude: lat, longitude: lon };
             } else {
                 const value = parseInt(input.value, 10);
                 if (isNaN(value) || value < 1) { showToast('Bomb count must be at least 1!', 'error'); return; }
@@ -539,7 +600,9 @@
                 const data = await resp.json();
 
                 if (data.success) {
+                    if (field === 'coords') setMarkerDraggable(number, false);
                     editing = null;
+                    updateMapHint();
                     showToast(data.message, 'success');
                     loadLocations();
                 } else {

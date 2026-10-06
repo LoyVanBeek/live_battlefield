@@ -1,3 +1,38 @@
+# Editable location coordinates
+
+## Backend
+- [x] Endpoint `POST /api/quick/set_location_coords` (finite + range guards, DB-only)
+
+## Frontend
+- [x] Clickable coords cell → `coords` branch in `startEdit`/`saveEdit`
+- [x] Map click fills input while coords editing (else creates location as before)
+- [x] Marker drag enabled only while coords editing; dragend fills input
+
+## Tests / verification
+- [x] Unit tests: `TestSetLocationCoordsGuards` (7 tests)
+- [x] E2E: 5 new tests (input edit, map click, invalid, marker drag, create-regression)
+- [x] `uv run pytest tests/` → 217 passed; `uv run ty check app` → clean
+- [x] E2E full suite → 44 passed, 0 failed
+- [x] Live API smoke: move ✓, bad lat ✓, `1e400` overflow ✓, unknown loc ✓, state reflects new coords ✓
+
+## Review
+- **DB-only, no event/migration**: `GameState` only tracks `location_codes` and
+  `location_counter` — `LocationAddedEvent.apply()` ignores lat/lon, and nothing does
+  proximity math. Redemption is code-based, so unlike codes this needs no event sourcing.
+- The coords cell keeps `data-lat`/`data-lon` from the API so the editor opens with full
+  precision while the cell displays `toFixed(4)`.
+- Map interactions are gated on `editing?.field === 'coords'`:
+  - map click → fills input (editor closed → still creates a location, regression-tested)
+  - `marker.dragging.enable()` only for that one marker, `disable()` + `off('dragend')`
+    on save/cancel; `dragend` fills the input, saving stays explicit via 💾
+- The `#map-hint` overlay switches text during picking so the create-vs-pick mode is
+  visible.
+- Guard style matches `create_locations`: `math.isfinite` + range checks. Note JSON has
+  no NaN/inf literal — the realistic bad input is an overflowing number (`1e400`), which
+  is how the unit test exercises that branch.
+
+---
+
 # Default bomb count per game (default 10)
 
 ## Backend

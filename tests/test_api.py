@@ -1572,6 +1572,108 @@ class TestDefaultLocationBombs:
         assert response.json()["bomb_value"] == 10
 
 
+class TestSetLocationCoordsGuards:
+    """Input validation for /api/quick/set_location_coords."""
+
+    def _call(self, location, raw_body=None, **overrides):
+        from app.api.routes import app, verify_gm_token, get_api_db
+        import json as json_mod
+
+        headers = {"Content-Type": "application/json"}
+        if raw_body is not None:
+            body = raw_body
+        else:
+            payload = {"location_number": 1, "latitude": 51.5, "longitude": 5.3}
+            payload.update(overrides)
+            body = json_mod.dumps(payload)
+
+        class MockSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            def add(self, *args, **kwargs):
+                pass
+
+            async def commit(self):
+                pass
+
+            async def execute(self, *args, **kwargs):
+                return MagicMock()
+
+        async def override_get_db():
+            yield MockSession()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch(
+                "app.models.get_location_by_number",
+                new_callable=AsyncMock,
+                return_value=location,
+            ):
+                client = TestClient(app)
+                return client.post(
+                    "/api/quick/set_location_coords",
+                    content=body,
+                    headers=headers,
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+    @staticmethod
+    def _location(latitude=51.5, longitude=5.3):
+        loc = MagicMock()
+        loc.latitude = latitude
+        loc.longitude = longitude
+        return loc
+
+    def test_rejects_unknown_location(self):
+        data = self._call(None).json()
+        assert data["success"] is False
+        assert "does not exist" in data["message"]
+
+    def test_rejects_infinite_latitude(self):
+        # JSON has no NaN/inf literal; an overflowing number like 1e400 is the
+        # realistic way a non-finite value reaches the endpoint.
+        raw = '{"location_number": 1, "latitude": 1e400, "longitude": 5.3}'
+        data = self._call(self._location(), raw_body=raw).json()
+        assert data["success"] is False
+        assert "Invalid coordinates" in data["message"]
+
+    def test_rejects_infinite_longitude(self):
+        raw = '{"location_number": 1, "latitude": 51.5, "longitude": -1e400}'
+        data = self._call(self._location(), raw_body=raw).json()
+        assert data["success"] is False
+        assert "Invalid coordinates" in data["message"]
+
+    def test_rejects_out_of_range_latitude(self):
+        data = self._call(self._location(), latitude=91.0).json()
+        assert data["success"] is False
+        assert "Latitude" in data["message"]
+        assert self._call(self._location(), latitude=-90.5).json()["success"] is False
+
+    def test_rejects_out_of_range_longitude(self):
+        data = self._call(self._location(), longitude=181.0).json()
+        assert data["success"] is False
+        assert "Longitude" in data["message"]
+        assert self._call(self._location(), longitude=-200.0).json()["success"] is False
+
+    def test_accepts_boundary_values(self):
+        assert self._call(self._location(), latitude=90, longitude=180).json()["success"] is True
+        assert self._call(self._location(), latitude=-90, longitude=-180).json()["success"] is True
+
+    def test_success_writes_both_fields(self):
+        location = self._location()
+        data = self._call(location, latitude=52.52, longitude=13.405).json()
+        assert data["success"] is True
+        assert location.latitude == 52.52
+        assert location.longitude == 13.405
+        assert "52.5200, 13.4050" in data["message"]
+
+
 class TestEventStreamCap:
     """SSE streams are rejected with 429 when the game is at connection capacity."""
 

@@ -138,3 +138,120 @@ def test_edit_default_bombs_rejects_zero(page, app_url, seeded_game):
     # editor stays open, value unchanged
     assert lp.default_bombs_input().is_visible()
     assert lp.default_bombs_value().count() == 0
+
+
+def test_edit_coords_inline(page, app_url, seeded_game_with_locations):
+    seed = seeded_game_with_locations
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+    lp.goto()
+
+    number = 1
+    lp.edit_cell("coords", number, "52.5200, 13.4050")
+
+    assert "moved to" in lp.toast().text_content()
+    assert lp.coords_cell(number).inner_text().strip() == "52.5200, 13.4050"
+
+    # marker followed the new position (old pos was 51.59, 5.33)
+    lp.page.reload()
+    lp.page.wait_for_load_state("networkidle")
+    assert lp.coords_cell(number).inner_text().strip() == "52.5200, 13.4050"
+
+
+def test_edit_coords_via_map_click(page, app_url, seeded_game_with_locations):
+    seed = seeded_game_with_locations
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+    lp.goto()
+
+    number = 1
+    lp.start_cell_edit("coords", number)
+    lp.edit_input().fill("0, 0")
+
+    # hint switches to picking mode, then a map click fills the input
+    assert "drag marker" in lp.map_hint().inner_text()
+    lp.map_element().click(position={"x": 300, "y": 200})
+    lp.page.wait_for_function(
+        "() => document.getElementById('cell-edit-input').value !== '0, 0'"
+    )
+    picked = lp.edit_input().input_value()
+    lat, lon = (float(p.strip()) for p in picked.split(","))
+    assert -90 <= lat <= 90 and -180 <= lon <= 180
+
+    lp.save_cell_edit()
+    assert "moved to" in lp.toast().text_content()
+
+    # map click with no editor open still creates a location (unchanged)
+    assert lp.map_hint().inner_text().strip().endswith("add location")
+
+
+def test_edit_coords_rejects_invalid(page, app_url, seeded_game_with_locations):
+    seed = seeded_game_with_locations
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+    lp.goto()
+
+    number = 1
+    original = lp.coords_cell(number).inner_text().strip()
+
+    lp.edit_cell("coords", number, "not a coordinate", expect="error")
+    assert 'latitude, longitude' in lp.toast().text_content()
+
+    # editor is still open after the rejected save — retry in place
+    lp.edit_input().fill("120, 5.33")
+    lp.save_cell_edit(expect="error")
+    assert "Latitude must be between -90 and 90" in lp.toast().text_content()
+
+    # neither attempt moved the location
+    lp.cancel_cell_edit()
+    assert lp.coords_cell(number).inner_text().strip() == original
+
+
+def test_edit_coords_via_marker_drag(page, app_url, seeded_game_with_locations):
+    seed = seeded_game_with_locations
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+    lp.goto()
+
+    number = 1
+    lp.start_cell_edit("coords", number)
+    lp.edit_input().fill("0, 0")
+
+    marker = lp.page.locator(".leaflet-marker-icon").first
+    box = marker.bounding_box()
+    assert box is not None
+
+    # drag the marker; dragend should fill the input with the new position
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 80, box["y"] + 60, steps=10)
+    page.mouse.up()
+    page.wait_for_function(
+        "() => document.getElementById('cell-edit-input').value !== '0, 0'"
+    )
+
+    picked = lp.edit_input().input_value()
+    lat, lon = (float(p.strip()) for p in picked.split(","))
+    assert (lat, lon) != (0.0, 0.0)
+    assert -90 <= lat <= 90 and -180 <= lon <= 180
+
+    lp.save_cell_edit()
+    assert "moved to" in lp.toast().text_content()
+    # cell displays toFixed(4); the input keeps full precision
+    lat4, lon4 = (float(p.strip()) for p in lp.coords_cell(number).inner_text().split(","))
+    assert lat4 == round(lat, 4)
+    assert lon4 == round(lon, 4)
+
+
+def test_map_click_still_creates_location_when_not_editing(page, app_url, seeded_game):
+    """Regression: map click creates a location unless the coords editor is open."""
+    seed = seeded_game
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+    lp.goto()
+
+    assert lp.get_location_count() == 0
+    assert "add location" in lp.map_hint().inner_text()
+
+    lp.map_element().click(position={"x": 80, "y": 260})
+    lp.page.wait_for_function(
+        "() => !document.querySelector('#locations-body td[colspan=\"7\"]')"
+    )
+
+    assert lp.get_location_count() == 1
+    assert "add location" in lp.map_hint().inner_text()
