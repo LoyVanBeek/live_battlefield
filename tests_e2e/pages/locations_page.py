@@ -57,3 +57,56 @@ class LocationsPage:
 
     def back_link(self):
         return self.page.locator("#back-link")
+
+    def code_cell(self, number: int):
+        return self.page.locator(f"#cell-code-{number}")
+
+    def bombs_cell(self, number: int):
+        return self.page.locator(f"#cell-bombs-{number}")
+
+    def edit_input(self):
+        return self.page.locator("#cell-edit-input")
+
+    def save_cell_button(self):
+        return self.page.locator("button.btn-save-cell")
+
+    def cancel_cell_button(self):
+        return self.page.locator("button.btn-cancel-cell")
+
+    def toast(self):
+        return self.page.locator("#toast")
+
+    def start_cell_edit(self, field: str, number: int):
+        """Click a Code ('code') or Bombs ('bombs') cell to open the inline editor."""
+        cell = (
+            self.code_cell(number) if field == "code" else self.bombs_cell(number)
+        )
+        cell.click()
+        self.edit_input().wait_for(state="visible")
+
+    def save_cell_edit(self, expect="success"):
+        before = self.toast().text_content() or ""
+        self.save_cell_button().click()
+        # networkidle is already latched by goto(), so wait on the actual
+        # signal instead: the toast changes when the response is processed.
+        self.page.wait_for_function(
+            """([before]) => {
+                const toast = document.getElementById('toast');
+                return toast && toast.textContent !== before;
+            }""",
+            arg=[before],
+        )
+        if expect == "success":
+            # success also re-renders the table, closing the inline editor
+            self.page.wait_for_function(
+                "() => !document.getElementById('cell-edit-input')"
+            )
+            self.page.wait_for_load_state("networkidle")
+
+    def cancel_cell_edit(self):
+        self.cancel_cell_button().click()
+
+    def edit_cell(self, field: str, number: int, value: str, expect="success"):
+        self.start_cell_edit(field, number)
+        self.edit_input().fill(value)
+        self.save_cell_edit(expect=expect)

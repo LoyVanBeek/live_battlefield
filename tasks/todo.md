@@ -1,38 +1,51 @@
-# Fix: missing `psycopg` on deployed system (Alembic migration crash)
+# Editable bomb count & code on Locations page
 
-## Root cause
-- `migrations/env.py` built the sync URL as bare `postgresql://...` (stripped `+asyncpg`).
-- Dockerfile installed from `pyproject.toml`, not `uv.lock` → rebuild resolved `sqlalchemy[asyncio]>=2.0.0` to SQLAlchemy 2.1.
-- SQLAlchemy 2.1 changed the default driver for bare `postgresql://` from psycopg2 → psycopg 3; `psycopg` is not shipped → `ModuleNotFoundError`.
+## Backend
+- [x] New `LocationCodeChangedEvent` in `app/events/models.py` (apply + to_game_event + AnyEvent union)
+- [x] Register event type: `app/events/types.py`, `app/database.py`, `factory.py`, `saver.py`, `__init__.py`
+- [x] Migration `009_add_location_code_changed.py` (`ALTER TYPE eventtype ADD VALUE`)
+- [x] New endpoint `POST /api/quick/set_location_code` in `app/api/routes.py`
+- [x] Stop rebalancing: remove loops in `routes.py` create/remove + fix messages
+- [x] Stop rebalancing in `app/bot/handlers.py` create path + fix message
 
-## Plan (approved: A + D)
-1. **A** `app/config.py`: `database_url_sync` replaces `+asyncpg` → `+psycopg2` (explicit shipped driver).
-2. `migrations/env.py`: drop redundant second `.replace("+asyncpg", "")`.
-3. **D** `Dockerfile`: install from `uv.lock` so rebuilds are reproducible.
+## Frontend
+- [x] `app/templates/locations.html`: click-to-edit Code & Bombs cells (startEdit/saveEdit/cancelEdit)
+- [x] Add `showToast()` + toast element/CSS, use for new edit flows
 
-## Tasks
-- [x] `app/config.py`: one-line fix (`+psycopg2`)
-- [x] `migrations/env.py`: cleanup
-- [x] `Dockerfile`: lockfile-based install
-- [x] Verify: sync URL prints `postgresql+psycopg2://...`
-- [x] Verify: `uv run pytest tests/` → 191 passed; ty check skipped (string-only change, no type surface)
-- [x] Verify: `docker compose build app` → image has SQLAlchemy 2.0.47 + psycopg2 2.9.11 (locked)
-- [x] Verify: `docker compose up -d` → migrations applied, DB at `008`, HTTP 200, healthcheck green
+## Tests / verification
+- [x] Unit test: LocationCodeChangedEvent apply + factory round-trip (`tests/test_location_code_changed_event.py`)
+- [x] Unit test: `set_location_code` validation guards (`tests/test_api.py::TestSetLocationCodeGuards`)
+- [x] E2E: extended locations page object + 4 new edit tests
+- [x] `uv run ty check app` → All checks passed
+- [x] `uv run pytest tests/` → 203 passed
+- [x] E2E full suite → 36 passed, 0 failed
 
-## Second issue found & resolved (user decision)
-- The deployed DB was stamped at revision `015` from the unmerged `feature/specials` branch
-  (its events included `TSUNAMI` / `SPECIAL_AMMO_GRANTED`, which main's `EventType` can't parse —
-  a plain `stamp 008` would have 500'd the event feed).
-- User chose **reset**: `docker compose down` + `docker volume rm live_battlefield_postgres_data`
-  (pgadmin config volume kept), then `up -d` on main. Fresh DB migrated 001→008 cleanly.
+## Review
 
-## Implementation note
-- First attempt used `uv sync --frozen --no-install-project --system` — invalid: `uv sync` has no
-  `--system` flag (build caught it). Final form: `uv export --frozen --no-dev --no-emit-project` →
-  `uv pip install --system -r`, which keeps the system-site-packages layout the app, healthcheck,
-  and `Dockerfile.e2e` already rely on.
+### What shipped
+- GM can now edit a location's **code** and **bomb count** inline on the locations table
+  (click cell → edit → 💾 save / ✕ cancel, Enter/Esc). Works in any game status.
+- Code edits are event-sourced via new `LocationCodeChangedEvent` (migration 009), so
+  redemption validates against the event-derived state, not just the DB row.
+- Bomb-value rebalancing on create/remove removed — existing locations keep their value;
+  new locations still get `max(1, 100 // total)`.
+- New edits use `showToast()`; existing alert()/confirm() flows untouched.
 
-## Follow-ups
-- When `feature/specials` merges, the fix rides along via main; no action needed.
-- A remote deployed host needs these commits pulled + image rebuilt; if its DB is also
-  specials-stamped, reset or reconcile it the same way.
+### Bugs found & fixed during E2E debugging
+1. **Cancel re-opened the editor**: the ✕/💾 click bubbled up to the cell handler that
+   `cancelEdit()` had just re-armed synchronously → `startEdit()` ran again.
+   Fixed with `event.stopPropagation()` on both buttons.
+2. **Flaky toast assertions**: `page.wait_for_load_state("networkidle")` returned the
+   state already latched by `goto()`, so tests read the toast before the fetch resolved.
+   Fixed in `LocationsPage.save_cell_edit()` to wait on the real signal (toast text
+   change; on success also editor close + networkidle), with `expect="success"|"error"`.
+
+### Environment note
+- `test-results/` host dir was `root:root` (from an earlier root-run Docker volume) while
+  the e2e container runs as uid 1000 → 36 teardown `PermissionError`s. Fixed by chown to
+  1000:1000; not related to this change.
+- `test_complete_game.py::test_play_full_game` failed once (start button race), passes
+  on re-run — pre-existing flakiness, not caused by this change.
+
+### Verification
+- Unit: 203 passed. Type check: clean. E2E: 36/36 passed (locations page 6/6).

@@ -724,9 +724,6 @@ async def handle_create_locations(
     total_after = len(existing_locations) + count
     default_bomb_value = max(1, 100 // total_after)
 
-    for loc in existing_locations:
-        loc.bomb_value = default_bomb_value
-
     for i in range(count):
         lat_offset = random.uniform(-radius_km / 111, radius_km / 111)
         lon_offset = random.uniform(
@@ -766,7 +763,7 @@ async def handle_create_locations(
 
     await db.commit()
 
-    msg = f"✅ Created {count} locations around ({latitude}, {longitude}). Each worth {default_bomb_value} bombs (Total: 100):\n"
+    msg = f"✅ Created {count} locations around ({latitude}, {longitude}). Each worth {default_bomb_value} bombs:\n"
     msg += "\n".join(created)
     msg += (
         f"\n\nTotal locations: {total_after}. Bombs per location: {default_bomb_value}"

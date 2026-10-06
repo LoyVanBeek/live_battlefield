@@ -399,6 +399,34 @@ class LocationRemovedEvent:
 
 
 @dataclass
+class LocationCodeChangedEvent:
+    event_type: EventType = EventType.LOCATION_CODE_CHANGED
+    number: int = 0
+    code: str = ""
+
+    def apply(self, state: "GameState") -> tuple["GameState", "LocationCodeChangedEvent"]:
+        number = self.number
+
+        # Unknown location: leave state untouched (no phantom entries).
+        if number not in state.location_codes:
+            return state, self
+
+        new_location_codes = {**state.location_codes, number: self.code}
+        return replace(state, location_codes=new_location_codes), self
+
+    def to_game_event(self, player_id: Optional[int] = None, game_id: Optional[uuid.UUID] = None) -> GameEvent:
+        return GameEvent(
+            event_type=EventType.LOCATION_CODE_CHANGED,
+            payload={
+                "number": self.number,
+                "code": self.code,
+            },
+            player_id=player_id,
+            game_id=game_id,
+        )
+
+
+@dataclass
 class BombsAddedEvent:
     event_type: EventType = EventType.BOMBS_ADDED
     color: str = ""
@@ -625,6 +653,7 @@ AnyEvent = Union[
     "CodeRedeemedEvent",
     "LocationAddedEvent",
     "LocationRemovedEvent",
+    "LocationCodeChangedEvent",
     "BombsAddedEvent",
     "TeamResetEvent",
     "GameStartedEvent",

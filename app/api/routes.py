@@ -2231,9 +2231,6 @@ async def create_locations(
     total_after = len(existing_locations) + action.count
     default_bomb_value = max(1, 100 // total_after)
 
-    for loc in existing_locations:
-        loc.bomb_value = default_bomb_value
-
     created = []
 
     for i in range(action.count):
@@ -2280,7 +2277,7 @@ async def create_locations(
 
     return {
         "success": True,
-        "message": f"Created {len(created)} locations! Each worth {default_bomb_value} bombs (Total: 100)",
+        "message": f"Created {len(created)} locations! Each worth {default_bomb_value} bombs.",
         "locations": created,
         "bomb_value": default_bomb_value,
     }
@@ -2331,14 +2328,6 @@ async def remove_location(
 
     await db.delete(location)
 
-    if remaining_count > 0:
-        new_bomb_value = max(1, 100 // remaining_count)
-        for loc in existing_locations:
-            if loc.number != action.location_number:
-                loc.bomb_value = new_bomb_value
-    else:
-        new_bomb_value = 0
-
     event = LocationRemovedEvent(
         number=action.location_number,
         bomb_value=location.bomb_value,
@@ -2353,9 +2342,8 @@ async def remove_location(
 
     return {
         "success": True,
-        "message": f"Location {action.location_number} removed. All locations now worth {new_bomb_value} bombs (Total: {100 if remaining_count > 0 else 0}). {warning}".strip(),
+        "message": f"Location {action.location_number} removed. {remaining_count} locations remaining. {warning}".strip(),
         "locations_remaining": remaining_count,
-        "bomb_value": new_bomb_value,
         "was_visited": was_visited,
     }
 
@@ -2831,4 +2819,58 @@ async def set_location_bombs(
     return {
         "success": True,
         "message": f"Location {data.location_number} now worth {data.bomb_value} bombs!",
+    }
+
+
+class SetLocationCode(BaseModel):
+    location_number: int
+    code: str
+
+
+@app.post("/api/quick/set_location_code")
+async def set_location_code(
+    data: SetLocationCode,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_location_by_number, get_game_locations
+    from app.events.models import LocationCodeChangedEvent
+
+    game_uuid = uuid.UUID(game_id)
+    location = await get_location_by_number(db, game_uuid, data.location_number)
+    if not location:
+        return {
+            "success": False,
+            "message": f"Location {data.location_number} does not exist!",
+        }
+
+    new_code = data.code.strip().upper()
+    if not new_code:
+        return {"success": False, "message": "Code cannot be empty!"}
+    if len(new_code) > 20:
+        return {"success": False, "message": "Code must be 20 characters or fewer!"}
+    if not new_code.isalnum():
+        return {
+            "success": False,
+            "message": "Code may only contain letters and digits!",
+        }
+
+    existing_locations = await get_game_locations(db, game_uuid)
+    for loc in existing_locations:
+        if loc.number != data.location_number and loc.code == new_code:
+            return {
+                "success": False,
+                "message": f"Code {new_code} is already used by location {loc.number}!",
+            }
+
+    location.code = new_code
+
+    # Codes are event-sourced: redemption validates against state.location_codes,
+    # so record the change as an event (not just a DB update).
+    event = LocationCodeChangedEvent(number=data.location_number, code=new_code)
+    await save_event(db, event, game_uuid)
+
+    return {
+        "success": True,
+        "message": f"Location {data.location_number} code changed to {new_code}!",
     }

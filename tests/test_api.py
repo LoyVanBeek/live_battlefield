@@ -1348,6 +1348,95 @@ class TestCreateLocationsGuards:
         assert response.json()["success"] is True
 
 
+class TestSetLocationCodeGuards:
+    """Input validation for /api/quick/set_location_code."""
+
+    def _call(self, location, others=None, **overrides):
+        from app.api.routes import app, verify_gm_token, get_api_db
+        from app.events.models import LocationCodeChangedEvent  # noqa: F401 (wiring check)
+
+        payload = {"location_number": 1, "code": "NEW123"}
+        payload.update(overrides)
+
+        class MockSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            def add(self, *args, **kwargs):
+                pass
+
+            async def commit(self):
+                pass
+
+            async def execute(self, *args, **kwargs):
+                return MagicMock()
+
+        async def override_get_db():
+            yield MockSession()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch(
+                "app.models.get_location_by_number",
+                new_callable=AsyncMock,
+                return_value=location,
+            ):
+                with patch(
+                    "app.models.get_game_locations",
+                    new_callable=AsyncMock,
+                    return_value=others if others is not None else [],
+                ):
+                    with patch("app.api.routes.save_event", new_callable=AsyncMock):
+                        client = TestClient(app)
+                        return client.post("/api/quick/set_location_code", json=payload)
+        finally:
+            app.dependency_overrides.clear()
+
+    @staticmethod
+    def _location(number=1, code="OLD111"):
+        loc = MagicMock()
+        loc.number = number
+        loc.code = code
+        return loc
+
+    def test_rejects_unknown_location(self):
+        data = self._call(location=None).json()
+        assert data["success"] is False
+        assert "does not exist" in data["message"]
+
+    def test_rejects_empty_code(self):
+        data = self._call(self._location(), code="   ").json()
+        assert data["success"] is False
+        assert "empty" in data["message"]
+
+    def test_rejects_too_long_code(self):
+        data = self._call(self._location(), code="A" * 21).json()
+        assert data["success"] is False
+        assert "20 characters" in data["message"]
+
+    def test_rejects_non_alphanumeric_code(self):
+        data = self._call(self._location(), code="BAD CODE").json()
+        assert data["success"] is False
+        assert "letters and digits" in data["message"]
+
+    def test_rejects_code_used_by_other_location(self):
+        other = self._location(number=2, code="TAKEN1")
+        data = self._call(self._location(), others=[self._location(), other], code="taken1").json()
+        assert data["success"] is False
+        assert "location 2" in data["message"]
+
+    def test_success_updates_and_normalizes_code(self):
+        location = self._location()
+        data = self._call(location, code="  new123  ").json()
+        assert data["success"] is True
+        assert location.code == "NEW123"
+        assert "NEW123" in data["message"]
+
+
 class TestEventStreamCap:
     """SSE streams are rejected with 429 when the game is at connection capacity."""
 

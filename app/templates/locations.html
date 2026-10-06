@@ -169,6 +169,76 @@
         .leaflet-popup-tip {
             background: #16213e;
         }
+        .editable-cell {
+            cursor: pointer;
+            border-bottom: 1px dashed #888;
+        }
+        .editable-cell:hover {
+            border-bottom-color: #00d9ff;
+            color: #00d9ff;
+        }
+        .cell-edit-input {
+            width: 90px;
+            padding: 4px 6px;
+            font-size: 14px;
+            border-radius: 4px;
+            border: 2px solid #0f3460;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .cell-edit-input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .btn-save-cell {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn-save-cell:hover {
+            background: #45a049;
+        }
+        .btn-cancel-cell {
+            background: #555;
+            color: #eee;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn-cancel-cell:hover {
+            background: #666;
+        }
+        #toast {
+            visibility: hidden;
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 250px;
+            max-width: 80%;
+            padding: 12px 20px;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            z-index: 2000;
+            text-align: center;
+        }
+        #toast.success { background: #2e7d32; }
+        #toast.error { background: #c62828; }
+        #toast.show {
+            visibility: visible;
+            animation: toast-fade 0.3s ease;
+        }
+        @keyframes toast-fade {
+            from { opacity: 0; bottom: 30px; }
+            to { opacity: 1; bottom: 20px; }
+        }
     </style>
 </head>
 <body>
@@ -232,6 +302,8 @@
             </table>
         </div>
     </div>
+
+    <div id="toast"></div>
 
     <script>
         function getGmToken() {
@@ -354,9 +426,9 @@
                     return `
                         <tr>
                             <td>${loc.number}</td>
-                            <td class="code">${loc.code}</td>
+                            <td class="code"><span class="editable-cell" id="cell-code-${loc.number}" onclick="startEdit(${loc.number}, 'code')">${loc.code}</span></td>
                             <td class="coords">${lat}, ${lon}</td>
-                            <td>💣 ${loc.bomb_value || 1}</td>
+                            <td><span class="editable-cell" id="cell-bombs-${loc.number}" onclick="startEdit(${loc.number}, 'bombs')">💣 ${loc.bomb_value || 1}</span></td>
                             <td class="visited">${visitedHtml}</td>
                             <td><a href="${mapUrl}" target="_blank" class="map-link">Map</a></td>
                             <td><button class="btn-remove" onclick="removeLocation(${loc.number}, '${loc.code}')">Remove</button></td>
@@ -367,6 +439,102 @@
                 console.error('Error loading locations:', e);
                 document.getElementById('locations-body').innerHTML = 
                     '<tr><td colspan="7" style="text-align: center; color: #f44336;">Error loading locations</td></tr>';
+            }
+        }
+
+        // ---- Inline editing of Code / Bombs cells ----
+        let editing = null; // {number, field, originalHtml}
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = '';
+            void toast.offsetWidth; // restart animation
+            toast.className = (type === 'success' ? 'success' : 'error') + ' show';
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(() => { toast.className = ''; }, 3000);
+        }
+
+        function cancelEdit() {
+            if (!editing) return;
+            const { number, field, originalHtml } = editing;
+            const cell = document.getElementById(`cell-${field}-${number}`);
+            if (cell) {
+                cell.innerHTML = originalHtml;
+                cell.onclick = () => startEdit(number, field);
+            }
+            editing = null;
+        }
+
+        function startEdit(number, field) {
+            if (editing && editing.number === number && editing.field === field) return;
+            cancelEdit();
+
+            const cell = document.getElementById(`cell-${field}-${number}`);
+            if (!cell) return;
+
+            editing = { number, field, originalHtml: cell.innerHTML };
+            cell.onclick = null;
+
+            const current = editing.originalHtml.replace('💣 ', '').trim();
+            const inputType = field === 'bombs' ? 'number' : 'text';
+            const extra = field === 'bombs' ? ' min="1" step="1"' : ' maxlength="20" style="width: 110px; text-transform: uppercase;"';
+
+            cell.innerHTML = `
+                <span style="display: inline-flex; gap: 4px; align-items: center;">
+                    <input class="cell-edit-input" type="${inputType}"${extra} id="cell-edit-input"
+                           value="${current.replace(/"/g, '&quot;')}"
+                           onkeydown="if(event.key==='Enter'){event.preventDefault();saveEdit();}
+                                       else if(event.key==='Escape'){event.preventDefault();cancelEdit();}">
+                    <button class="btn-save-cell" onclick="event.stopPropagation();saveEdit()">💾</button>
+                    <button class="btn-cancel-cell" onclick="event.stopPropagation();cancelEdit()">✕</button>
+                </span>`;
+
+            const input = document.getElementById('cell-edit-input');
+            input.focus();
+            input.select();
+        }
+
+        async function saveEdit() {
+            if (!editing) return;
+            const { number, field } = editing;
+            const input = document.getElementById('cell-edit-input');
+            if (!input) return;
+
+            let body;
+            let url;
+            if (field === 'code') {
+                const code = input.value.trim().toUpperCase();
+                if (!code) { showToast('Code cannot be empty!', 'error'); return; }
+                if (code.length > 20) { showToast('Code must be 20 characters or fewer!', 'error'); return; }
+                if (!/^[A-Z0-9]+$/.test(code)) { showToast('Code may only contain letters and digits!', 'error'); return; }
+                url = '/api/quick/set_location_code';
+                body = { location_number: number, code };
+            } else {
+                const value = parseInt(input.value, 10);
+                if (isNaN(value) || value < 1) { showToast('Bomb count must be at least 1!', 'error'); return; }
+                url = '/api/quick/set_location_bombs';
+                body = { location_number: number, bomb_value: value };
+            }
+
+            try {
+                const resp = await fetch(url + '?gm_token=' + encodeURIComponent(getGmToken()), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    editing = null;
+                    showToast(data.message, 'success');
+                    loadLocations();
+                } else {
+                    showToast(data.message || 'Error saving change', 'error');
+                }
+            } catch (e) {
+                console.error('Error saving edit:', e);
+                showToast('Error saving change', 'error');
             }
         }
 
