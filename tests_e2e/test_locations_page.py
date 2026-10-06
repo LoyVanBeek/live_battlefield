@@ -19,6 +19,20 @@ def test_locations_page_loads(page, app_url, seeded_game_with_locations):
     assert "game-master" in href
 
 
+def test_map_pins_show_location_number(page, app_url, seeded_game_with_locations):
+    seed = seeded_game_with_locations
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+    lp.goto()
+
+    pins = lp.pins()
+    pins.first.wait_for(state="visible")
+
+    # fixture creates locations 1..5 — every pin carries its location number
+    assert pins.count() == lp.get_location_count()
+    numbers = {pins.nth(i).inner_text().strip() for i in range(pins.count())}
+    assert {str(n) for n in range(1, 6)} <= numbers
+
+
 def test_add_location_via_form(page, app_url, seeded_game):
     seed = seeded_game
     lp = LocationsPage(page, seed["gm_token"], app_url=app_url)

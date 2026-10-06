@@ -6,7 +6,9 @@
     <title>Quest Locations Map - Live Battlefield</title>
     
     <link rel="stylesheet" href="/static/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="/static/location-pin.css" />
     <script src="/static/leaflet/leaflet.js"></script>
+    <script src="/static/location-pin.js"></script>
     
     <style>
         * {
@@ -201,7 +203,8 @@
                         bounds.push([loc.latitude, loc.longitude]);
                         
                         const marker = L.marker([loc.latitude, loc.longitude], {
-                            title: 'Location #' + loc.number
+                            title: 'Location #' + loc.number,
+                            icon: locationPinIcon(loc.number)
                         }).addTo(map);
                         
                         const popupContent = `

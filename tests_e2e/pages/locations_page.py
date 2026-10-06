@@ -73,6 +73,10 @@ class LocationsPage:
     def marker_count(self):
         return self.page.locator(".leaflet-marker-icon").count()
 
+    def pins(self):
+        """Numbered teardrop pins rendered on the map."""
+        return self.page.locator(".location-pin")
+
     def edit_input(self):
         return self.page.locator("#cell-edit-input")
 

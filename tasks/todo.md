@@ -1,3 +1,38 @@
+# Numbered location pins on both maps
+
+## Assets
+- [x] `app/static/location-pin.css` — teardrop pin (rotated square, `border-radius: 50% 50% 50% 0`), number counter-rotated upright
+- [x] `app/static/location-pin.js` — `locationPinIcon(number)` → `L.divIcon`, `iconSize: [30, 36]`, `iconAnchor: [15, 36]` (rotated tip lands at y≈36.2, so the pin points at the exact coordinate — default divIcon anchor is top-left and would offset it)
+
+## Templates
+- [x] `locations.html` (GM): assets linked after Leaflet; icon in `updateMarkers()` + map-click-create path
+- [x] `map.html` (player): assets linked; icon added alongside existing `title: 'Location #N'`
+
+## Tests / verification
+- [x] E2E `test_map_pins_show_location_number` (GM: pins carry 1..5, count == row count)
+- [x] E2E `tests_e2e/test_map_page.py`: numbered pins after start + `title` kept; no pins while WAITING (regression) — first coverage for `/map`
+- [x] `uv run pytest tests/` → 217 passed; `uv run ty check app` → clean (backend untouched)
+- [x] Rebuilt **both** `test-app` and `test-e2e` images; locations + map tests → 17 passed
+- [x] Full e2e suite → 47 passed, 0 failed (includes marker-drag test against new pin geometry)
+
+## Review
+- **Frontend-only**: no API, event, or migration changes — both endpoints already return `loc.number`.
+- Shared assets so GM and player pins can't drift; served by the existing `/static` mount
+  (`routes.py:239`), no plumbing.
+- Pin is a divIcon: keeps `.leaflet-marker-icon` (so `marker_count`, coords drag-while-editing,
+  and `marker.locationNumber` lookups still work — verified by the passing drag test).
+- The number sits in an inner span counter-rotated `+45deg` so it stays upright.
+- `/map` had zero coverage; added a positive test (started game) and a negative one (waiting
+  game renders no pins — `map.html` early-returns on `status === 'waiting'` and never polls).
+  The negative test waits on `#game-status-badge` = WAITING so it can't pass vacuously.
+- **Gotcha**: `test-results/` flipped to root ownership again mid-session (timestamp 19:16,
+  right after a `docker compose run -v` screenshot run) → 47 permission errors; fixed with
+  `docker run --user 0 ... chown -R 1000:1000`. Check `ls -ld test-results` before any
+  full e2e run.
+- Screenshot for visual check: `/tmp/opencode/pin_gm.png` (script `/tmp/opencode/pin_shot.py`).
+
+---
+
 # Editable location coordinates
 
 ## Backend
