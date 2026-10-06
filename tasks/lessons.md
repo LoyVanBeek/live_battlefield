@@ -59,3 +59,9 @@
 ## piped audit output truncation hides remaining findings
 - `pip-audit | tail -N` showed only the last findings — fixing one package revealed the next (pillow → idna → mako → click needed FOUR rounds)
 - Rule: write audit output to a file and inspect it fully; trust the exit code, not the visible tail
+
+## Naive TCP relay needs `TCP_NODELAY` — Nagle stalls cost ~43ms per request
+- The E2E loopback relay (conftest, gives browsers a trustworthy `http://localhost` origin for Geolocation) initially forwarded bytes with Nagle on: every API round trip went 4ms → 47ms (delayed-ACK signature)
+- That 40ms hit three tests asserting *immediately* after `page.goto` on JS-fetch-populated content (`test_join_page_loads`, `test_full_color_block`, `test_navigate_to_events_from_gm`) — deterministic failures, but the root cause was proxy latency, not the tests
+- Rule: set `TCP_NODELAY` on BOTH ends of any forwarding socket (accepted + upstream); when a relay/proxy changes timing, measure before rewriting callers — `performance.getEntriesByType('resource')` per fetch makes it a number, not a guess
+- Chromium's `--unsafely-treat-insecure-origin-as-secure` flag is dead in Chrome 153 (`isSecureContext` stays false) — don't reach for it to fake a secure context; loopback is trustworthy with no flags

@@ -269,3 +269,66 @@ def test_map_click_still_creates_location_when_not_editing(page, app_url, seeded
 
     assert lp.get_location_count() == 1
     assert "add location" in lp.map_hint().inner_text()
+
+
+def test_insert_location_via_gps(page, app_url, seeded_game):
+    """📍 button drops one location at the exact GPS fix (radius_km=0)."""
+    seed = seeded_game
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+
+    page.context.grant_permissions(["geolocation"])
+    page.context.set_geolocation({"latitude": 52.52, "longitude": 13.405, "accuracy": 12})
+
+    lp.goto()
+    assert lp.get_location_count() == 0
+
+    lp.my_location_button().click()
+    page.wait_for_function(
+        "() => document.getElementById('toast').classList.contains('success')"
+    )
+    assert "±12m" in lp.toast().text_content()
+
+    page.wait_for_function(
+        "() => !document.querySelector('#locations-body td[colspan=\"7\"]')"
+    )
+    assert lp.get_location_count() == 1
+    # exact position — the default 2km radius would have offset it
+    assert lp.coords_cell(1).inner_text().strip() == "52.5200, 13.4050"
+    assert lp.my_location_button().is_enabled()
+
+
+def test_insert_location_via_gps_denied(page, app_url, seeded_game):
+    """Without geolocation permission the button errors and creates nothing."""
+    seed = seeded_game
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+    lp.goto()
+
+    lp.my_location_button().click()
+    page.wait_for_function(
+        "() => document.getElementById('toast').classList.contains('error')"
+    )
+    assert "permission denied" in lp.toast().text_content().lower()
+
+    assert lp.get_location_count() == 0
+    assert lp.my_location_button().is_enabled()
+
+
+def test_insert_location_via_gps_requires_secure_context(page, app_url, seeded_game):
+    """Plain-HTTP origins get no Geolocation API — the button must say so (HTTPS)."""
+    seed = seeded_game
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+
+    # simulate an insecure origin: navigator.geolocation is undefined in browsers
+    page.add_init_script(
+        "Object.defineProperty(Navigator.prototype, 'geolocation',"
+        " { get: function () { return undefined; } });"
+    )
+    lp.goto()
+
+    lp.my_location_button().click()
+    page.wait_for_function(
+        "() => document.getElementById('toast').classList.contains('error')"
+    )
+    assert "HTTPS" in lp.toast().text_content()
+
+    assert lp.get_location_count() == 0

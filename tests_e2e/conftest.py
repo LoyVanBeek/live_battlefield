@@ -1,5 +1,10 @@
 import os
+import socket
+import socketserver
 import sys
+import threading
+from urllib.parse import urlparse
+
 import pytest
 from tests_e2e.config import IS_CI, HTTPX_TIMEOUT, PLAYWRIGHT_TIMEOUT
 
@@ -19,7 +24,93 @@ def pytest_runtest_makereport(item, call):
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 APP_URL = os.environ.get("APP_URL", "http://localhost:8000")
+APP_UPSTREAM = os.environ.get("APP_UPSTREAM", "test-app:8000")
 ADMIN_TOKEN = "e2e-test-admin"
+
+
+def _pump(src: socket.socket, dst: socket.socket) -> None:
+    """Relay bytes until one side closes, then tear down both directions."""
+    try:
+        while True:
+            data = src.recv(65536)
+            if not data:
+                break
+            dst.sendall(data)
+    except OSError:
+        pass
+    finally:
+        for sock in (src, dst):
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+
+class _RelayHandler(socketserver.BaseRequestHandler):
+    def handle(self) -> None:
+        # Nagle + delayed-ACK on a forwarding socket stalls small segments for
+        # ~40ms — enough to turn every API round trip into a visible wait.
+        self.request.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        host, port = self.server.upstream  # type: ignore[attr-defined]
+        try:
+            upstream = socket.create_connection((host, port), timeout=10)
+        except OSError as exc:
+            print(f"e2e relay: cannot reach {host}:{port}: {exc}", file=sys.stderr)
+            return
+        upstream.settimeout(None)  # SSE connections idle longer than connect-timeout
+        upstream.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        reverse = threading.Thread(target=_pump, args=(upstream, self.request), daemon=True)
+        reverse.start()
+        _pump(self.request, upstream)
+        reverse.join(timeout=5)
+
+
+class _Relay(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+    def __init__(self, addr, upstream, family=socket.AF_INET):
+        self.upstream = upstream
+        self.address_family = family
+        super().__init__(addr, _RelayHandler)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _loopback_relay():
+    """Expose the test app on APP_URL's loopback address.
+
+    The app runs at http://test-app:8000 — not a potentially-trustworthy origin,
+    so `window.isSecureContext` is false and the Geolocation API is unavailable
+    (a real phone gets a secure context through ngrok's https). Browsers treat
+    loopback as secure without TLS, so relaying APP_URL to the app gives tests a
+    genuine secure context with no Chromium flags or certificates.
+
+    If the port is already served locally (app run outside docker), nothing is
+    started and the existing listener answers directly.
+    """
+    parsed = urlparse(APP_URL)
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    host, _, up_port = APP_UPSTREAM.rpartition(":")
+    upstream = (host, int(up_port))
+
+    servers = []
+    for family, bind in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        try:
+            servers.append(_Relay((bind, port), upstream, family))
+        except OSError:
+            continue  # IPv6 unavailable (or port already in use locally)
+
+    threads = [
+        threading.Thread(target=server.serve_forever, daemon=True) for server in servers
+    ]
+    for thread in threads:
+        thread.start()
+
+    yield
+
+    for server in servers:
+        server.shutdown()
+        server.server_close()
 
 
 @pytest.fixture(autouse=True)

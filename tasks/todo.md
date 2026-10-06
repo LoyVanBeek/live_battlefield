@@ -1,3 +1,26 @@
+# 📍 Insert location at current GPS position (GM locations page)
+
+## Frontend
+- [x] `📍 My location` button in `.form-row` + `.btn-myloc` style + hint text
+- [x] `addLocationAtMyLocation()`: secure-context guard, locate → POST `count=1, radius_km=0`, toasts
+
+## Tests / verification
+- [x] E2E: GPS insert (exact coords), denied permission, insecure-context stub
+- [x] `uv run pytest tests/` + `uv run ty check app` + full e2e
+- [x] Note in review: works via ngrok HTTPS; only plain LAN HTTP shows the guard toast
+
+## Review
+- One tap → `getCurrentPosition({enableHighAccuracy:true, timeout:10s, maximumAge:0})` → `POST /api/quick/create_locations` with `count:1, radius_km:0`, so the row shows the exact fix (`52.5200, 13.4050` in the E2E asserts radius 0 — a default 2km radius would offset it). Success toast includes rounded accuracy (±12m); button shows `📍 Locating…` and is restored in `finally`.
+- Guard order: `!window.isSecureContext || !navigator.geolocation` → `GPS needs HTTPS…` toast, no request sent. Error callbacks map codes 1/2/3 → denied / unavailable / timeout toasts.
+- **E2E secure context**: the test origin `http://test-app:8000` is *not* potentially trustworthy (only loopback is, without TLS), so the guard fired for every test. Chromium's `--unsafely-treat-insecure-origin-as-secure` flag is dead in Chrome 153 (verified: `isSecureContext` stays false), and self-signed HTTPS on `test-app` would break every `httpx` fixture (cert verification). Fix: `tests_e2e/conftest.py` now relays `APP_URL` (`http://localhost:8000`, set in `docker-compose.e2e.yml`) to `APP_UPSTREAM` (`test-app:8000`) over a stdlib TCP relay — loopback is secure by default, no flags, no certs.
+- **Relay perf bug (found via 3 regressions)**: the naive relay added ~43ms/request (Nagle + delayed-ACK) which flipped three racy "assert right after page load" tests (`test_join_page_loads`, `test_full_color_block`, `test_navigate_to_events_from_gm`). Fixed at the root with `TCP_NODELAY` on both sockets → back to 4–5ms, identical to direct. Page-object/API call sites untouched.
+- Production unaffected: the guard, button and toast are client-side only; ngrok already serves real HTTPS (geolocation works there today). Only plain-LAN `http://IP` shows the guard toast.
+
+## Follow-up (not started)
+- [ ] HTTPS for plain-LAN HTTP deployments (e.g. local CA / `mkcert` behind the app, or always-ngrok) so phones on `http://IP` get GPS too
+
+---
+
 # Quest Locations Map link on the team page
 
 ## Backend

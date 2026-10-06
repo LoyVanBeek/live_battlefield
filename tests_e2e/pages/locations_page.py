@@ -43,6 +43,9 @@ class LocationsPage:
     def add_button(self):
         return self.page.locator("button.btn-add", has_text="Add")
 
+    def my_location_button(self):
+        return self.page.locator("#btn-my-location")
+
     def add_location(self, lat: float, lon: float, count: int = 1, radius: float = 0):
         self.lat_input().fill(str(lat))
         self.lon_input().fill(str(lon))
