@@ -249,7 +249,15 @@
         
         <!-- Add Location Form -->
         <div class="location-form">
-            <h3 style="margin-bottom: 10px; color: #00d9ff;">➕ Add Locations</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                <h3 style="color: #00d9ff;">➕ Add Locations</h3>
+                <div style="font-size: 13px; color: #888;">
+                    New locations worth
+                    <span id="default-bombs-cell" class="editable-cell" title="Click to edit"
+                          onclick="startDefaultEdit()">💣 <span id="default-bombs-value">10</span></span>
+                    bombs each
+                </div>
+            </div>
             <div class="form-row">
                 <div style="display: flex; flex-direction: column; gap: 5px;">
                     <label style="font-size: 12px; color: #888;">Latitude</label>
@@ -399,7 +407,12 @@
             try {
                 const resp = await fetch('/api/admin/locations?gm_token=' + encodeURIComponent(getGmToken()));
                 const data = await resp.json();
-                
+
+                if (data.default_bombs !== undefined) {
+                    const defaultEl = document.getElementById('default-bombs-value');
+                    if (defaultEl) defaultEl.textContent = data.default_bombs;
+                }
+
                 const tbody = document.getElementById('locations-body');
                 
                 if (data.locations.length === 0) {
@@ -535,6 +548,77 @@
             } catch (e) {
                 console.error('Error saving edit:', e);
                 showToast('Error saving change', 'error');
+            }
+        }
+
+        // ---- Inline editing of the per-game default bomb count ----
+        let defaultEditing = false;   // {originalValue} while the editor is open
+        let defaultOriginalValue = null;
+
+        function renderDefaultDisplay(value) {
+            const cell = document.getElementById('default-bombs-cell');
+            cell.innerHTML = `💣 <span id="default-bombs-value">${value}</span>`;
+        }
+
+        function startDefaultEdit() {
+            if (defaultEditing) return;
+            const cell = document.getElementById('default-bombs-cell');
+            const valueEl = document.getElementById('default-bombs-value');
+            if (!cell || !valueEl) return;
+
+            defaultEditing = true;
+            defaultOriginalValue = valueEl.textContent.trim();
+
+            cell.innerHTML = `
+                <input class="cell-edit-input" type="number" min="1" step="1" id="default-bombs-input"
+                       value="${defaultOriginalValue}"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();saveDefaultEdit();}
+                                   else if(event.key==='Escape'){event.preventDefault();cancelDefaultEdit();}">
+                <button class="btn-save-cell" onclick="event.stopPropagation();saveDefaultEdit()">💾</button>
+                <button class="btn-cancel-cell" onclick="event.stopPropagation();cancelDefaultEdit()">✕</button>`;
+
+            const input = document.getElementById('default-bombs-input');
+            input.focus();
+            input.select();
+        }
+
+        function cancelDefaultEdit() {
+            if (!defaultEditing) return;
+            defaultEditing = false;
+            renderDefaultDisplay(defaultOriginalValue);
+            defaultOriginalValue = null;
+        }
+
+        async function saveDefaultEdit() {
+            if (!defaultEditing) return;
+            const input = document.getElementById('default-bombs-input');
+            if (!input) return;
+
+            const value = parseInt(input.value, 10);
+            if (isNaN(value) || value < 1) {
+                showToast('Default bomb count must be at least 1!', 'error');
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/quick/set_default_bombs?gm_token=' + encodeURIComponent(getGmToken()), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ default_bombs: value })
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    defaultEditing = false;
+                    defaultOriginalValue = null;
+                    renderDefaultDisplay(value);
+                    showToast(data.message, 'success');
+                } else {
+                    showToast(data.message || 'Error saving default', 'error');
+                }
+            } catch (e) {
+                console.error('Error saving default bombs:', e);
+                showToast('Error saving default', 'error');
             }
         }
 

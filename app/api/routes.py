@@ -992,7 +992,14 @@ async def get_admin_locations(
             }
         )
 
-    return {"locations": result}
+    from app.models import get_game
+
+    game = await get_game(db, game_uuid)
+
+    return {
+        "locations": result,
+        "default_bombs": game.default_location_bombs if game else 10,
+    }
 
 
 @app.get("/api/admin/events")
@@ -2229,7 +2236,10 @@ async def create_locations(
         }
 
     total_after = len(existing_locations) + action.count
-    default_bomb_value = max(1, 100 // total_after)
+    from app.models import get_game
+
+    game = await get_game(db, game_uuid)
+    default_bomb_value = game.default_location_bombs if game else 10
 
     created = []
 
@@ -2873,4 +2883,34 @@ async def set_location_code(
     return {
         "success": True,
         "message": f"Location {data.location_number} code changed to {new_code}!",
+    }
+
+
+class SetDefaultBombs(BaseModel):
+    default_bombs: int
+
+
+@app.post("/api/quick/set_default_bombs")
+async def set_default_bombs(
+    data: SetDefaultBombs,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_game
+
+    game_uuid = uuid.UUID(game_id)
+    game = await get_game(db, game_uuid)
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    if data.default_bombs < 1:
+        return {"success": False, "message": "Default bomb count must be at least 1!"}
+
+    # Only affects locations created from now on; existing ones are untouched.
+    game.default_location_bombs = data.default_bombs
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"New locations are now worth {data.default_bombs} bombs!",
     }

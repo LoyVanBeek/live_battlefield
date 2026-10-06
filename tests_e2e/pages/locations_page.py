@@ -76,6 +76,35 @@ class LocationsPage:
     def toast(self):
         return self.page.locator("#toast")
 
+    def default_bombs_value(self):
+        return self.page.locator("#default-bombs-value")
+
+    def default_bombs_cell(self):
+        return self.page.locator("#default-bombs-cell")
+
+    def default_bombs_input(self):
+        return self.page.locator("#default-bombs-input")
+
+    def edit_default_bombs(self, value: str, expect="success"):
+        """Click the header default, set a new value, and save."""
+        before = self.toast().text_content() or ""
+        self.default_bombs_cell().click()
+        self.default_bombs_input().wait_for(state="visible")
+        self.default_bombs_input().fill(value)
+        self.save_cell_button().click()
+        self.page.wait_for_function(
+            """([before]) => {
+                const toast = document.getElementById('toast');
+                return toast && toast.textContent !== before;
+            }""",
+            arg=[before],
+        )
+        if expect == "success":
+            self.page.wait_for_function(
+                "() => !document.getElementById('default-bombs-input')"
+            )
+        self.page.wait_for_load_state("networkidle")
+
     def start_cell_edit(self, field: str, number: int):
         """Click a Code ('code') or Bombs ('bombs') cell to open the inline editor."""
         cell = (

@@ -1437,6 +1437,141 @@ class TestSetLocationCodeGuards:
         assert "NEW123" in data["message"]
 
 
+class TestDefaultLocationBombs:
+    """Per-game default bomb count: /api/quick/set_default_bombs + create path."""
+
+    def _mock_db(self):
+        class MockSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            def add(self, *args, **kwargs):
+                pass
+
+            async def commit(self):
+                pass
+
+            async def refresh(self, *args, **kwargs):
+                pass
+
+            async def execute(self, *args, **kwargs):
+                return MagicMock()
+
+        return MockSession()
+
+    def _game(self, default_bombs=10):
+        game = MagicMock()
+        game.default_location_bombs = default_bombs
+        return game
+
+    def test_model_column_defaults_to_10(self):
+        from app.database import Game
+
+        col = Game.__table__.c.default_location_bombs
+        assert col.default.arg == 10
+        assert col.nullable is False
+
+    def _set_default(self, game, payload):
+        from app.api.routes import app, verify_gm_token, get_api_db
+
+        async def override_get_db():
+            yield self._mock_db()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                client = TestClient(app)
+                return client.post("/api/quick/set_default_bombs", json=payload)
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_rejects_zero(self):
+        data = self._set_default(self._game(), {"default_bombs": 0}).json()
+        assert data["success"] is False
+        assert "at least 1" in data["message"]
+
+    def test_rejects_negative(self):
+        data = self._set_default(self._game(), {"default_bombs": -5}).json()
+        assert data["success"] is False
+
+    def test_success_updates_game(self):
+        game = self._game()
+        data = self._set_default(game, {"default_bombs": 25}).json()
+        assert data["success"] is True
+        assert game.default_location_bombs == 25
+        assert "25 bombs" in data["message"]
+
+    def test_rejects_unknown_game(self):
+        data = self._set_default(None, {"default_bombs": 25}).json()
+        assert data["success"] is False
+
+    def test_create_locations_uses_game_default(self):
+        """New locations get the game default regardless of how many exist."""
+        from app.api.routes import app, verify_gm_token, get_api_db
+        from app.game.state import GameState
+
+        async def override_get_db():
+            yield self._mock_db()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with (
+                patch("app.api.routes.GameState.from_events", return_value=GameState()),
+                patch("app.models.get_game_events", return_value=[]),
+                patch("app.models.get_game_locations", return_value=[]),
+                patch("app.models.get_next_location_number", new_callable=AsyncMock, return_value=1),
+                patch("app.api.routes.save_event", new_callable=AsyncMock) as save_ev,
+                patch("app.models.get_game", new_callable=AsyncMock, return_value=self._game(25)),
+            ):
+                client = TestClient(app)
+                response = client.post(
+                    "/api/quick/create_locations",
+                    json={"latitude": 52.0, "longitude": 4.0, "count": 3},
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["bomb_value"] == 25
+        assert "25 bombs" in data["message"]
+        # both the Location rows and the events carry the game default
+        assert save_ev.call_args.args[1].bomb_value == 25
+
+    def test_create_locations_falls_back_to_10_without_game(self):
+        from app.api.routes import app, verify_gm_token, get_api_db
+        from app.game.state import GameState
+
+        async def override_get_db():
+            yield self._mock_db()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with (
+                patch("app.api.routes.GameState.from_events", return_value=GameState()),
+                patch("app.models.get_game_events", return_value=[]),
+                patch("app.models.get_game_locations", return_value=[]),
+                patch("app.models.get_next_location_number", new_callable=AsyncMock, return_value=1),
+                patch("app.api.routes.save_event", new_callable=AsyncMock),
+                patch("app.models.get_game", new_callable=AsyncMock, return_value=None),
+            ):
+                client = TestClient(app)
+                response = client.post(
+                    "/api/quick/create_locations",
+                    json={"latitude": 52.0, "longitude": 4.0, "count": 1},
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.json()["bomb_value"] == 10
+
+
 class TestEventStreamCap:
     """SSE streams are rejected with 429 when the game is at connection capacity."""
 

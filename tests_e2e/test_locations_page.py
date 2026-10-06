@@ -100,3 +100,41 @@ def test_edit_cancel_leaves_value_unchanged(page, app_url, seeded_game_with_loca
     lp.cancel_cell_edit()
 
     assert lp.bombs_cell(number).inner_text() == original
+
+
+def test_default_bombs_shown_as_10(page, app_url, seeded_game):
+    """A fresh game defaults to 10 bombs per new location."""
+    seed = seeded_game
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+    lp.goto()
+
+    assert lp.default_bombs_value().inner_text().strip() == "10"
+
+
+def test_edit_default_bombs_affects_new_locations(page, app_url, seeded_game):
+    seed = seeded_game
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+    lp.goto()
+
+    lp.edit_default_bombs("25")
+    assert lp.default_bombs_value().inner_text().strip() == "25"
+    assert "25 bombs" in lp.toast().text_content()
+
+    # a location created afterwards gets the new default
+    lp.add_location(51.59, 5.33, count=1, radius=0)
+    lp.page.wait_for_function(
+        "() => document.querySelectorAll('#locations-body tr').length > 0"
+    )
+    assert lp.bombs_cell(1).inner_text().strip() == "💣 25"
+
+
+def test_edit_default_bombs_rejects_zero(page, app_url, seeded_game):
+    seed = seeded_game
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+    lp.goto()
+
+    lp.edit_default_bombs("0", expect="error")
+    assert "at least 1" in lp.toast().text_content()
+    # editor stays open, value unchanged
+    assert lp.default_bombs_input().is_visible()
+    assert lp.default_bombs_value().count() == 0

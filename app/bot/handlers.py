@@ -505,8 +505,10 @@ async def handle_locations_list(db, update: Update, context: ContextTypes.DEFAUL
     if not locations:
         return "No locations have been added yet."
 
-    num_locations = len(locations)
-    default_bomb_value = max(1, 100 // num_locations)
+    from app.models import get_game
+
+    game = await get_game(db, game_id)
+    default_bomb_value = game.default_location_bombs if game else 10
 
     for loc in locations:
         try:
@@ -722,7 +724,10 @@ async def handle_create_locations(
     created = []
 
     total_after = len(existing_locations) + count
-    default_bomb_value = max(1, 100 // total_after)
+    from app.models import get_game
+
+    game = await get_game(db, game_id)
+    default_bomb_value = game.default_location_bombs if game else 10
 
     for i in range(count):
         lat_offset = random.uniform(-radius_km / 111, radius_km / 111)

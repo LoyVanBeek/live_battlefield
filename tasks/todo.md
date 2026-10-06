@@ -1,3 +1,39 @@
+# Default bomb count per game (default 10)
+
+## Backend
+- [x] Migration `010_add_default_location_bombs.py` (games.default_location_bombs INT NOT NULL DEFAULT 10)
+- [x] `Game.default_location_bombs` column in `app/database.py`
+- [x] Endpoint `POST /api/quick/set_default_bombs` (validate >= 1)
+- [x] Add `default_bombs` to `/api/admin/locations` response
+- [x] Replace `max(1, 100 // total)` in `routes.py` create + bot create/list
+
+## Frontend
+- [x] Inline click-to-edit "Default: 💣 N" next to ➕ Add Locations heading
+
+## Tests / verification
+- [x] Unit tests: `TestDefaultLocationBombs` (7 tests — column default, validation, create uses game default, fallback)
+- [x] E2E: 3 new tests (shown as 10 / set 25 → new location 💣 25 / reject 0)
+- [x] `uv run pytest tests/` → 210 passed; `uv run ty check app` → clean
+- [x] E2E full suite → 39 passed, 0 failed
+- [x] Live API smoke test: default 10 → create 10 → set 25 → reject 0 → create 25, existing location untouched
+- [x] Alembic chain verified on scratch DB: `001 → 010` upgrade + `010 → 009` downgrade
+
+## Review
+- **Scope guarantee**: changing the default never touches existing locations — only
+  `create_locations` (API + bot) reads `game.default_location_bombs`.
+- `default_bombs` rides on `/api/admin/locations`, which `loadLocations()` already polls,
+  so the header stays in sync with no extra request. It's set before the empty-table
+  early-return so the value shows even with zero locations.
+- The header editor has its own state (`defaultEditing`) separate from the table's
+  `editing`, with `event.stopPropagation()` on its 💾/✕ buttons — same bubbling bug that
+  affected the cell editors.
+- Bot list display ("Worth N bombs each by default") now compares against the game
+  default instead of recomputing `100 // total`.
+- `test-results/` ownership got reset to root by `docker compose down -v`; chowned back
+  to 1000:1000. If e2e runs suddenly show 39 `PermissionError`s, that's why.
+
+---
+
 # Editable bomb count & code on Locations page
 
 ## Backend
