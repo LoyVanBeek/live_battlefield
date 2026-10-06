@@ -817,6 +817,7 @@ async def team_page(
             "request": request,
             "team_color": team_token_color,
             "team_token": token,
+            "game_id": game_id_str,
             "tr": translations,
             "tr_json": json.dumps(translations),
             "current_lang": chosen_lang,

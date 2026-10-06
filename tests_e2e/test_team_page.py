@@ -87,3 +87,52 @@ def test_remove_ship_from_team_page(page, app_url, seeded_game_with_teams):
     ships_text_after = tp.ships_placed_text().text_content()
     placed_after = int(ships_text_after)
     assert placed_after < placed_before
+
+
+def _game_id(app_url: str, admin_token: str, gm_token: str) -> str:
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        games = client.get(
+            "/api/admin/games", params={"token": admin_token}
+        ).json()["games"]
+        return next(g["id"] for g in games if g["gm_token"] == gm_token)
+
+
+def test_map_link_in_header(page, app_url, admin_token, seeded_game_with_teams):
+    """Header row has a 🗺️ button to the Quest Locations Map (opens in a new tab)."""
+    seed = seeded_game_with_teams
+    game_id = _game_id(app_url, admin_token, seed["gm_token"])
+
+    tp = TeamPage(page, seed["team_urls"]["red"], app_url)
+    tp.goto()
+
+    link = tp.map_link()
+    link.wait_for(state="visible")
+
+    assert link.get_attribute("href") == f"/map?game_id={game_id}"
+    assert link.get_attribute("target") == "_blank"
+    assert "noopener" in (link.get_attribute("rel") or "")
+    # translated tooltip (default en: "🗺️ Quest Locations Map")
+    assert "Map" in (link.get_attribute("title") or "")
+
+
+def test_map_link_in_redeem_form(page, app_url, admin_token, seeded_game_with_teams):
+    """Once started, the Redeem Code form carries the same map link."""
+    seed = seeded_game_with_teams
+    game_id = _game_id(app_url, admin_token, seed["gm_token"])
+
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        resp = client.post(
+            "/api/quick/start-game", params={"gm_token": seed["gm_token"]}
+        )
+        assert resp.json().get("success") is True, resp.text
+
+    tp = TeamPage(page, seed["team_urls"]["red"], app_url)
+    tp.goto()
+    # redeem form is only rendered when the game has started
+    page.wait_for_selector("#code-loc", timeout=15000)
+
+    link = tp.redeem_map_link()
+    link.wait_for(state="visible")
+
+    assert link.get_attribute("href") == f"/map?game_id={game_id}"
+    assert link.get_attribute("target") == "_blank"

@@ -1,3 +1,37 @@
+# Quest Locations Map link on the team page
+
+## Backend
+- [x] `team_page` passes `game_id` to the template context (`routes.py`, team.html context)
+
+## Frontend
+- [x] 🗺️ button in `.team-actions` header row (always visible, `target="_blank"`)
+- [x] Link under the Redeem Code form (renders when started, `#actions`)
+- [x] Translation key `action.code.map_link` in en.json ("🗺️ Quest Locations Map") + nl.json ("🗺️ Kaart met questlocaties")
+
+## Tests / verification
+- [x] `tests/test_translations.py` — en/nl key-parity (233 keys, currently identical) + map_link non-empty
+- [x] E2E: `test_map_link_in_header` (href/target/rel/translated title) + `test_map_link_in_redeem_form` (started game, waits for `#code-loc`)
+- [x] `uv run pytest tests/` → 219 passed; `uv run ty check app` → clean
+- [x] Rebuilt both `test-app` + `test-e2e`; targeted run → 7 passed; **full suite → 49 passed, 0 failed**
+- [x] Live smoke on :8001 — header anchor + JS-built anchor render with real UUID; `accept-language: nl` and `lang=nl` cookie both yield "🗺️ Kaart met questlocaties"
+
+## Review
+- `game_id` was already computed in the route but never passed down — one context line,
+  nothing else backend-side.
+- Link appears in two places per your choice: header button (always) and redeem form
+  (only when `gameStatus === 'started'`, matching when the form and map pins exist).
+- Both open in a new tab (`rel="noopener"`) so teams keep the team page while reading codes.
+- Header anchor gets inline `background:#0f3460;color:#00d9ff;text-decoration:none` —
+  `.btn` has no default background and plain `<a class="btn">` would render as a bare link.
+- Redeem link is injected into the JS-built HTML with `{{ game_id }}` — Jinja renders
+  inside `<script>` (same pattern as `map.html`'s `GAME_ID`), verified in served HTML.
+- New translation-key-parity unit test guards future i18n drift (en/nl were already in
+  exact sync at 233 keys).
+- **Note**: language precedence on `/team/{token}` is query > cookie > accept-language
+  (cookie wins) — pre-existing behavior, hit while smoke-testing NL labels.
+
+---
+
 # Numbered location pins on both maps
 
 ## Assets

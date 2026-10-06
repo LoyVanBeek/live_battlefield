@@ -9,6 +9,14 @@ class TeamPage:
         self.page.goto(self.url)
         self.page.wait_for_load_state("load")
 
+    def map_link(self):
+        """Header 🗺️ button linking to the Quest Locations Map."""
+        return self.page.locator('.team-actions a[href*="/map?game_id="]')
+
+    def redeem_map_link(self):
+        """Map link inside the Redeem Code form (rendered once the game started)."""
+        return self.page.locator('#actions a[href*="/map?game_id="]')
+
     def board_cells(self):
         return self.page.locator("table.board-table td.cell")
 
