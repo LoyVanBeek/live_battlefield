@@ -817,6 +817,7 @@ async def team_page(
             "request": request,
             "team_color": team_token_color,
             "team_token": token,
+            "game_id": game_id_str,
             "tr": translations,
             "tr_json": json.dumps(translations),
             "current_lang": chosen_lang,
@@ -992,7 +993,14 @@ async def get_admin_locations(
             }
         )
 
-    return {"locations": result}
+    from app.models import get_game
+
+    game = await get_game(db, game_uuid)
+
+    return {
+        "locations": result,
+        "default_bombs": game.default_location_bombs if game else 10,
+    }
 
 
 @app.get("/api/admin/events")
@@ -2229,10 +2237,10 @@ async def create_locations(
         }
 
     total_after = len(existing_locations) + action.count
-    default_bomb_value = max(1, 100 // total_after)
+    from app.models import get_game
 
-    for loc in existing_locations:
-        loc.bomb_value = default_bomb_value
+    game = await get_game(db, game_uuid)
+    default_bomb_value = game.default_location_bombs if game else 10
 
     created = []
 
@@ -2280,7 +2288,7 @@ async def create_locations(
 
     return {
         "success": True,
-        "message": f"Created {len(created)} locations! Each worth {default_bomb_value} bombs (Total: 100)",
+        "message": f"Created {len(created)} locations! Each worth {default_bomb_value} bombs.",
         "locations": created,
         "bomb_value": default_bomb_value,
     }
@@ -2331,14 +2339,6 @@ async def remove_location(
 
     await db.delete(location)
 
-    if remaining_count > 0:
-        new_bomb_value = max(1, 100 // remaining_count)
-        for loc in existing_locations:
-            if loc.number != action.location_number:
-                loc.bomb_value = new_bomb_value
-    else:
-        new_bomb_value = 0
-
     event = LocationRemovedEvent(
         number=action.location_number,
         bomb_value=location.bomb_value,
@@ -2353,9 +2353,8 @@ async def remove_location(
 
     return {
         "success": True,
-        "message": f"Location {action.location_number} removed. All locations now worth {new_bomb_value} bombs (Total: {100 if remaining_count > 0 else 0}). {warning}".strip(),
+        "message": f"Location {action.location_number} removed. {remaining_count} locations remaining. {warning}".strip(),
         "locations_remaining": remaining_count,
-        "bomb_value": new_bomb_value,
         "was_visited": was_visited,
     }
 
@@ -2831,4 +2830,138 @@ async def set_location_bombs(
     return {
         "success": True,
         "message": f"Location {data.location_number} now worth {data.bomb_value} bombs!",
+    }
+
+
+class SetLocationCoords(BaseModel):
+    location_number: int
+    latitude: float
+    longitude: float
+
+
+@app.post("/api/quick/set_location_coords")
+async def set_location_coords(
+    data: SetLocationCoords,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_location_by_number
+
+    game_uuid = uuid.UUID(game_id)
+    location = await get_location_by_number(db, game_uuid, data.location_number)
+    if not location:
+        return {
+            "success": False,
+            "message": f"Location {data.location_number} does not exist!",
+        }
+
+    if not (math.isfinite(data.latitude) and math.isfinite(data.longitude)):
+        return {"success": False, "message": "Invalid coordinates!"}
+    if not -90 <= data.latitude <= 90:
+        return {
+            "success": False,
+            "message": "Latitude must be between -90 and 90!",
+        }
+    if not -180 <= data.longitude <= 180:
+        return {
+            "success": False,
+            "message": "Longitude must be between -180 and 180!",
+        }
+
+    # Coordinates are display-only (map, links, bot listing) — not part of
+    # GameState, so a plain DB update is all that's needed.
+    location.latitude = data.latitude
+    location.longitude = data.longitude
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": (
+            f"Location {data.location_number} moved to "
+            f"{data.latitude:.4f}, {data.longitude:.4f}!"
+        ),
+    }
+
+
+class SetLocationCode(BaseModel):
+    location_number: int
+    code: str
+
+
+@app.post("/api/quick/set_location_code")
+async def set_location_code(
+    data: SetLocationCode,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_location_by_number, get_game_locations
+    from app.events.models import LocationCodeChangedEvent
+
+    game_uuid = uuid.UUID(game_id)
+    location = await get_location_by_number(db, game_uuid, data.location_number)
+    if not location:
+        return {
+            "success": False,
+            "message": f"Location {data.location_number} does not exist!",
+        }
+
+    new_code = data.code.strip().upper()
+    if not new_code:
+        return {"success": False, "message": "Code cannot be empty!"}
+    if len(new_code) > 20:
+        return {"success": False, "message": "Code must be 20 characters or fewer!"}
+    if not new_code.isalnum():
+        return {
+            "success": False,
+            "message": "Code may only contain letters and digits!",
+        }
+
+    existing_locations = await get_game_locations(db, game_uuid)
+    for loc in existing_locations:
+        if loc.number != data.location_number and loc.code == new_code:
+            return {
+                "success": False,
+                "message": f"Code {new_code} is already used by location {loc.number}!",
+            }
+
+    location.code = new_code
+
+    # Codes are event-sourced: redemption validates against state.location_codes,
+    # so record the change as an event (not just a DB update).
+    event = LocationCodeChangedEvent(number=data.location_number, code=new_code)
+    await save_event(db, event, game_uuid)
+
+    return {
+        "success": True,
+        "message": f"Location {data.location_number} code changed to {new_code}!",
+    }
+
+
+class SetDefaultBombs(BaseModel):
+    default_bombs: int
+
+
+@app.post("/api/quick/set_default_bombs")
+async def set_default_bombs(
+    data: SetDefaultBombs,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_game
+
+    game_uuid = uuid.UUID(game_id)
+    game = await get_game(db, game_uuid)
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    if data.default_bombs < 1:
+        return {"success": False, "message": "Default bomb count must be at least 1!"}
+
+    # Only affects locations created from now on; existing ones are untouched.
+    game.default_location_bombs = data.default_bombs
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"New locations are now worth {data.default_bombs} bombs!",
     }

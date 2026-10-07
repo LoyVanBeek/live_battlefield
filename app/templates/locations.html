@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Locations Overview - Live Battlefield</title>
     <link rel="stylesheet" href="/static/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="/static/location-pin.css" />
     <script src="/static/leaflet/leaflet.js"></script>
+    <script src="/static/location-pin.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -130,6 +132,24 @@
         .btn-add:hover {
             background: #45a049;
         }
+        .btn-myloc {
+            background: #0f3460;
+            color: #00d9ff;
+            border: 1px solid #00d9ff;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .btn-myloc:hover:not(:disabled) {
+            background: #00d9ff;
+            color: #1a1a2e;
+        }
+        .btn-myloc:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
         .location-form {
             background: #16213e;
             padding: 15px;
@@ -169,6 +189,76 @@
         .leaflet-popup-tip {
             background: #16213e;
         }
+        .editable-cell {
+            cursor: pointer;
+            border-bottom: 1px dashed #888;
+        }
+        .editable-cell:hover {
+            border-bottom-color: #00d9ff;
+            color: #00d9ff;
+        }
+        .cell-edit-input {
+            width: 90px;
+            padding: 4px 6px;
+            font-size: 14px;
+            border-radius: 4px;
+            border: 2px solid #0f3460;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .cell-edit-input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .btn-save-cell {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn-save-cell:hover {
+            background: #45a049;
+        }
+        .btn-cancel-cell {
+            background: #555;
+            color: #eee;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn-cancel-cell:hover {
+            background: #666;
+        }
+        #toast {
+            visibility: hidden;
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 250px;
+            max-width: 80%;
+            padding: 12px 20px;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            z-index: 2000;
+            text-align: center;
+        }
+        #toast.success { background: #2e7d32; }
+        #toast.error { background: #c62828; }
+        #toast.show {
+            visibility: visible;
+            animation: toast-fade 0.3s ease;
+        }
+        @keyframes toast-fade {
+            from { opacity: 0; bottom: 30px; }
+            to { opacity: 1; bottom: 20px; }
+        }
     </style>
 </head>
 <body>
@@ -179,7 +269,15 @@
         
         <!-- Add Location Form -->
         <div class="location-form">
-            <h3 style="margin-bottom: 10px; color: #00d9ff;">➕ Add Locations</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                <h3 style="color: #00d9ff;">➕ Add Locations</h3>
+                <div style="font-size: 13px; color: #888;">
+                    New locations worth
+                    <span id="default-bombs-cell" class="editable-cell" title="Click to edit"
+                          onclick="startDefaultEdit()">💣 <span id="default-bombs-value">10</span></span>
+                    bombs each
+                </div>
+            </div>
             <div class="form-row">
                 <div style="display: flex; flex-direction: column; gap: 5px;">
                     <label style="font-size: 12px; color: #888;">Latitude</label>
@@ -189,6 +287,8 @@
                     <label style="font-size: 12px; color: #888;">Longitude</label>
                     <input type="number" id="loc-lon" placeholder="13.405" step="0.0001" style="width: 120px;">
                 </div>
+                <button id="btn-my-location" type="button" class="btn-myloc" onclick="addLocationAtMyLocation()"
+                        style="margin-top: 18px;" title="Insert a single location at my current GPS position">📍 My location</button>
                 <div style="display: flex; flex-direction: column; gap: 5px;">
                     <label style="font-size: 12px; color: #888;">Count</label>
                     <input type="number" id="loc-count" placeholder="Count" value="1" min="1" max="100" style="width: 80px;">
@@ -200,13 +300,13 @@
                 <button class="btn-add" onclick="addLocations()" style="margin-top: 18px;">Add</button>
                 <button class="btn-remove" onclick="clearAllLocations()" style="margin-top: 18px; height: fit-content;">🗑️ Clear All</button>
             </div>
-            <p style="color: #888; font-size: 12px; margin-top: 5px;">Leave count=1 for single location, or set higher for random batch. Or click on the map below to pick a location.</p>
+            <p style="color: #888; font-size: 12px; margin-top: 5px;">Leave count=1 for single location, or set higher for random batch. Or click on the map below to pick a location, or use 📍 My location to drop one at your current GPS position.</p>
         </div>
         
         <!-- Map -->
         <div style="position: relative;">
             <div id="map"></div>
-            <div style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(22, 33, 62, 0.9); padding: 8px 12px; border-radius: 4px; font-size: 12px; color: #00d9ff;">
+            <div id="map-hint" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(22, 33, 62, 0.9); padding: 8px 12px; border-radius: 4px; font-size: 12px; color: #00d9ff;">
                 🖱️ Click map to add location
             </div>
         </div>
@@ -232,6 +332,8 @@
             </table>
         </div>
     </div>
+
+    <div id="toast"></div>
 
     <script>
         function getGmToken() {
@@ -276,6 +378,17 @@
             }).addTo(map);
             
             map.on('click', async function(e) {
+                // While the coords editor is open, a map click picks the new
+                // position instead of creating a location.
+                if (editing && editing.field === 'coords') {
+                    const input = document.getElementById('cell-edit-input');
+                    if (input) {
+                        input.value = `${e.latlng.lat}, ${e.latlng.lng}`;
+                        input.focus();
+                    }
+                    return;
+                }
+
                 try {
                     const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getGmToken()), {
                         method: 'POST',
@@ -291,10 +404,13 @@
                     
                     if (data.success && data.locations && data.locations.length > 0) {
                         const loc = data.locations[0];
-                        const marker = L.marker([e.latlng.lat, e.latlng.lng])
+                        const marker = L.marker([e.latlng.lat, e.latlng.lng], {
+                            icon: locationPinIcon(loc.number)
+                        })
                             .addTo(map)
                             .bindPopup(`<b>Location ${loc.number}</b><br>Code: ${loc.code}<br>Bombs: ${loc.bomb_value || 1}`)
                             .openPopup();
+                        marker.locationNumber = loc.number;
                         markers.push(marker);
                         loadLocations();
                     } else {
@@ -312,9 +428,12 @@
             markers = [];
             
             locations.forEach(loc => {
-                const marker = L.marker([loc.latitude, loc.longitude])
+                const marker = L.marker([loc.latitude, loc.longitude], {
+                    icon: locationPinIcon(loc.number)
+                })
                     .addTo(map)
                     .bindPopup(`<b>Location ${loc.number}</b><br>Code: ${loc.code}<br>Bombs: ${loc.bomb_value || 1}`);
+                marker.locationNumber = loc.number;
                 markers.push(marker);
             });
         }
@@ -327,7 +446,12 @@
             try {
                 const resp = await fetch('/api/admin/locations?gm_token=' + encodeURIComponent(getGmToken()));
                 const data = await resp.json();
-                
+
+                if (data.default_bombs !== undefined) {
+                    const defaultEl = document.getElementById('default-bombs-value');
+                    if (defaultEl) defaultEl.textContent = data.default_bombs;
+                }
+
                 const tbody = document.getElementById('locations-body');
                 
                 if (data.locations.length === 0) {
@@ -354,9 +478,9 @@
                     return `
                         <tr>
                             <td>${loc.number}</td>
-                            <td class="code">${loc.code}</td>
-                            <td class="coords">${lat}, ${lon}</td>
-                            <td>💣 ${loc.bomb_value || 1}</td>
+                            <td class="code"><span class="editable-cell" id="cell-code-${loc.number}" onclick="startEdit(${loc.number}, 'code')">${loc.code}</span></td>
+                            <td class="coords"><span class="editable-cell" id="cell-coords-${loc.number}" data-lat="${loc.latitude}" data-lon="${loc.longitude}" onclick="startEdit(${loc.number}, 'coords')">${lat}, ${lon}</span></td>
+                            <td><span class="editable-cell" id="cell-bombs-${loc.number}" onclick="startEdit(${loc.number}, 'bombs')">💣 ${loc.bomb_value || 1}</span></td>
                             <td class="visited">${visitedHtml}</td>
                             <td><a href="${mapUrl}" target="_blank" class="map-link">Map</a></td>
                             <td><button class="btn-remove" onclick="removeLocation(${loc.number}, '${loc.code}')">Remove</button></td>
@@ -367,6 +491,223 @@
                 console.error('Error loading locations:', e);
                 document.getElementById('locations-body').innerHTML = 
                     '<tr><td colspan="7" style="text-align: center; color: #f44336;">Error loading locations</td></tr>';
+            }
+        }
+
+        // ---- Inline editing of Code / Bombs cells ----
+        let editing = null; // {number, field, originalHtml}
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = '';
+            void toast.offsetWidth; // restart animation
+            toast.className = (type === 'success' ? 'success' : 'error') + ' show';
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(() => { toast.className = ''; }, 3000);
+        }
+
+        function updateMapHint() {
+            const hint = document.getElementById('map-hint');
+            if (!hint) return;
+            hint.textContent = (editing && editing.field === 'coords')
+                ? '🖱️ Click map or drag marker to set position'
+                : '🖱️ Click map to add location';
+        }
+
+        function cancelEdit() {
+            if (!editing) return;
+            const { number, field, originalHtml } = editing;
+            const cell = document.getElementById(`cell-${field}-${number}`);
+            if (cell) {
+                cell.innerHTML = originalHtml;
+                cell.onclick = () => startEdit(number, field);
+            }
+            if (field === 'coords') setMarkerDraggable(number, false);
+            editing = null;
+            updateMapHint();
+        }
+
+        function startEdit(number, field) {
+            if (editing && editing.number === number && editing.field === field) return;
+            cancelEdit();
+
+            const cell = document.getElementById(`cell-${field}-${number}`);
+            if (!cell) return;
+
+            editing = { number, field, originalHtml: cell.innerHTML };
+            cell.onclick = null;
+
+            const current = field === 'coords'
+                ? `${cell.dataset.lat}, ${cell.dataset.lon}`
+                : editing.originalHtml.replace('💣 ', '').trim();
+            const inputType = field === 'bombs' ? 'number' : 'text';
+            const extra = field === 'bombs'
+                ? ' min="1" step="1"'
+                : field === 'coords'
+                    ? ' style="width: 170px;"'
+                    : ' maxlength="20" style="width: 110px; text-transform: uppercase;"';
+
+            cell.innerHTML = `
+                <span style="display: inline-flex; gap: 4px; align-items: center;">
+                    <input class="cell-edit-input" type="${inputType}"${extra} id="cell-edit-input"
+                           value="${current.replace(/"/g, '&quot;')}"
+                           onkeydown="if(event.key==='Enter'){event.preventDefault();saveEdit();}
+                                       else if(event.key==='Escape'){event.preventDefault();cancelEdit();}">
+                    <button class="btn-save-cell" onclick="event.stopPropagation();saveEdit()">💾</button>
+                    <button class="btn-cancel-cell" onclick="event.stopPropagation();cancelEdit()">✕</button>
+                </span>`;
+
+            const input = document.getElementById('cell-edit-input');
+            input.focus();
+            input.select();
+
+            if (field === 'coords') setMarkerDraggable(number, true);
+            updateMapHint();
+        }
+
+        // While the coords editor is open, that location's marker can be dragged
+        // (dragend fills the input; saving is still explicit via 💾).
+        function setMarkerDraggable(number, enabled) {
+            const marker = markers.find(m => m.locationNumber === number);
+            if (!marker) return;
+            if (enabled) {
+                marker.dragging.enable();
+                marker.off('dragend');
+                marker.on('dragend', function () {
+                    const input = document.getElementById('cell-edit-input');
+                    if (!input || !editing || editing.field !== 'coords') return;
+                    const ll = marker.getLatLng();
+                    input.value = `${ll.lat}, ${ll.lng}`;
+                });
+            } else {
+                marker.dragging.disable();
+                marker.off('dragend');
+            }
+        }
+
+        async function saveEdit() {
+            if (!editing) return;
+            const { number, field } = editing;
+            const input = document.getElementById('cell-edit-input');
+            if (!input) return;
+
+            let body;
+            let url;
+            if (field === 'code') {
+                const code = input.value.trim().toUpperCase();
+                if (!code) { showToast('Code cannot be empty!', 'error'); return; }
+                if (code.length > 20) { showToast('Code must be 20 characters or fewer!', 'error'); return; }
+                if (!/^[A-Z0-9]+$/.test(code)) { showToast('Code may only contain letters and digits!', 'error'); return; }
+                url = '/api/quick/set_location_code';
+                body = { location_number: number, code };
+            } else if (field === 'coords') {
+                const parts = input.value.split(',');
+                const lat = parts.length === 2 ? parseFloat(parts[0]) : NaN;
+                const lon = parts.length === 2 ? parseFloat(parts[1]) : NaN;
+                if (!isFinite(lat) || !isFinite(lon)) { showToast('Enter coordinates as "latitude, longitude"!', 'error'); return; }
+                if (lat < -90 || lat > 90) { showToast('Latitude must be between -90 and 90!', 'error'); return; }
+                if (lon < -180 || lon > 180) { showToast('Longitude must be between -180 and 180!', 'error'); return; }
+                url = '/api/quick/set_location_coords';
+                body = { location_number: number, latitude: lat, longitude: lon };
+            } else {
+                const value = parseInt(input.value, 10);
+                if (isNaN(value) || value < 1) { showToast('Bomb count must be at least 1!', 'error'); return; }
+                url = '/api/quick/set_location_bombs';
+                body = { location_number: number, bomb_value: value };
+            }
+
+            try {
+                const resp = await fetch(url + '?gm_token=' + encodeURIComponent(getGmToken()), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    if (field === 'coords') setMarkerDraggable(number, false);
+                    editing = null;
+                    updateMapHint();
+                    showToast(data.message, 'success');
+                    loadLocations();
+                } else {
+                    showToast(data.message || 'Error saving change', 'error');
+                }
+            } catch (e) {
+                console.error('Error saving edit:', e);
+                showToast('Error saving change', 'error');
+            }
+        }
+
+        // ---- Inline editing of the per-game default bomb count ----
+        let defaultEditing = false;   // {originalValue} while the editor is open
+        let defaultOriginalValue = null;
+
+        function renderDefaultDisplay(value) {
+            const cell = document.getElementById('default-bombs-cell');
+            cell.innerHTML = `💣 <span id="default-bombs-value">${value}</span>`;
+        }
+
+        function startDefaultEdit() {
+            if (defaultEditing) return;
+            const cell = document.getElementById('default-bombs-cell');
+            const valueEl = document.getElementById('default-bombs-value');
+            if (!cell || !valueEl) return;
+
+            defaultEditing = true;
+            defaultOriginalValue = valueEl.textContent.trim();
+
+            cell.innerHTML = `
+                <input class="cell-edit-input" type="number" min="1" step="1" id="default-bombs-input"
+                       value="${defaultOriginalValue}"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();saveDefaultEdit();}
+                                   else if(event.key==='Escape'){event.preventDefault();cancelDefaultEdit();}">
+                <button class="btn-save-cell" onclick="event.stopPropagation();saveDefaultEdit()">💾</button>
+                <button class="btn-cancel-cell" onclick="event.stopPropagation();cancelDefaultEdit()">✕</button>`;
+
+            const input = document.getElementById('default-bombs-input');
+            input.focus();
+            input.select();
+        }
+
+        function cancelDefaultEdit() {
+            if (!defaultEditing) return;
+            defaultEditing = false;
+            renderDefaultDisplay(defaultOriginalValue);
+            defaultOriginalValue = null;
+        }
+
+        async function saveDefaultEdit() {
+            if (!defaultEditing) return;
+            const input = document.getElementById('default-bombs-input');
+            if (!input) return;
+
+            const value = parseInt(input.value, 10);
+            if (isNaN(value) || value < 1) {
+                showToast('Default bomb count must be at least 1!', 'error');
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/quick/set_default_bombs?gm_token=' + encodeURIComponent(getGmToken()), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ default_bombs: value })
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    defaultEditing = false;
+                    defaultOriginalValue = null;
+                    renderDefaultDisplay(value);
+                    showToast(data.message, 'success');
+                } else {
+                    showToast(data.message || 'Error saving default', 'error');
+                }
+            } catch (e) {
+                console.error('Error saving default bombs:', e);
+                showToast('Error saving default', 'error');
             }
         }
 
@@ -393,6 +734,70 @@
                 console.error('Error removing location:', e);
                 alert('Error removing location');
             }
+        }
+
+        // Drop a single location at the device's current GPS position (one tap).
+        // count=1 + radius_km=0 so the pin lands exactly where we are — with the
+        // default radius the backend would scatter it randomly around the point.
+        async function addLocationAtMyLocation() {
+            const btn = document.getElementById('btn-my-location');
+            if (!btn || btn.disabled) return;
+
+            // Browsers only expose the Geolocation API in secure contexts
+            // (https:// or localhost) — a phone on http://LAN-IP gets neither.
+            if (!window.isSecureContext || !navigator.geolocation) {
+                showToast('GPS needs HTTPS — open this page via https:// or localhost to use your location.', 'error');
+                return;
+            }
+
+            const originalLabel = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '📍 Locating…';
+
+            const restore = () => {
+                btn.disabled = false;
+                btn.textContent = originalLabel;
+            };
+
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    try {
+                        const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getGmToken()), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                latitude: pos.coords.latitude,
+                                longitude: pos.coords.longitude,
+                                count: 1,
+                                radius_km: 0
+                            })
+                        });
+                        const data = await resp.json();
+                        if (data.success) {
+                            const accuracy = Math.round(pos.coords.accuracy || 0);
+                            showToast(`📍 ${data.message} GPS ±${accuracy}m`, 'success');
+                            loadLocations();
+                        } else {
+                            showToast(data.message || 'Error adding location', 'error');
+                        }
+                    } catch (e) {
+                        console.error('Error adding location at GPS position:', e);
+                        showToast('Error adding location', 'error');
+                    } finally {
+                        restore();
+                    }
+                },
+                (err) => {
+                    restore();
+                    const msg = err.code === 1
+                        ? 'Location permission denied — allow it in your browser settings and try again.'
+                        : err.code === 2
+                            ? "Couldn't determine your location (position unavailable)."
+                            : 'Timed out waiting for your location — try again.';
+                    showToast(msg, 'error');
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
         }
 
         async function addLocations() {

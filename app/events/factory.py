@@ -11,6 +11,7 @@ from app.events.models import (
     CodeRedeemedEvent,
     LocationAddedEvent,
     LocationRemovedEvent,
+    LocationCodeChangedEvent,
     BombsAddedEvent,
     TeamRemovedEvent,
     TeamResetEvent,
@@ -58,6 +59,9 @@ def create_event(db_event: GameEvent) -> Optional[AnyEvent]:
 
     elif event_type_value == "location_removed":
         return LocationRemovedEvent(**payload_dict)
+
+    elif event_type_value == "location_code_changed":
+        return LocationCodeChangedEvent(**payload_dict)
 
     elif event_type_value == "team_removed":
         return TeamRemovedEvent(**payload_dict)

@@ -1348,6 +1348,332 @@ class TestCreateLocationsGuards:
         assert response.json()["success"] is True
 
 
+class TestSetLocationCodeGuards:
+    """Input validation for /api/quick/set_location_code."""
+
+    def _call(self, location, others=None, **overrides):
+        from app.api.routes import app, verify_gm_token, get_api_db
+        from app.events.models import LocationCodeChangedEvent  # noqa: F401 (wiring check)
+
+        payload = {"location_number": 1, "code": "NEW123"}
+        payload.update(overrides)
+
+        class MockSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            def add(self, *args, **kwargs):
+                pass
+
+            async def commit(self):
+                pass
+
+            async def execute(self, *args, **kwargs):
+                return MagicMock()
+
+        async def override_get_db():
+            yield MockSession()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch(
+                "app.models.get_location_by_number",
+                new_callable=AsyncMock,
+                return_value=location,
+            ):
+                with patch(
+                    "app.models.get_game_locations",
+                    new_callable=AsyncMock,
+                    return_value=others if others is not None else [],
+                ):
+                    with patch("app.api.routes.save_event", new_callable=AsyncMock):
+                        client = TestClient(app)
+                        return client.post("/api/quick/set_location_code", json=payload)
+        finally:
+            app.dependency_overrides.clear()
+
+    @staticmethod
+    def _location(number=1, code="OLD111"):
+        loc = MagicMock()
+        loc.number = number
+        loc.code = code
+        return loc
+
+    def test_rejects_unknown_location(self):
+        data = self._call(location=None).json()
+        assert data["success"] is False
+        assert "does not exist" in data["message"]
+
+    def test_rejects_empty_code(self):
+        data = self._call(self._location(), code="   ").json()
+        assert data["success"] is False
+        assert "empty" in data["message"]
+
+    def test_rejects_too_long_code(self):
+        data = self._call(self._location(), code="A" * 21).json()
+        assert data["success"] is False
+        assert "20 characters" in data["message"]
+
+    def test_rejects_non_alphanumeric_code(self):
+        data = self._call(self._location(), code="BAD CODE").json()
+        assert data["success"] is False
+        assert "letters and digits" in data["message"]
+
+    def test_rejects_code_used_by_other_location(self):
+        other = self._location(number=2, code="TAKEN1")
+        data = self._call(self._location(), others=[self._location(), other], code="taken1").json()
+        assert data["success"] is False
+        assert "location 2" in data["message"]
+
+    def test_success_updates_and_normalizes_code(self):
+        location = self._location()
+        data = self._call(location, code="  new123  ").json()
+        assert data["success"] is True
+        assert location.code == "NEW123"
+        assert "NEW123" in data["message"]
+
+
+class TestDefaultLocationBombs:
+    """Per-game default bomb count: /api/quick/set_default_bombs + create path."""
+
+    def _mock_db(self):
+        class MockSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            def add(self, *args, **kwargs):
+                pass
+
+            async def commit(self):
+                pass
+
+            async def refresh(self, *args, **kwargs):
+                pass
+
+            async def execute(self, *args, **kwargs):
+                return MagicMock()
+
+        return MockSession()
+
+    def _game(self, default_bombs=10):
+        game = MagicMock()
+        game.default_location_bombs = default_bombs
+        return game
+
+    def test_model_column_defaults_to_10(self):
+        from app.database import Game
+
+        col = Game.__table__.c.default_location_bombs
+        assert col.default.arg == 10
+        assert col.nullable is False
+
+    def _set_default(self, game, payload):
+        from app.api.routes import app, verify_gm_token, get_api_db
+
+        async def override_get_db():
+            yield self._mock_db()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.models.get_game", new_callable=AsyncMock, return_value=game):
+                client = TestClient(app)
+                return client.post("/api/quick/set_default_bombs", json=payload)
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_rejects_zero(self):
+        data = self._set_default(self._game(), {"default_bombs": 0}).json()
+        assert data["success"] is False
+        assert "at least 1" in data["message"]
+
+    def test_rejects_negative(self):
+        data = self._set_default(self._game(), {"default_bombs": -5}).json()
+        assert data["success"] is False
+
+    def test_success_updates_game(self):
+        game = self._game()
+        data = self._set_default(game, {"default_bombs": 25}).json()
+        assert data["success"] is True
+        assert game.default_location_bombs == 25
+        assert "25 bombs" in data["message"]
+
+    def test_rejects_unknown_game(self):
+        data = self._set_default(None, {"default_bombs": 25}).json()
+        assert data["success"] is False
+
+    def test_create_locations_uses_game_default(self):
+        """New locations get the game default regardless of how many exist."""
+        from app.api.routes import app, verify_gm_token, get_api_db
+        from app.game.state import GameState
+
+        async def override_get_db():
+            yield self._mock_db()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with (
+                patch("app.api.routes.GameState.from_events", return_value=GameState()),
+                patch("app.models.get_game_events", return_value=[]),
+                patch("app.models.get_game_locations", return_value=[]),
+                patch("app.models.get_next_location_number", new_callable=AsyncMock, return_value=1),
+                patch("app.api.routes.save_event", new_callable=AsyncMock) as save_ev,
+                patch("app.models.get_game", new_callable=AsyncMock, return_value=self._game(25)),
+            ):
+                client = TestClient(app)
+                response = client.post(
+                    "/api/quick/create_locations",
+                    json={"latitude": 52.0, "longitude": 4.0, "count": 3},
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["bomb_value"] == 25
+        assert "25 bombs" in data["message"]
+        # both the Location rows and the events carry the game default
+        assert save_ev.call_args.args[1].bomb_value == 25
+
+    def test_create_locations_falls_back_to_10_without_game(self):
+        from app.api.routes import app, verify_gm_token, get_api_db
+        from app.game.state import GameState
+
+        async def override_get_db():
+            yield self._mock_db()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with (
+                patch("app.api.routes.GameState.from_events", return_value=GameState()),
+                patch("app.models.get_game_events", return_value=[]),
+                patch("app.models.get_game_locations", return_value=[]),
+                patch("app.models.get_next_location_number", new_callable=AsyncMock, return_value=1),
+                patch("app.api.routes.save_event", new_callable=AsyncMock),
+                patch("app.models.get_game", new_callable=AsyncMock, return_value=None),
+            ):
+                client = TestClient(app)
+                response = client.post(
+                    "/api/quick/create_locations",
+                    json={"latitude": 52.0, "longitude": 4.0, "count": 1},
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.json()["bomb_value"] == 10
+
+
+class TestSetLocationCoordsGuards:
+    """Input validation for /api/quick/set_location_coords."""
+
+    def _call(self, location, raw_body=None, **overrides):
+        from app.api.routes import app, verify_gm_token, get_api_db
+        import json as json_mod
+
+        headers = {"Content-Type": "application/json"}
+        if raw_body is not None:
+            body = raw_body
+        else:
+            payload = {"location_number": 1, "latitude": 51.5, "longitude": 5.3}
+            payload.update(overrides)
+            body = json_mod.dumps(payload)
+
+        class MockSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            def add(self, *args, **kwargs):
+                pass
+
+            async def commit(self):
+                pass
+
+            async def execute(self, *args, **kwargs):
+                return MagicMock()
+
+        async def override_get_db():
+            yield MockSession()
+
+        app.dependency_overrides[get_api_db] = override_get_db
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch(
+                "app.models.get_location_by_number",
+                new_callable=AsyncMock,
+                return_value=location,
+            ):
+                client = TestClient(app)
+                return client.post(
+                    "/api/quick/set_location_coords",
+                    content=body,
+                    headers=headers,
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+    @staticmethod
+    def _location(latitude=51.5, longitude=5.3):
+        loc = MagicMock()
+        loc.latitude = latitude
+        loc.longitude = longitude
+        return loc
+
+    def test_rejects_unknown_location(self):
+        data = self._call(None).json()
+        assert data["success"] is False
+        assert "does not exist" in data["message"]
+
+    def test_rejects_infinite_latitude(self):
+        # JSON has no NaN/inf literal; an overflowing number like 1e400 is the
+        # realistic way a non-finite value reaches the endpoint.
+        raw = '{"location_number": 1, "latitude": 1e400, "longitude": 5.3}'
+        data = self._call(self._location(), raw_body=raw).json()
+        assert data["success"] is False
+        assert "Invalid coordinates" in data["message"]
+
+    def test_rejects_infinite_longitude(self):
+        raw = '{"location_number": 1, "latitude": 51.5, "longitude": -1e400}'
+        data = self._call(self._location(), raw_body=raw).json()
+        assert data["success"] is False
+        assert "Invalid coordinates" in data["message"]
+
+    def test_rejects_out_of_range_latitude(self):
+        data = self._call(self._location(), latitude=91.0).json()
+        assert data["success"] is False
+        assert "Latitude" in data["message"]
+        assert self._call(self._location(), latitude=-90.5).json()["success"] is False
+
+    def test_rejects_out_of_range_longitude(self):
+        data = self._call(self._location(), longitude=181.0).json()
+        assert data["success"] is False
+        assert "Longitude" in data["message"]
+        assert self._call(self._location(), longitude=-200.0).json()["success"] is False
+
+    def test_accepts_boundary_values(self):
+        assert self._call(self._location(), latitude=90, longitude=180).json()["success"] is True
+        assert self._call(self._location(), latitude=-90, longitude=-180).json()["success"] is True
+
+    def test_success_writes_both_fields(self):
+        location = self._location()
+        data = self._call(location, latitude=52.52, longitude=13.405).json()
+        assert data["success"] is True
+        assert location.latitude == 52.52
+        assert location.longitude == 13.405
+        assert "52.5200, 13.4050" in data["message"]
+
+
 class TestEventStreamCap:
     """SSE streams are rejected with 429 when the game is at connection capacity."""
 

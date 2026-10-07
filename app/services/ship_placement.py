@@ -1,10 +1,54 @@
+import copy
 import random
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import get_game_events
-from app.game.state import GameState, GameStatusField, _copy_team
+from app.game.state import GameState, GameStatusField, TeamState
 from app.game.ships import SHIP_COUNTS
 from app.events import ShipPlacedEvent, save_event
+
+Placement = tuple[str, int, int, str]  # ship_type, row, col, direction
+
+# Greedy placement paints itself into a corner: under the no-touching rule an
+# early ship can leave the board with no legal cell for a later one (measured
+# 3.5% of draws dying with the patrol boat still to place). A dead-end draw is
+# normal, so redraw the whole board instead of failing the call.
+MAX_BOARD_DRAWS = 20
+ATTEMPTS_PER_SHIP = 5000
+
+
+def _draw_placements(team: TeamState, ships_to_place: list[str]) -> list[Placement] | None:
+    """One greedy placement attempt on a private copy of the team's board.
+
+    Returns every placement, or None when this draw dead-ends — the caller
+    redraws rather than failing.
+    """
+    board = copy.deepcopy(team)
+    placements: list[Placement] = []
+
+    for ship_type in ships_to_place:
+        for _ in range(ATTEMPTS_PER_SHIP):
+            row = random.randint(0, 9)
+            col = random.randint(0, 9)
+            direction = random.choice(["horizontal", "vertical"])
+
+            placed, board = board.place_ship(ship_type, row, col, direction)
+            if placed:
+                placements.append((ship_type, row, col, direction))
+                break
+        else:
+            return None
+
+    return placements
+
+
+def find_placements(team: TeamState, ships_to_place: list[str]) -> list[Placement] | None:
+    """Place every ship, redrawing the board each time a draw dead-ends."""
+    for _ in range(MAX_BOARD_DRAWS):
+        placements = _draw_placements(team, ships_to_place)
+        if placements is not None:
+            return placements
+    return None
 
 
 async def place_all_ships_game_scoped(db: AsyncSession, game_id: str, team_color: str) -> tuple[bool, str]:
@@ -35,25 +79,9 @@ async def place_all_ships_game_scoped(db: AsyncSession, game_id: str, team_color
     if not ships_to_place:
         return True, "All ships already placed!"
 
-    placements = []
-    team_copy = _copy_team(team)
-
-    for ship_type in ships_to_place:
-        found = False
-        for _ in range(5000):
-            row = random.randint(0, 9)
-            col = random.randint(0, 9)
-            direction = random.choice(["horizontal", "vertical"])
-
-            success, updated_team = team_copy.place_ship(ship_type, row, col, direction)
-            if success:
-                placements.append((ship_type, row, col, direction))
-                team_copy = updated_team
-                found = True
-                break
-
-        if not found:
-            return False, f"Could not find placement for {ship_type}"
+    placements = find_placements(team, ships_to_place)
+    if placements is None:
+        return False, "Could not find a valid ship layout - try again"
 
     for ship_type, row, col, direction in placements:
         event = ShipPlacedEvent(

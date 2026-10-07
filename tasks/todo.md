@@ -1,38 +1,240 @@
-# Fix: missing `psycopg` on deployed system (Alembic migration crash)
+# 📍 Insert location at current GPS position (GM locations page)
 
-## Root cause
-- `migrations/env.py` built the sync URL as bare `postgresql://...` (stripped `+asyncpg`).
-- Dockerfile installed from `pyproject.toml`, not `uv.lock` → rebuild resolved `sqlalchemy[asyncio]>=2.0.0` to SQLAlchemy 2.1.
-- SQLAlchemy 2.1 changed the default driver for bare `postgresql://` from psycopg2 → psycopg 3; `psycopg` is not shipped → `ModuleNotFoundError`.
+## Frontend
+- [x] `📍 My location` button in `.form-row` + `.btn-myloc` style + hint text
+- [x] `addLocationAtMyLocation()`: secure-context guard, locate → POST `count=1, radius_km=0`, toasts
 
-## Plan (approved: A + D)
-1. **A** `app/config.py`: `database_url_sync` replaces `+asyncpg` → `+psycopg2` (explicit shipped driver).
-2. `migrations/env.py`: drop redundant second `.replace("+asyncpg", "")`.
-3. **D** `Dockerfile`: install from `uv.lock` so rebuilds are reproducible.
+## Tests / verification
+- [x] E2E: GPS insert (exact coords), denied permission, insecure-context stub
+- [x] `uv run pytest tests/` + `uv run ty check app` + full e2e
+- [x] Note in review: works via ngrok HTTPS; only plain LAN HTTP shows the guard toast
 
-## Tasks
-- [x] `app/config.py`: one-line fix (`+psycopg2`)
-- [x] `migrations/env.py`: cleanup
-- [x] `Dockerfile`: lockfile-based install
-- [x] Verify: sync URL prints `postgresql+psycopg2://...`
-- [x] Verify: `uv run pytest tests/` → 191 passed; ty check skipped (string-only change, no type surface)
-- [x] Verify: `docker compose build app` → image has SQLAlchemy 2.0.47 + psycopg2 2.9.11 (locked)
-- [x] Verify: `docker compose up -d` → migrations applied, DB at `008`, HTTP 200, healthcheck green
+## Review
+- One tap → `getCurrentPosition({enableHighAccuracy:true, timeout:10s, maximumAge:0})` → `POST /api/quick/create_locations` with `count:1, radius_km:0`, so the row shows the exact fix (`52.5200, 13.4050` in the E2E asserts radius 0 — a default 2km radius would offset it). Success toast includes rounded accuracy (±12m); button shows `📍 Locating…` and is restored in `finally`.
+- Guard order: `!window.isSecureContext || !navigator.geolocation` → `GPS needs HTTPS…` toast, no request sent. Error callbacks map codes 1/2/3 → denied / unavailable / timeout toasts.
+- **E2E secure context**: the test origin `http://test-app:8000` is *not* potentially trustworthy (only loopback is, without TLS), so the guard fired for every test. Chromium's `--unsafely-treat-insecure-origin-as-secure` flag is dead in Chrome 153 (verified: `isSecureContext` stays false), and self-signed HTTPS on `test-app` would break every `httpx` fixture (cert verification). Fix: `tests_e2e/conftest.py` now relays `APP_URL` (`http://localhost:8000`, set in `docker-compose.e2e.yml`) to `APP_UPSTREAM` (`test-app:8000`) over a stdlib TCP relay — loopback is secure by default, no flags, no certs.
+- **Relay perf bug (found via 3 regressions)**: the naive relay added ~43ms/request (Nagle + delayed-ACK) which flipped three racy "assert right after page load" tests (`test_join_page_loads`, `test_full_color_block`, `test_navigate_to_events_from_gm`). Fixed at the root with `TCP_NODELAY` on both sockets → back to 4–5ms, identical to direct. Page-object/API call sites untouched.
+- Production unaffected: the guard, button and toast are client-side only; ngrok already serves real HTTPS (geolocation works there today). Only plain-LAN `http://IP` shows the guard toast.
 
-## Second issue found & resolved (user decision)
-- The deployed DB was stamped at revision `015` from the unmerged `feature/specials` branch
-  (its events included `TSUNAMI` / `SPECIAL_AMMO_GRANTED`, which main's `EventType` can't parse —
-  a plain `stamp 008` would have 500'd the event feed).
-- User chose **reset**: `docker compose down` + `docker volume rm live_battlefield_postgres_data`
-  (pgadmin config volume kept), then `up -d` on main. Fresh DB migrated 001→008 cleanly.
+## Follow-up (not started)
+- [ ] HTTPS for plain-LAN HTTP deployments (e.g. local CA / `mkcert` behind the app, or always-ngrok) so phones on `http://IP` get GPS too
 
-## Implementation note
-- First attempt used `uv sync --frozen --no-install-project --system` — invalid: `uv sync` has no
-  `--system` flag (build caught it). Final form: `uv export --frozen --no-dev --no-emit-project` →
-  `uv pip install --system -r`, which keeps the system-site-packages layout the app, healthcheck,
-  and `Dockerfile.e2e` already rely on.
+---
 
-## Follow-ups
-- When `feature/specials` merges, the fix rides along via main; no action needed.
-- A remote deployed host needs these commits pulled + image rebuilt; if its DB is also
-  specials-stamped, reset or reconcile it the same way.
+# Quest Locations Map link on the team page
+
+## Backend
+- [x] `team_page` passes `game_id` to the template context (`routes.py`, team.html context)
+
+## Frontend
+- [x] 🗺️ button in `.team-actions` header row (always visible, `target="_blank"`)
+- [x] Link under the Redeem Code form (renders when started, `#actions`)
+- [x] Translation key `action.code.map_link` in en.json ("🗺️ Quest Locations Map") + nl.json ("🗺️ Kaart met questlocaties")
+
+## Tests / verification
+- [x] `tests/test_translations.py` — en/nl key-parity (233 keys, currently identical) + map_link non-empty
+- [x] E2E: `test_map_link_in_header` (href/target/rel/translated title) + `test_map_link_in_redeem_form` (started game, waits for `#code-loc`)
+- [x] `uv run pytest tests/` → 219 passed; `uv run ty check app` → clean
+- [x] Rebuilt both `test-app` + `test-e2e`; targeted run → 7 passed; **full suite → 49 passed, 0 failed**
+- [x] Live smoke on :8001 — header anchor + JS-built anchor render with real UUID; `accept-language: nl` and `lang=nl` cookie both yield "🗺️ Kaart met questlocaties"
+
+## Review
+- `game_id` was already computed in the route but never passed down — one context line,
+  nothing else backend-side.
+- Link appears in two places per your choice: header button (always) and redeem form
+  (only when `gameStatus === 'started'`, matching when the form and map pins exist).
+- Both open in a new tab (`rel="noopener"`) so teams keep the team page while reading codes.
+- Header anchor gets inline `background:#0f3460;color:#00d9ff;text-decoration:none` —
+  `.btn` has no default background and plain `<a class="btn">` would render as a bare link.
+- Redeem link is injected into the JS-built HTML with `{{ game_id }}` — Jinja renders
+  inside `<script>` (same pattern as `map.html`'s `GAME_ID`), verified in served HTML.
+- New translation-key-parity unit test guards future i18n drift (en/nl were already in
+  exact sync at 233 keys).
+- **Note**: language precedence on `/team/{token}` is query > cookie > accept-language
+  (cookie wins) — pre-existing behavior, hit while smoke-testing NL labels.
+
+---
+
+# Numbered location pins on both maps
+
+## Assets
+- [x] `app/static/location-pin.css` — teardrop pin (rotated square, `border-radius: 50% 50% 50% 0`), number counter-rotated upright
+- [x] `app/static/location-pin.js` — `locationPinIcon(number)` → `L.divIcon`, `iconSize: [30, 36]`, `iconAnchor: [15, 36]` (rotated tip lands at y≈36.2, so the pin points at the exact coordinate — default divIcon anchor is top-left and would offset it)
+
+## Templates
+- [x] `locations.html` (GM): assets linked after Leaflet; icon in `updateMarkers()` + map-click-create path
+- [x] `map.html` (player): assets linked; icon added alongside existing `title: 'Location #N'`
+
+## Tests / verification
+- [x] E2E `test_map_pins_show_location_number` (GM: pins carry 1..5, count == row count)
+- [x] E2E `tests_e2e/test_map_page.py`: numbered pins after start + `title` kept; no pins while WAITING (regression) — first coverage for `/map`
+- [x] `uv run pytest tests/` → 217 passed; `uv run ty check app` → clean (backend untouched)
+- [x] Rebuilt **both** `test-app` and `test-e2e` images; locations + map tests → 17 passed
+- [x] Full e2e suite → 47 passed, 0 failed (includes marker-drag test against new pin geometry)
+
+## Review
+- **Frontend-only**: no API, event, or migration changes — both endpoints already return `loc.number`.
+- Shared assets so GM and player pins can't drift; served by the existing `/static` mount
+  (`routes.py:239`), no plumbing.
+- Pin is a divIcon: keeps `.leaflet-marker-icon` (so `marker_count`, coords drag-while-editing,
+  and `marker.locationNumber` lookups still work — verified by the passing drag test).
+- The number sits in an inner span counter-rotated `+45deg` so it stays upright.
+- `/map` had zero coverage; added a positive test (started game) and a negative one (waiting
+  game renders no pins — `map.html` early-returns on `status === 'waiting'` and never polls).
+  The negative test waits on `#game-status-badge` = WAITING so it can't pass vacuously.
+- **Gotcha**: `test-results/` flipped to root ownership again mid-session (timestamp 19:16,
+  right after a `docker compose run -v` screenshot run) → 47 permission errors; fixed with
+  `docker run --user 0 ... chown -R 1000:1000`. Check `ls -ld test-results` before any
+  full e2e run.
+- Screenshot for visual check: `/tmp/opencode/pin_gm.png` (script `/tmp/opencode/pin_shot.py`).
+
+---
+
+# Editable location coordinates
+
+## Backend
+- [x] Endpoint `POST /api/quick/set_location_coords` (finite + range guards, DB-only)
+
+## Frontend
+- [x] Clickable coords cell → `coords` branch in `startEdit`/`saveEdit`
+- [x] Map click fills input while coords editing (else creates location as before)
+- [x] Marker drag enabled only while coords editing; dragend fills input
+
+## Tests / verification
+- [x] Unit tests: `TestSetLocationCoordsGuards` (7 tests)
+- [x] E2E: 5 new tests (input edit, map click, invalid, marker drag, create-regression)
+- [x] `uv run pytest tests/` → 217 passed; `uv run ty check app` → clean
+- [x] E2E full suite → 44 passed, 0 failed
+- [x] Live API smoke: move ✓, bad lat ✓, `1e400` overflow ✓, unknown loc ✓, state reflects new coords ✓
+
+## Review
+- **DB-only, no event/migration**: `GameState` only tracks `location_codes` and
+  `location_counter` — `LocationAddedEvent.apply()` ignores lat/lon, and nothing does
+  proximity math. Redemption is code-based, so unlike codes this needs no event sourcing.
+- The coords cell keeps `data-lat`/`data-lon` from the API so the editor opens with full
+  precision while the cell displays `toFixed(4)`.
+- Map interactions are gated on `editing?.field === 'coords'`:
+  - map click → fills input (editor closed → still creates a location, regression-tested)
+  - `marker.dragging.enable()` only for that one marker, `disable()` + `off('dragend')`
+    on save/cancel; `dragend` fills the input, saving stays explicit via 💾
+- The `#map-hint` overlay switches text during picking so the create-vs-pick mode is
+  visible.
+- Guard style matches `create_locations`: `math.isfinite` + range checks. Note JSON has
+  no NaN/inf literal — the realistic bad input is an overflowing number (`1e400`), which
+  is how the unit test exercises that branch.
+
+---
+
+# Default bomb count per game (default 10)
+
+## Backend
+- [x] Migration `010_add_default_location_bombs.py` (games.default_location_bombs INT NOT NULL DEFAULT 10)
+- [x] `Game.default_location_bombs` column in `app/database.py`
+- [x] Endpoint `POST /api/quick/set_default_bombs` (validate >= 1)
+- [x] Add `default_bombs` to `/api/admin/locations` response
+- [x] Replace `max(1, 100 // total)` in `routes.py` create + bot create/list
+
+## Frontend
+- [x] Inline click-to-edit "Default: 💣 N" next to ➕ Add Locations heading
+
+## Tests / verification
+- [x] Unit tests: `TestDefaultLocationBombs` (7 tests — column default, validation, create uses game default, fallback)
+- [x] E2E: 3 new tests (shown as 10 / set 25 → new location 💣 25 / reject 0)
+- [x] `uv run pytest tests/` → 210 passed; `uv run ty check app` → clean
+- [x] E2E full suite → 39 passed, 0 failed
+- [x] Live API smoke test: default 10 → create 10 → set 25 → reject 0 → create 25, existing location untouched
+- [x] Alembic chain verified on scratch DB: `001 → 010` upgrade + `010 → 009` downgrade
+
+## Review
+- **Scope guarantee**: changing the default never touches existing locations — only
+  `create_locations` (API + bot) reads `game.default_location_bombs`.
+- `default_bombs` rides on `/api/admin/locations`, which `loadLocations()` already polls,
+  so the header stays in sync with no extra request. It's set before the empty-table
+  early-return so the value shows even with zero locations.
+- The header editor has its own state (`defaultEditing`) separate from the table's
+  `editing`, with `event.stopPropagation()` on its 💾/✕ buttons — same bubbling bug that
+  affected the cell editors.
+- Bot list display ("Worth N bombs each by default") now compares against the game
+  default instead of recomputing `100 // total`.
+- `test-results/` ownership got reset to root by `docker compose down -v`; chowned back
+  to 1000:1000. If e2e runs suddenly show 39 `PermissionError`s, that's why.
+
+---
+
+# Editable bomb count & code on Locations page
+
+## Backend
+- [x] New `LocationCodeChangedEvent` in `app/events/models.py` (apply + to_game_event + AnyEvent union)
+- [x] Register event type: `app/events/types.py`, `app/database.py`, `factory.py`, `saver.py`, `__init__.py`
+- [x] Migration `009_add_location_code_changed.py` (`ALTER TYPE eventtype ADD VALUE`)
+- [x] New endpoint `POST /api/quick/set_location_code` in `app/api/routes.py`
+- [x] Stop rebalancing: remove loops in `routes.py` create/remove + fix messages
+- [x] Stop rebalancing in `app/bot/handlers.py` create path + fix message
+
+## Frontend
+- [x] `app/templates/locations.html`: click-to-edit Code & Bombs cells (startEdit/saveEdit/cancelEdit)
+- [x] Add `showToast()` + toast element/CSS, use for new edit flows
+
+## Tests / verification
+- [x] Unit test: LocationCodeChangedEvent apply + factory round-trip (`tests/test_location_code_changed_event.py`)
+- [x] Unit test: `set_location_code` validation guards (`tests/test_api.py::TestSetLocationCodeGuards`)
+- [x] E2E: extended locations page object + 4 new edit tests
+- [x] `uv run ty check app` → All checks passed
+- [x] `uv run pytest tests/` → 203 passed
+- [x] E2E full suite → 36 passed, 0 failed
+
+## Review
+
+### What shipped
+- GM can now edit a location's **code** and **bomb count** inline on the locations table
+  (click cell → edit → 💾 save / ✕ cancel, Enter/Esc). Works in any game status.
+- Code edits are event-sourced via new `LocationCodeChangedEvent` (migration 009), so
+  redemption validates against the event-derived state, not just the DB row.
+- Bomb-value rebalancing on create/remove removed — existing locations keep their value;
+  new locations still get `max(1, 100 // total)`.
+- New edits use `showToast()`; existing alert()/confirm() flows untouched.
+
+### Bugs found & fixed during E2E debugging
+1. **Cancel re-opened the editor**: the ✕/💾 click bubbled up to the cell handler that
+   `cancelEdit()` had just re-armed synchronously → `startEdit()` ran again.
+   Fixed with `event.stopPropagation()` on both buttons.
+2. **Flaky toast assertions**: `page.wait_for_load_state("networkidle")` returned the
+   state already latched by `goto()`, so tests read the toast before the fetch resolved.
+   Fixed in `LocationsPage.save_cell_edit()` to wait on the real signal (toast text
+   change; on success also editor close + networkidle), with `expect="success"|"error"`.
+
+### Environment note
+- `test-results/` host dir was `root:root` (from an earlier root-run Docker volume) while
+  the e2e container runs as uid 1000 → 36 teardown `PermissionError`s. Fixed by chown to
+  1000:1000; not related to this change.
+- `test_complete_game.py::test_play_full_game` failed once (start button race), passes
+  on re-run — pre-existing flakiness, not caused by this change.
+
+### Verification
+- Unit: 203 passed. Type check: clean. E2E: 36/36 passed (locations page 6/6).
+
+## CI green: type checks, pip-audit, auto-place dead ends
+
+### Review
+- **Red CI runs 161–164** (`Run type checks`): CI/pre-commit run `uv run ty check` repo-wide while
+  AGENTS.md only documented `ty check app`, which skips tests/. Fixed both diagnostics (c0de885):
+  a no-op `game_id` assignment to a SQLAlchemy descriptor, and a mypy-style `# type: ignore[…]`
+  that ty doesn't honour (replaced with a `cast`). AGENTS.md now documents the full CI sequence.
+- **Hooks were never installed** — `.pre-commit-config.yaml` existed but `.git/hooks/` had only
+  `*.sample`, so nothing guarded a single commit. Installed (`pre-commit install`) and documented.
+- **Audit step**: `uv lock --upgrade-package anyio` → 4.12.1 → 4.14.2 (PYSEC-2026-4024/4025).
+  uv picks 4.14.2 over 4.15.1 because 4.15.1 needs `typing_extensions>=4.16.0` and the lock pins
+  4.15.0; a single-package upgrade deliberately leaves the rest alone.
+- **Auto-place dead ends**: greedy draw gave up instead of redrawing when an earlier ship left no
+  legal cell (3.5% of draws) → HTTP 200 `success:false` → GM Start button stuck disabled → the
+  intermittent full-suite E2E failures. `find_placements()` now redraws (bounded, 20 draws).
+- Known follow-up (not fixed): `routes.py:2068` and `bot/handlers.py:628` ignore the auto-place
+  result and always reply "Ships auto-placed" — truthful now, but unguarded if a board is truly unfillable.
+
+### Verification
+- `uv run ty check` repo-wide clean; `uv run pytest tests/` **223 passed** (219 + 4 new in
+  `tests/test_ship_placement_service.py`); `uvx pip-audit` exit 0 ("No known vulnerabilities found")
+- Placement stress: single draws dead-end 3.5% → `find_placements` 0/1500 failures, mean 0.75ms
+- Full E2E: **52/52 passed** (first fully green run; previous runs failed ~every other time)
+- CI on `f611fcb`: runs #167/#168 **success** — type checks, tests and audit all pass, and the
+  `e2e` job ran for the first time ever (previously always skipped) and passed

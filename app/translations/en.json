@@ -125,7 +125,8 @@
             "heading": "\ud83d\udd11 Redeem Code",
             "location_placeholder": "Location #",
             "value_placeholder": "ABCD",
-            "redeem": "Redeem"
+            "redeem": "Redeem",
+            "map_link": "\ud83d\uddfa\ufe0f Quest Locations Map"
         },
         "save": "Save",
         "cancel": "Cancel"

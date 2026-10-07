@@ -11,6 +11,7 @@ class EventType(str, Enum):
     CODE_REDEEMED = "code_redeemed"
     LOCATION_ADDED = "location_added"
     LOCATION_REMOVED = "location_removed"
+    LOCATION_CODE_CHANGED = "location_code_changed"
     BOMBS_ADDED = "bombs_added"
     TEAM_RESET = "team_reset"
     GAME_STARTED = "game_started"

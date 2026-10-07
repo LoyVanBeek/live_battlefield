@@ -69,6 +69,7 @@ class EventType(str, enum.Enum):
     CODE_REDEEMED = "code_redeemed"
     LOCATION_ADDED = "location_added"
     LOCATION_REMOVED = "location_removed"
+    LOCATION_CODE_CHANGED = "location_code_changed"
     GAME_STARTED = "game_started"
     GAME_ENDED = "game_ended"
     BOMBS_ADDED = "bombs_added"
@@ -160,6 +161,7 @@ class Game(Base):
     paused_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     quiz_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
     quiz_total_bombs: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    default_location_bombs: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
     scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

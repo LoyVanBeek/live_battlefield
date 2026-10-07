@@ -505,8 +505,10 @@ async def handle_locations_list(db, update: Update, context: ContextTypes.DEFAUL
     if not locations:
         return "No locations have been added yet."
 
-    num_locations = len(locations)
-    default_bomb_value = max(1, 100 // num_locations)
+    from app.models import get_game
+
+    game = await get_game(db, game_id)
+    default_bomb_value = game.default_location_bombs if game else 10
 
     for loc in locations:
         try:
@@ -722,10 +724,10 @@ async def handle_create_locations(
     created = []
 
     total_after = len(existing_locations) + count
-    default_bomb_value = max(1, 100 // total_after)
+    from app.models import get_game
 
-    for loc in existing_locations:
-        loc.bomb_value = default_bomb_value
+    game = await get_game(db, game_id)
+    default_bomb_value = game.default_location_bombs if game else 10
 
     for i in range(count):
         lat_offset = random.uniform(-radius_km / 111, radius_km / 111)
@@ -766,7 +768,7 @@ async def handle_create_locations(
 
     await db.commit()
 
-    msg = f"✅ Created {count} locations around ({latitude}, {longitude}). Each worth {default_bomb_value} bombs (Total: 100):\n"
+    msg = f"✅ Created {count} locations around ({latitude}, {longitude}). Each worth {default_bomb_value} bombs:\n"
     msg += "\n".join(created)
     msg += (
         f"\n\nTotal locations: {total_after}. Bombs per location: {default_bomb_value}"

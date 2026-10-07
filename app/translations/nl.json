@@ -125,7 +125,8 @@
             "heading": "\ud83d\udd11 Code Inwisselen",
             "location_placeholder": "Locatie #",
             "value_placeholder": "ABCD",
-            "redeem": "Inwisselen"
+            "redeem": "Inwisselen",
+            "map_link": "\ud83d\uddfa\ufe0f Kaart met locaties"
         },
         "save": "Opslaan",
         "cancel": "Annuleren"

@@ -40,7 +40,8 @@ services:
       test-app:
         condition: service_healthy
     environment:
-      APP_URL: http://test-app:8000
+      APP_URL: http://localhost:8000
+      APP_UPSTREAM: test-app:8000
     volumes:
       - ./test-results:/app/test-results
     command: >
