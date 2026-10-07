@@ -107,10 +107,14 @@ docker compose -f docker-compose.e2e.yml run --rm test-e2e
 
 1. `uv run ty check` (repo-wide; also what the pre-commit `ty-check` hook runs)
 2. `uv run pytest tests/` (pre-commit `pytest` hook runs `uv run pytest`)
-3. `uvx pip-audit` against `uv export --format requirements-txt --no-hashes --no-dev` — currently failing on `anyio` 4.12.1 (PYSEC-2026-4024/4025), fix pending in a separate commit
+3. `uvx pip-audit` against `uv export --format requirements-txt --no-hashes --no-dev` — must exit 0
 4. `docker compose -f docker-compose.e2e.yml run --rm test-e2e` (the `e2e` job runs after `test`, and is `continue-on-error`)
 
 Steps 2–4 never run while step 1 fails, so a type error hides every failure behind it.
+
+Run `pre-commit install` once per clone: it wires steps 1–2 up as commit hooks
+(`ty-check` + `pytest`). Hooks that are configured but never installed guard nothing —
+that is how four red CI runs shipped.
 
 _Note: use `--extra dev` not `--dev` — the latter is for uv's own `[dependency-groups]` format, not PEP 621 extras.
 
