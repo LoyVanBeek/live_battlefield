@@ -43,8 +43,8 @@ class TestLocationCodeChangedEvent:
             ).to_game_event(),
             LocationCodeChangedEvent(number=1, code="NEW222").to_game_event(),
         ]
-        for e in events:
-            e.game_id = None
+        # to_game_event() already leaves game_id=None (these events predate the
+        # game binding), so nothing to strip before replay.
 
         state = GameState.from_events(events)
 

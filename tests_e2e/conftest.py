@@ -3,6 +3,7 @@ import socket
 import socketserver
 import sys
 import threading
+from typing import cast
 from urllib.parse import urlparse
 
 import pytest
@@ -51,7 +52,9 @@ class _RelayHandler(socketserver.BaseRequestHandler):
         # Nagle + delayed-ACK on a forwarding socket stalls small segments for
         # ~40ms — enough to turn every API round trip into a visible wait.
         self.request.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        host, port = self.server.upstream  # type: ignore[attr-defined]
+        # socketserver types .server as BaseServer; only _Relay builds this handler.
+        server = cast(_Relay, self.server)
+        host, port = server.upstream
         try:
             upstream = socket.create_connection((host, port), timeout=10)
         except OSError as exc:

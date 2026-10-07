@@ -91,15 +91,26 @@ Dev dependencies are under `[project.optional-dependencies] dev` in pyproject.to
 # Install dev dependencies into uv venv
 uv sync --extra dev
 
-# Run type checker
-uv run ty check app
+# Run type checker — repo-wide, matching CI and the pre-commit hook exactly.
+# Do NOT narrow this to `ty check app`: that skips tests/ and tests_e2e/ and
+# reports green while CI is red.
+uv run ty check
 
 # Run unit tests
 uv run pytest tests/
 
 # Run E2E tests (requires docker compose test stack)
-docker compose run --rm test-e2e
+docker compose -f docker-compose.e2e.yml run --rm test-e2e
 ```
+
+**Before calling work done**, run the **same commands CI runs** (`.github/workflows/ci.yml`), in order — a green local subset is not green CI:
+
+1. `uv run ty check` (repo-wide; also what the pre-commit `ty-check` hook runs)
+2. `uv run pytest tests/` (pre-commit `pytest` hook runs `uv run pytest`)
+3. `uvx pip-audit` against `uv export --format requirements-txt --no-hashes --no-dev` — currently failing on `anyio` 4.12.1 (PYSEC-2026-4024/4025), fix pending in a separate commit
+4. `docker compose -f docker-compose.e2e.yml run --rm test-e2e` (the `e2e` job runs after `test`, and is `continue-on-error`)
+
+Steps 2–4 never run while step 1 fails, so a type error hides every failure behind it.
 
 _Note: use `--extra dev` not `--dev` — the latter is for uv's own `[dependency-groups]` format, not PEP 621 extras.
 

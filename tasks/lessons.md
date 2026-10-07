@@ -65,3 +65,11 @@
 - That 40ms hit three tests asserting *immediately* after `page.goto` on JS-fetch-populated content (`test_join_page_loads`, `test_full_color_block`, `test_navigate_to_events_from_gm`) — deterministic failures, but the root cause was proxy latency, not the tests
 - Rule: set `TCP_NODELAY` on BOTH ends of any forwarding socket (accepted + upstream); when a relay/proxy changes timing, measure before rewriting callers — `performance.getEntriesByType('resource')` per fetch makes it a number, not a guess
 - Chromium's `--unsafely-treat-insecure-origin-as-secure` flag is dead in Chrome 153 (`isSecureContext` stays false) — don't reach for it to fake a secure context; loopback is trustworthy with no flags
+
+## Green `ty check app` ≠ green CI — run the exact CI command
+- AGENTS.md told me to run `uv run ty check app`; CI and the pre-commit `ty-check` hook run `uv run ty check` (repo-wide)
+- Result: 4 consecutive red CI runs (161–164) on `Run type checks` while every local check I ran reported clean — the two `ty` errors lived in `tests/` and `tests_e2e/`, outside the `app` path
+- Worse: CI's `Run tests` and `Audit dependencies` steps sit *behind* the type check, so a type error silently hid a real `pip-audit` failure (anyio 4.12.1) for four runs
+- Rule: before calling anything done, run the commands from `.github/workflows/ci.yml` verbatim, in the same order, and confirm which downstream steps were blocked by an earlier failure
+- `# type: ignore[attr-defined]` is mypy syntax — ty does not honour it; use `# ty: ignore[<ty-rule>]` or a `cast()` that keeps the attribute actually checked
+- AGENTS.md now documents `uv run ty check` (repo-wide) plus the full CI sequence
