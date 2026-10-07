@@ -73,3 +73,25 @@
 - Rule: before calling anything done, run the commands from `.github/workflows/ci.yml` verbatim, in the same order, and confirm which downstream steps were blocked by an earlier failure
 - `# type: ignore[attr-defined]` is mypy syntax — ty does not honour it; use `# ty: ignore[<ty-rule>]` or a `cast()` that keeps the attribute actually checked
 - AGENTS.md now documents `uv run ty check` (repo-wide) plus the full CI sequence
+
+## Auto-place died on "dead-end boards" — redraw instead of giving up
+- Symptom: intermittent full-suite E2E failures, but a *different* test each time (`test_complete_game`,
+  `test_quiz_mode`) — Playwright clicked `#btn-start` for 30s while it stayed `disabled`
+- The app explained it once I read the UI instead of guessing: `#start-reason` said "Not all teams have
+  placed all ships (1/2)" and `/api/quick/place_all_ships` returned HTTP 200
+  `{"success": false, "message": "Could not find placement for patrol_boat"}` — the tests ignore response bodies
+- Root cause: `place_all_ships_game_scoped` ran one greedy draw (5000 random tries per ship). Under the
+  no-touching rule an early ship can leave *no legal cell* for a later one — measured 3.5% of draws die
+  that way — and the code gave up instead of redrawing the board
+- Ruling out my own relay: reproduce with a loop that alternates relayed vs direct origin. It failed on
+  both → not the relay, one command instead of an argument
+- Fix: redraw the whole board on a dead end (`MAX_BOARD_DRAWS = 20`) → 0/1500 failures, mean 0.75ms
+- Why tests missed it: auto-place response bodies are never asserted, and the GM Start precondition only
+  fails intermittently, surfacing as a click timeout in whichever full-flow test ran the auto-place
+
+## `write` silently overwrites — check the path exists first (self-caught)
+- I "created" `tests/test_ship_placement.py` without checking: it already existed (5 geometry tests from
+  "Split up tests") → suite went 219 → 218 instead of 219 → 223
+- The wrong-direction total was the tell. Know the expected count *before* running the suite
+- Rule: `ls`/`git status` a populated directory before writing a "new" file there, and name test files
+  after the module they cover (`test_ship_placement_service.py` for `app/services/ship_placement.py`)

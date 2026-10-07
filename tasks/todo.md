@@ -212,3 +212,29 @@
 
 ### Verification
 - Unit: 203 passed. Type check: clean. E2E: 36/36 passed (locations page 6/6).
+
+## CI green: type checks, pip-audit, auto-place dead ends
+
+### Review
+- **Red CI runs 161–164** (`Run type checks`): CI/pre-commit run `uv run ty check` repo-wide while
+  AGENTS.md only documented `ty check app`, which skips tests/. Fixed both diagnostics (c0de885):
+  a no-op `game_id` assignment to a SQLAlchemy descriptor, and a mypy-style `# type: ignore[…]`
+  that ty doesn't honour (replaced with a `cast`). AGENTS.md now documents the full CI sequence.
+- **Hooks were never installed** — `.pre-commit-config.yaml` existed but `.git/hooks/` had only
+  `*.sample`, so nothing guarded a single commit. Installed (`pre-commit install`) and documented.
+- **Audit step**: `uv lock --upgrade-package anyio` → 4.12.1 → 4.14.2 (PYSEC-2026-4024/4025).
+  uv picks 4.14.2 over 4.15.1 because 4.15.1 needs `typing_extensions>=4.16.0` and the lock pins
+  4.15.0; a single-package upgrade deliberately leaves the rest alone.
+- **Auto-place dead ends**: greedy draw gave up instead of redrawing when an earlier ship left no
+  legal cell (3.5% of draws) → HTTP 200 `success:false` → GM Start button stuck disabled → the
+  intermittent full-suite E2E failures. `find_placements()` now redraws (bounded, 20 draws).
+- Known follow-up (not fixed): `routes.py:2068` and `bot/handlers.py:628` ignore the auto-place
+  result and always reply "Ships auto-placed" — truthful now, but unguarded if a board is truly unfillable.
+
+### Verification
+- `uv run ty check` repo-wide clean; `uv run pytest tests/` **223 passed** (219 + 4 new in
+  `tests/test_ship_placement_service.py`); `uvx pip-audit` exit 0 ("No known vulnerabilities found")
+- Placement stress: single draws dead-end 3.5% → `find_placements` 0/1500 failures, mean 0.75ms
+- Full E2E: **52/52 passed** (first fully green run; previous runs failed ~every other time)
+- CI on `f611fcb`: runs #167/#168 **success** — type checks, tests and audit all pass, and the
+  `e2e` job ran for the first time ever (previously always skipped) and passed
