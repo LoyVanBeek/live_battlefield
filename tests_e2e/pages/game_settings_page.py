@@ -27,7 +27,11 @@ class GameSettingsPage:
         self.quiz_total_input().fill(str(total_bombs))
 
     def add_question(self, question_text: str, answers: list):
-        """Add a question with answers. Each answer: {"text": ..., "bombs": ..., "correct": bool}"""
+        """Add a question with answers. Each answer: {"text": ..., "correct": bool}.
+
+        Answer bomb values are auto-distributed (total / #questions) by the UI,
+        so there is no per-answer bomb input anymore.
+        """
         self.add_question_button().click()
         self.page.wait_for_timeout(300)
 
@@ -40,9 +44,7 @@ class GameSettingsPage:
         text_inputs = q_block.locator("input[type='text']")
         text_inputs.first.fill(question_text)
 
-        # First answer is auto-created, update it
         answer_radios = q_block.locator("input[type='radio']")
-        bomb_inputs = q_block.locator("input[type='number']")
 
         for i, a in enumerate(answers):
             if i > 0:
@@ -52,10 +54,8 @@ class GameSettingsPage:
             # Re-query after adding new answer
             text_inputs = q_block.locator("input[type='text']")
             answer_radios = q_block.locator("input[type='radio']")
-            bomb_inputs = q_block.locator("input[type='number']")
 
             text_inputs.nth(i).fill(a["text"])
-            bomb_inputs.nth(i).fill(str(a["bombs"]))
             if a["correct"]:
                 answer_radios.nth(i).check()
 

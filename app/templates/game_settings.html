@@ -280,7 +280,11 @@
 
         function renderQuizQuestions() {
             const list = document.getElementById('quiz-questions-list');
-            list.innerHTML = quizQuestions.map((q, qi) => `
+            const total = parseInt(document.getElementById('quiz-total').value) || 100;
+            const perQ = quizQuestions.length > 0 ? Math.floor(total / quizQuestions.length) : 0;
+            list.innerHTML = quizQuestions.map((q, qi) => {
+                const hasCorrect = q.answers && q.answers.some(a => a.is_correct);
+                return `
                 <div style="background:#0f3460;border-radius:6px;padding:12px;margin-bottom:10px;">
                     <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
                         <span style="color:#888;font-size:12px;">Q${qi + 1}</span>
@@ -291,14 +295,14 @@
                         <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;padding-left:20px;">
                             <input type="radio" name="correct-${qi}" ${a.is_correct?'checked':''} onchange="quizQuestions[${qi}].answers.forEach((x,i)=>{x.is_correct=i===${ai}})">
                             <input type="text" value="${a.answer_text.replace(/"/g,'&quot;')}" onchange="quizQuestions[${qi}].answers[${ai}].answer_text=this.value" placeholder="Answer" style="flex:1;padding:5px;font-size:12px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
-                            <input type="number" value="${a.bomb_value}" onchange="quizQuestions[${qi}].answers[${ai}].bomb_value=parseInt(this.value)||0" style="width:50px;padding:5px;font-size:12px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;" title="Bombs">
-                            <span style="font-size:11px;color:#888;">💣</span>
+                            <span style="width:70px;text-align:center;font-size:12px;white-space:nowrap;${(a.is_correct || !hasCorrect) ? (perQ > 0 ? 'color:#4caf50;font-weight:bold;' : 'color:#ff8a80;font-weight:bold;') : 'color:#888;'}">${(a.is_correct || !hasCorrect) ? perQ : 0} 💣</span>
                             <button class="btn btn-danger" style="padding:2px 6px;font-size:10px;" onclick="quizQuestions[${qi}].answers.splice(${ai},1);renderQuizQuestions()">✕</button>
                         </div>
                     `).join('')}
                     <button class="btn btn-primary" style="padding:4px 10px;font-size:11px;margin-left:20px;margin-top:4px;" onclick="addAnswer(${qi})">+ {{ tr.settings.quiz_add_a }}</button>
                 </div>
-            `).join('');
+            `;
+            }).join('');
             updateQuizWarnings();
         }
 
@@ -372,20 +376,6 @@
                 const q = quizQuestions[qi];
                 const broken = lowTotal || !q.answers || q.answers.length === 0;
                 card.style.outline = broken ? '2px solid #ff5252' : '';
-                if (lowTotal) {
-                    const inputs = card.querySelectorAll('input[type="number"]');
-                    (q.answers || []).forEach((a, ai) => {
-                        const inp = inputs[ai];
-                        if (!inp) return;
-                        if (a.is_correct) {
-                            inp.style.borderColor = '#ff5252';
-                            inp.style.color = '#ff8a80';
-                        } else {
-                            inp.style.borderColor = '';
-                            inp.style.color = '';
-                        }
-                    });
-                }
             });
         }
 
