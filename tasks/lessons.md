@@ -95,3 +95,20 @@
 - The wrong-direction total was the tell. Know the expected count *before* running the suite
 - Rule: `ls`/`git status` a populated directory before writing a "new" file there, and name test files
   after the module they cover (`test_ship_placement_service.py` for `app/services/ship_placement.py`)
+
+## Flicker = destructive `innerHTML` churn, not page reloads — prove the test goes red first
+- "The quiz page flickers, I think due to page reloads": the team page never reloads; every SSE state
+  push ran `renderActions()` → `actionsEl.innerHTML = html`, destroying and re-creating `#quiz-content`
+  with a "loading…" placeholder followed by an async `updateQuizSection()` repaint. Boards were already
+  incremental (`renderGrid` caches DOM in `boardGridCache`); `#actions` was the only destructive render.
+- Fix pattern: shape-key guard (`gameStatus|quizEnabled|isPaused`) — rebuild only when the panel's shape
+  changes, otherwise refresh the few live sub-parts; each sub-render (`updateQuizSection`,
+  `renderTargetTeams`) gets its own content signature and writes nothing when unchanged. Side effects of
+  the same bug: typed bomb coordinate and chosen `#target-team` were wiped by every opponent move.
+- DOM-identity regression test: tag a live element (`dataset.probe`), install a `MutationObserver`
+  counting child mutations, trigger a state push via the API (opponent bomb → broadcast), assert the
+  tagged element survived and mutations == 0. Existing waits for "a button exists" can't see churn.
+- Rule: registered a regression E2E and verified it FAILS against the old template
+  (`quiz text is now: 'ParisLondon'`) before shipping — a test that only passes both ways guards nothing.
+- Doc drift noticed, not fixed: AGENTS.md's `--video=on-fail` is rejected by the e2e container's
+  pytest-browser (`invalid choice`, picks are on/off/retain-on-failure); compose already uses `--video=on`.

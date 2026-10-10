@@ -238,3 +238,39 @@
 - Full E2E: **52/52 passed** (first fully green run; previous runs failed ~every other time)
 - CI on `f611fcb`: runs #167/#168 **success** — type checks, tests and audit all pass, and the
   `e2e` job ran for the first time ever (previously always skipped) and passed
+
+---
+
+# Quiz page flicker during a running game (team.html)
+
+## Root cause
+- Not page reloads — the team page never reloads itself (`window.location.reload()` exists
+  only in join.html). The quiz lives in team.html as `#quiz-section` → `#quiz-content`.
+- Every saved event broadcasts (`app/events/saver.py:62` `manager.broadcast("refresh")`; also
+  pause/resume `routes.py:2413/2435`). Each SSE push → `renderState()` → `renderActions()`,
+  which ended with `actionsEl.innerHTML = html` — destroying the whole actions panel and
+  re-creating `#quiz-content` with the literal "loading…" placeholder, then `updateQuizSection()`
+  awaited a `/api/quiz/questions` round trip before repainting. That flash was the flicker.
+- Same mechanism wiped a typed bomb coordinate and reset the chosen `#target-team` (also rebuilt
+  every push). The boards were already fine (`renderGrid` is incremental via `boardGridCache`).
+
+## Fix
+- `renderActions()`: rebuild only when the panel's shape changes (`gameStatus | quizEnabled |
+  isPaused`); same-shape pushes only refresh ship inventory (preparing) / target teams + quiz
+  (started). `renderTargetTeams`/`updateQuizSection` guard their own DOM writes.
+- `updateQuizSection()`: writes only when a content signature (question id + text + answer ids)
+  changes; the "loading…" placeholder now shows only when `#quiz-content` is empty (first load).
+- `renderTargetTeams()`: rebuilds only when the opponent set changes and preserves the chosen value.
+
+## Tests / verification
+- E2E regression test `test_quiz_section_not_rebuilt_on_game_events` (test_quiz_mode.py):
+  tags the quiz button, installs a MutationObserver on `#quiz-content`, picks a bomb target,
+  fires an opponent bomb via the API (broadcasts to the team page), then asserts the button
+  element survived (identity), zero child mutations, and the target select kept its value.
+- Prove-it-ran: test **fails against the old template** (`quiz text is now: 'ParisLondon'`,
+  probe lost) and passes with the fix — it's a real regression test.
+- `uv run ty check` repo-wide clean; `uv run pytest tests/` **223 passed**; `uvx pip-audit` exit 0.
+- Full E2E: **53/53 passed** (52 + 1 new; quiz tests 2/2).
+- Note: the e2e container's compose flag is `--video=on` (AGENTS.md's `--video=on-fail` is
+  rejected by the container's pytest-browser; use `retain-on-failure` if wanted) — doc drift,
+  not fixed here.
