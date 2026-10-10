@@ -112,3 +112,28 @@
   (`quiz text is now: 'ParisLondon'`) before shipping — a test that only passes both ways guards nothing.
 - Doc drift noticed, not fixed: AGENTS.md's `--video=on-fail` is rejected by the e2e container's
   pytest-browser (`invalid choice`, picks are on/off/retain-on-failure); compose already uses `--video=on`.
+
+## Routed `await` on a patched model → patch with `AsyncMock`, not `MagicMock`
+- A route that does `await save_quiz_questions(...)` (model imported inside the function)
+  breaks under `patch("app.models.save_quiz_questions")`: a MagicMock is not awaitable →
+  `client.post(...)` raises before returning → the test "fails" at the request, not at an assert
+- Fix: `patch(..., new_callable=AsyncMock)`; set `mock.return_value` to a real list because
+  the route calls `len(result)` (a bare AsyncMock has no `__len__`) — then
+  `mock.assert_awaited_once()` matches the awaited call
+
+## `git checkout <ref> -- <file>` stages; `git restore <file>` restores from the INDEX
+- "Prove-the-e2e-is-red" flow: `git checkout 63f262a -- app/templates/game_settings.html`
+  updates AND stages the old file. After the red run, `git restore <file>` pulled the *old*
+  content back (from the index), re-staging the broken template — only a
+  `git checkout HEAD -- <file>` (or `git restore --source=HEAD --staged --worktree <file>`)
+  recovers. `git status --short` shows a staged `M` when this state bites
+
+## The e2e "54 passed, 54 errors" pattern is a permissions teardown noise, not failures
+- The compose ships `--video=on` with `./test-results:/app/test-results` and the container
+  as UID 1000. Docker creates a *fresh* mount root-owned, so Playwright's teardown
+  `video.save_as()` raises `PermissionError` for EVERY test (PASS + teardown ERROR, exit 1).
+  That is why CI marks the e2e job `continue-on-error`.
+- One-off debug runs leave root-owned `test-results/` on the host behind (rm-as-yourself
+  works; chown doesn't). To see a REAL clean signal locally run
+  `docker compose ... run --rm --user root test-e2e` → spotless 54/54.
+- Don't "fix" by editing the compose for a private run; document instead.

@@ -274,3 +274,47 @@
 - Note: the e2e container's compose flag is `--video=on` (AGENTS.md's `--video=on-fail` is
   rejected by the container's pytest-browser; use `retain-on-failure` if wanted) — doc drift,
   not fixed here.
+
+---
+
+# Quiz can be saved with zero bomb-yielding answers (settings editor)
+
+## What broke
+- `saveQuiz()` auto-distributed `perQ = Math.floor(total / #questions)` to every correct
+  answer. With total < #questions → perQ = 0 → every answer saved with 0 bombs. No UI
+  warning, no server validation (`routes.py` `save_quiz_questions` accepted anything).
+
+## Fix (user choice: strict block; auto-fix-to-1 explicitly rejected)
+- `game_settings.html`:
+  - live `updateQuizWarnings()` — red banner when total < #questions or a question has
+    no answers; all question cards get a red outline (`outline`, not `border` — no layout
+    shift); re-runs on `#quiz-total` input and after every `renderQuizQuestions()`
+  - `saveQuiz()` blocks **before either API call** with an error toast naming the problem
+- `routes.py` `POST /api/quiz/questions`: backstop for import/API/bot writes — rejects any
+  question with zero answers or zero answers worth 1+ bombs, message names the offending
+  question index (+ first 40 chars of its text), 200 + `success:false` per app convention
+- Honest bomb display: the editable per-answer bomb input was overwritten on save (correct
+  → perQ, others → 0), i.e. a lie. Replaced with a read-only per-answer "N 💣" label
+  (green on the bomb-yielding answer(s), grey 0 elsewhere), recomputed from
+  `Math.floor(total/questions)` at render, red when it would be 0. POM `add_question`
+  stopped filling a bomb input that no longer exists.
+
+## Verification
+- Unit: 4 new `TestQuizMode` tests — all-zero answers rejected (names the question),
+  empty-answers rejected, broken question among valid ones rejected (names `Question 2`),
+  valid set accepted (route awaits model once). `tests/` → **227 passed**
+- E2E (3/3 quiz): new `test_quiz_save_blocks_low_total_bombs` — 3 questions, total 2 →
+  banner shows "lower than the number of questions", save → error toast, `GET
+  /api/quiz/questions` still `[]`. **Proven red against the pre-fix template**
+  (timeout on the missing banner) before landing
+- `uv run ty check` repo-wide clean; `uvx pip-audit` exit 0
+- Full E2E: **54/54 passed** (53 + 1 new), run as root so the video-artifact teardown
+  errors don't mask anything (see pre-existing quirk below)
+
+## Pre-existing quirk, not introduced here
+- The e2e suite ships `--video=on` + `./test-results:/app/test-results` while the
+  container runs as UID 1000. On a per-container-recreated mount nothing writes until
+  teardown, and the first write fails with `PermissionError` (mount is root-owned) —
+  so every test reports PASS + teardown ERROR, exit 1. That is why CI marks the e2e job
+  `continue-on-error`. Wiped `test-results/` locally and verified the same pattern under
+  the default (battleship) user; root run → spotless 54/54. Not fixing here.
