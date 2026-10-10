@@ -208,3 +208,56 @@ def test_quiz_section_not_rebuilt_on_game_events(page, app_url, admin_token):
         f"quiz DOM mutated {state['mutations']}x on a state push (flicker)"
     )
     assert state["target_value"] == "blue", "bomb target selection was reset by a state push"
+
+
+def test_quiz_save_blocks_low_total_bombs(page, app_url, admin_token):
+    """A quiz whose questions outnumber the bomb total must be blocked.
+
+    Regression test: total bombs < number of questions made the save-time
+    distribution Math.floor(total/N) = 0, so every answer was saved with 0 bombs
+    and players could never earn bombs from the quiz. Save must be blocked and
+    the problem surfaced with a warning banner + error toast.
+    """
+    import httpx
+    from tests_e2e.config import HTTPX_TIMEOUT
+    from tests_e2e.pages.game_settings_page import GameSettingsPage
+
+    # Create a game via admin API (no UI for this)
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        resp = client.post("/api/admin/create-game", params={"token": admin_token})
+        gm_token = resp.json()["token"]
+
+    # Open settings, enable quiz with 2 total bombs, add 3 questions
+    gs = GameSettingsPage(page, gm_token, app_url)
+    gs.goto()
+    gs.enable_quiz(2)
+    for i in range(3):
+        gs.add_question(f"Question {i + 1}?", [
+            {"text": "Yes", "bombs": 1, "correct": True},
+            {"text": "No", "bombs": 0, "correct": False},
+        ])
+
+    # The editor must warn that total (2) < number of questions (3)
+    page.wait_for_function(
+        'document.getElementById("quiz-warning-banner") && '
+        'document.getElementById("quiz-warning-banner").style.display === "block"',
+        timeout=5000,
+    )
+    banner = gs.quiz_warning_banner()
+    assert "lower than the number of questions" in banner.text_content()
+
+    # Save must be blocked with an error toast
+    gs.save_quiz()
+    page.wait_for_function(
+        'document.getElementById("toast") && '
+        'document.getElementById("toast").className === "error" && '
+        'document.getElementById("toast").style.display === "block"',
+        timeout=5000,
+    )
+    toast_text = page.locator("#toast").text_content()
+    assert "at least the number of questions" in toast_text, f"Got toast: {toast_text}"
+
+    # Nothing persisted: the questions API is still empty for this fresh game
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        data = client.get("/api/quiz/questions", params={"gm_token": gm_token}).json()
+    assert data.get("questions") == [], f"Expected no saved questions, got {data.get('questions')}"

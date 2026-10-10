@@ -2543,6 +2543,24 @@ async def save_quiz_questions(
 ):
     from app.models import save_quiz_questions
 
+    # Every question must give players a way to win: at least one answer, and
+    # at least one answer worth bombs. Reject otherwise so a quiz can never be
+    # saved in a state where every answer yields 0 bombs (covers import/API/bot).
+    for i, q in enumerate(body.questions, start=1):
+        answers = q.get("answers") or []
+        if not answers:
+            return {"success": False, "message": f"Question {i} has no answers - add at least one answer."}
+        if not any((a.get("bomb_value") or 0) > 0 for a in answers):
+            label = q.get("question_text") or ""
+            label_suffix = f" ('{label[:40]}')" if label else ""
+            return {
+                "success": False,
+                "message": (
+                    f"Question {i}{label_suffix} has no bomb-yielding answer - "
+                    "give at least one answer a bomb value of 1 or more."
+                ),
+            }
+
     game_uuid = uuid.UUID(game_id)
     result = await save_quiz_questions(db, game_uuid, body.questions)
     return {"success": True, "questions": result, "message": f"Saved {len(result)} question(s)."}

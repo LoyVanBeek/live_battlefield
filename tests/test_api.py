@@ -1174,6 +1174,110 @@ class TestQuizMode:
         finally:
             app.dependency_overrides.clear()
 
+    def test_save_quiz_questions_rejects_all_zero_bomb_answers(self):
+        from app.api.routes import app, verify_gm_token
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.models.save_quiz_questions") as mock_save:
+                client = TestClient(app)
+                response = client.post("/api/quiz/questions", json={
+                    "questions": [
+                        {
+                            "question_text": "Capital of France?",
+                            "answers": [
+                                {"answer_text": "Paris", "bomb_value": 0, "is_correct": True},
+                                {"answer_text": "London", "bomb_value": 0, "is_correct": False},
+                            ],
+                        },
+                    ],
+                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is False
+            assert "no bomb-yielding answer" in data["message"]
+            assert "Capital of France" in data["message"]
+            mock_save.assert_not_called()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_save_quiz_questions_rejects_question_without_answers(self):
+        from app.api.routes import app, verify_gm_token
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.models.save_quiz_questions") as mock_save:
+                client = TestClient(app)
+                response = client.post("/api/quiz/questions", json={
+                    "questions": [{"question_text": "Empty Q", "answers": []}],
+                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is False
+            assert "has no answers" in data["message"]
+            mock_save.assert_not_called()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_save_quiz_questions_rejects_broken_question_among_valid_ones(self):
+        from app.api.routes import app, verify_gm_token
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.models.save_quiz_questions") as mock_save:
+                client = TestClient(app)
+                response = client.post("/api/quiz/questions", json={
+                    "questions": [
+                        {
+                            "question_text": "Good Q",
+                            "answers": [{"answer_text": "Yes", "bomb_value": 25, "is_correct": True}],
+                        },
+                        {
+                            "question_text": "Bad Q",
+                            "answers": [{"answer_text": "No", "bomb_value": 0, "is_correct": True}],
+                        },
+                    ],
+                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is False
+            assert "Question 2" in data["message"]
+            assert "Bad Q" in data["message"]
+            mock_save.assert_not_called()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_save_quiz_questions_accepts_bomb_yielding_questions(self):
+        from unittest.mock import AsyncMock
+        from app.api.routes import app, verify_gm_token
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            with patch("app.models.save_quiz_questions", new_callable=AsyncMock) as mock_save:
+                mock_save.return_value = [{"id": 1, "question_text": "Q1"}]
+                client = TestClient(app)
+                response = client.post("/api/quiz/questions", json={
+                    "questions": [
+                        {
+                            "question_text": "Q1",
+                            "answers": [
+                                {"answer_text": "A", "bomb_value": 25, "is_correct": True},
+                                {"answer_text": "B", "bomb_value": 0, "is_correct": False},
+                            ],
+                        },
+                    ],
+                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            mock_save.assert_awaited_once()
+        finally:
+            app.dependency_overrides.clear()
+
 
 class TestAuthRateLimit:
     """Failed auth attempts are throttled per client IP."""

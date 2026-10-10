@@ -167,6 +167,7 @@
                     </div>
                     <div id="quiz-questions-area" style="display:none;margin-top:15px;">
                         <div style="margin-bottom:8px;"><strong>{{ tr.settings.quiz_questions }}</strong></div>
+                        <div id="quiz-warning-banner" style="display:none;background:rgba(255,82,82,.12);border:1px solid #ff5252;border-radius:6px;padding:8px 10px;font-size:12px;color:#ff8a80;margin-bottom:10px;"></div>
                         <div id="quiz-questions-list"></div>
                         <button class="btn btn-primary" onclick="addQuestion()" style="font-size:12px;padding:5px 10px;margin-top:8px;">+ {{ tr.settings.quiz_add_q }}</button>
                         <button class="btn btn-primary" onclick="saveQuiz()" style="margin-top:10px;">{{ tr.settings.quiz_save }}</button>
@@ -298,6 +299,7 @@
                     <button class="btn btn-primary" style="padding:4px 10px;font-size:11px;margin-left:20px;margin-top:4px;" onclick="addAnswer(${qi})">+ {{ tr.settings.quiz_add_a }}</button>
                 </div>
             `).join('');
+            updateQuizWarnings();
         }
 
         function addQuestion() {
@@ -335,9 +337,75 @@
             document.getElementById('quiz-questions-area').style.display = this.checked ? 'block' : 'none';
         });
 
+        document.getElementById('quiz-total').addEventListener('input', updateQuizWarnings);
+
+        // Flag questions/answers that would leave players unable to earn bombs:
+        // total bombs lower than the number of questions (each correct answer
+        // would be worth Math.floor(total/N) = 0), or a question with no answers.
+        function updateQuizWarnings() {
+            const banner = document.getElementById('quiz-warning-banner');
+            const list = document.getElementById('quiz-questions-list');
+            const total = parseInt(document.getElementById('quiz-total').value) || 100;
+            const problems = [];
+
+            if (quizQuestions.length > 0 && total < quizQuestions.length) {
+                problems.push(
+                    `Total bombs (${total}) is lower than the number of questions (${quizQuestions.length}) - each correct answer would be worth 0 bombs.`
+                );
+            }
+            quizQuestions.forEach((q, qi) => {
+                if (!q.answers || q.answers.length === 0) {
+                    problems.push(`Question ${qi + 1} has no answers.`);
+                }
+            });
+
+            if (problems.length > 0) {
+                banner.textContent = '⚠️ ' + problems.join(' ');
+                banner.style.display = 'block';
+            } else {
+                banner.style.display = 'none';
+            }
+
+            const lowTotal = total < quizQuestions.length;
+            const cards = list.querySelectorAll(':scope > div');
+            cards.forEach((card, qi) => {
+                const q = quizQuestions[qi];
+                const broken = lowTotal || !q.answers || q.answers.length === 0;
+                card.style.outline = broken ? '2px solid #ff5252' : '';
+                if (lowTotal) {
+                    const inputs = card.querySelectorAll('input[type="number"]');
+                    (q.answers || []).forEach((a, ai) => {
+                        const inp = inputs[ai];
+                        if (!inp) return;
+                        if (a.is_correct) {
+                            inp.style.borderColor = '#ff5252';
+                            inp.style.color = '#ff8a80';
+                        } else {
+                            inp.style.borderColor = '';
+                            inp.style.color = '';
+                        }
+                    });
+                }
+            });
+        }
+
         async function saveQuiz() {
             const enabled = document.getElementById('quiz-enabled').checked;
             const total = parseInt(document.getElementById('quiz-total').value) || 100;
+
+            if (enabled && quizQuestions.length > 0) {
+                if (total < quizQuestions.length) {
+                    updateQuizWarnings();
+                    showToast(`Total bombs (${total}) must be at least the number of questions (${quizQuestions.length}).`, 'error');
+                    return;
+                }
+                const emptyIdx = quizQuestions.findIndex(q => !q.answers || q.answers.length === 0);
+                if (emptyIdx !== -1) {
+                    updateQuizWarnings();
+                    showToast(`Question ${emptyIdx + 1} has no answers.`, 'error');
+                    return;
+                }
+            }
 
             let result = await apiCall('/api/quick/quiz_settings', 'POST', { enabled: enabled, total_bombs: total });
             if (!result || !result.success) {

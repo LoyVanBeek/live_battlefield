@@ -62,3 +62,6 @@ class GameSettingsPage:
     def save_quiz(self):
         self.save_quiz_button().click()
         self.page.wait_for_timeout(1000)
+
+    def quiz_warning_banner(self):
+        return self.page.locator("#quiz-warning-banner")
