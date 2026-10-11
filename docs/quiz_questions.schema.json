@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://live-battlefield.dev/schemas/quiz_questions.schema.json",
+  "title": "Quiz Questions",
+  "description": "Array of quiz questions used for export and import by the Battleship quiz editor. The same shape is returned by the API (GET /api/quiz/questions, GET /api/quiz-templates/{id}) and accepted by the save endpoints (POST /api/quiz/questions, POST /api/quiz-templates).",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/question"
+  },
+  "$defs": {
+    "question": {
+      "type": "object",
+      "required": ["question_text", "bomb_value", "source_url", "answers"],
+      "additionalProperties": false,
+      "properties": {
+        "question_text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The question text shown to players."
+        },
+        "bomb_value": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum bombs this question can yield. Equals the highest bomb_value among its answers. Editor convenience field; re-derived from answers on import."
+        },
+        "source_url": {
+          "description": "Optional URL that verifies the correct answer, only revealed after the team has answered. Empty string or null when unset. Scheme-less input (e.g. 'example.com') is auto-prefixed with https:// on save; non-http schemes (javascript:, data:) are rejected.",
+          "anyOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^(https?:\\/\\/.*)?$" }
+          ]
+        },
+        "answers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/answer" },
+          "description": "Answer options. Must contain exactly one correct answer and at least one answer with bomb_value ≥ 1.",
+          "allOf": [
+            {
+              "description": "At least one answer must yield bombs.",
+              "contains": {
+                "required": ["bomb_value"],
+                "properties": {
+                  "bomb_value": { "type": "integer", "minimum": 1 }
+                }
+              }
+            },
+            {
+              "description": "Exactly one answer must be marked correct.",
+              "contains": {
+                "required": ["is_correct"],
+                "properties": {
+                  "is_correct": { "const": true }
+                }
+              },
+              "maxContains": 1
+            }
+          ]
+        }
+      }
+    },
+    "answer": {
+      "type": "object",
+      "required": ["answer_text", "bomb_value", "is_correct"],
+      "additionalProperties": false,
+      "properties": {
+        "answer_text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The answer text shown to players."
+        },
+        "bomb_value": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Bombs this answer yields. One answer per question must have bomb_value ≥ 1."
+        },
+        "is_correct": {
+          "type": "boolean",
+          "description": "Whether this is the correct answer. Exactly one answer per question should be true."
+        }
+      }
+    }
+  }
+}
