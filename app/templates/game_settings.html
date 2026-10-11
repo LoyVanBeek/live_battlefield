@@ -163,13 +163,16 @@
                 <div class="mode-controls" style="flex-direction:column;align-items:stretch;">
                     <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;">
                         <label><input type="checkbox" id="quiz-enabled"> {{ tr.settings.enable }}</label>
-                        <label>{{ tr.settings.quiz_total }} <input type="number" id="quiz-total" value="100" min="1" style="width:60px;"></label>
+                        <label>{{ tr.settings.quiz_total }} <input type="number" id="quiz-total" value="100" min="0" style="width:70px;"></label>
                     </div>
                     <div id="quiz-questions-area" style="display:none;margin-top:15px;">
                         <div style="margin-bottom:8px;"><strong>{{ tr.settings.quiz_questions }}</strong></div>
                         <div id="quiz-warning-banner" style="display:none;background:rgba(255,82,82,.12);border:1px solid #ff5252;border-radius:6px;padding:8px 10px;font-size:12px;color:#ff8a80;margin-bottom:10px;"></div>
                         <div id="quiz-questions-list"></div>
-                        <button class="btn btn-primary" onclick="addQuestion()" style="font-size:12px;padding:5px 10px;margin-top:8px;">+ {{ tr.settings.quiz_add_q }}</button>
+                        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+                            <button class="btn btn-primary" onclick="addQuestion()" style="font-size:12px;padding:5px 10px;">+ {{ tr.settings.quiz_add_q }}</button>
+                            <button class="btn btn-secondary" onclick="rebalanceBombs()" style="font-size:12px;padding:5px 10px;">Rebalance</button>
+                        </div>
                         <button class="btn btn-primary" onclick="saveQuiz()" style="margin-top:10px;">{{ tr.settings.quiz_save }}</button>
                         <div style="display:flex;gap:8px;margin-top:8px;">
                             <button class="btn btn-primary" onclick="exportQuiz()" style="font-size:12px;padding:5px 10px;">⬇ {{ tr.settings.quiz_export }}</button>
@@ -286,16 +289,17 @@
                 const hasCorrect = q.answers && q.answers.some(a => a.is_correct);
                 return `
                 <div style="background:#0f3460;border-radius:6px;padding:12px;margin-bottom:10px;">
-                    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+                    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
                         <span style="color:#888;font-size:12px;">Q${qi + 1}</span>
+                        <label style="color:#aaa;font-size:11px;">Bombs <input type="number" min="0" step="1" value="${q.bomb_value || 0}" onchange="quizQuestions[${qi}].bomb_value=parseInt(this.value)||0; syncQuizTotal(); updateQuizWarnings()" style="width:60px;padding:4px;font-size:11px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;"></label>
                         <input type="text" value="${q.question_text.replace(/"/g,'&quot;')}" onchange="quizQuestions[${qi}].question_text=this.value" placeholder="Question text" style="flex:1;padding:6px;font-size:13px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
-                        <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="removeQuestion(${qi})">✕</button>
+                        <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="quizQuestions.splice(${qi},1); renderQuizQuestions(); syncQuizTotal()">✕</button>
                     </div>
                     ${q.answers.map((a, ai) => `
                         <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;padding-left:20px;">
                             <input type="radio" name="correct-${qi}" ${a.is_correct?'checked':''} onchange="quizQuestions[${qi}].answers.forEach((x,i)=>{x.is_correct=i===${ai}})">
                             <input type="text" value="${a.answer_text.replace(/"/g,'&quot;')}" onchange="quizQuestions[${qi}].answers[${ai}].answer_text=this.value" placeholder="Answer" style="flex:1;padding:5px;font-size:12px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
-                            <span style="width:70px;text-align:center;font-size:12px;white-space:nowrap;${(a.is_correct || !hasCorrect) ? (perQ > 0 ? 'color:#4caf50;font-weight:bold;' : 'color:#ff8a80;font-weight:bold;') : 'color:#888;'}">${(a.is_correct || !hasCorrect) ? perQ : 0} 💣</span>
+                            <span style="width:70px;text-align:center;font-size:12px;white-space:nowrap;color:#888;">0 💣</span>
                             <button class="btn btn-danger" style="padding:2px 6px;font-size:10px;" onclick="quizQuestions[${qi}].answers.splice(${ai},1);renderQuizQuestions()">✕</button>
                         </div>
                     `).join('')}
@@ -306,11 +310,49 @@
             updateQuizWarnings();
         }
 
+        function syncQuizTotal() {
+            const totalInput = document.getElementById('quiz-total');
+            if (!totalInput) return;
+            const sum = quizQuestions.reduce((s, q) => s + (parseInt(q.bomb_value) || 0), 0);
+            totalInput.value = sum;
+        }
+
+        function rebalanceBombs() {
+            if (quizQuestions.length === 0) return;
+            const totalInput = document.getElementById('quiz-total');
+            const total = parseInt(totalInput.value) || 0;
+            if (total < 1) {
+                quizQuestions.forEach(q => { q.bomb_value = 1; });
+                syncQuizTotal();
+                renderQuizQuestions();
+                updateQuizWarnings();
+                return;
+            }
+            const n = quizQuestions.length;
+            if (total < n) {
+                quizQuestions.forEach(q => { q.bomb_value = 1; });
+                syncQuizTotal();
+                renderQuizQuestions();
+                updateQuizWarnings();
+                return;
+            }
+            const base = Math.floor(total / n);
+            const rem = total % n;
+            quizQuestions.forEach((q, qi) => {
+                q.bomb_value = base + (qi < rem ? 1 : 0);
+            });
+            syncQuizTotal();
+            renderQuizQuestions();
+            updateQuizWarnings();
+        }
+
         function addQuestion() {
             const total = parseInt(document.getElementById('quiz-total').value) || 100;
             const perQ = quizQuestions.length > 0 ? Math.floor(total / (quizQuestions.length + 1)) : total;
-            quizQuestions.push({ question_text: '', answers: [{ answer_text: '', bomb_value: perQ, is_correct: true }] });
+            quizQuestions.push({ question_text: '', bomb_value: perQ > 0 ? perQ : 1, answers: [{ answer_text: '', bomb_value: 0, is_correct: true }] });
             renderQuizQuestions();
+            syncQuizTotal();
+            updateQuizWarnings();
         }
 
         function addAnswer(qi) {
@@ -334,6 +376,7 @@
             if (data && data.questions) {
                 quizQuestions = data.questions;
                 renderQuizQuestions();
+                syncQuizTotal();
             }
         }
 
@@ -341,7 +384,10 @@
             document.getElementById('quiz-questions-area').style.display = this.checked ? 'block' : 'none';
         });
 
-        document.getElementById('quiz-total').addEventListener('input', updateQuizWarnings);
+        document.getElementById('quiz-total').addEventListener('input', function() {
+            // Don't auto-rebalance on manual total edit; just validate
+            updateQuizWarnings();
+        });
 
         // Flag questions/answers that would leave players unable to earn bombs:
         // total bombs lower than the number of questions (each correct answer
@@ -349,17 +395,15 @@
         function updateQuizWarnings() {
             const banner = document.getElementById('quiz-warning-banner');
             const list = document.getElementById('quiz-questions-list');
-            const total = parseInt(document.getElementById('quiz-total').value) || 100;
             const problems = [];
 
-            if (quizQuestions.length > 0 && total < quizQuestions.length) {
-                problems.push(
-                    `Total bombs (${total}) is lower than the number of questions (${quizQuestions.length}) - each correct answer would be worth 0 bombs.`
-                );
-            }
             quizQuestions.forEach((q, qi) => {
                 if (!q.answers || q.answers.length === 0) {
                     problems.push(`Question ${qi + 1} has no answers.`);
+                }
+                const bv = q.bomb_value;
+                if (bv == null || isNaN(bv) || bv < 1 || !Number.isInteger(bv)) {
+                    problems.push(`Question ${qi + 1} has ${bv || 0} bombs (must be at least 1).`);
                 }
             });
 
@@ -370,11 +414,12 @@
                 banner.style.display = 'none';
             }
 
-            const lowTotal = total < quizQuestions.length;
             const cards = list.querySelectorAll(':scope > div');
             cards.forEach((card, qi) => {
                 const q = quizQuestions[qi];
-                const broken = lowTotal || !q.answers || q.answers.length === 0;
+                const bv = q.bomb_value;
+                const badQbv = bv == null || isNaN(bv) || bv < 1 || !Number.isInteger(bv);
+                const broken = badQbv || !q.answers || q.answers.length === 0;
                 card.style.outline = broken ? '2px solid #ff5252' : '';
             });
         }
@@ -384,15 +429,13 @@
             const total = parseInt(document.getElementById('quiz-total').value) || 100;
 
             if (enabled && quizQuestions.length > 0) {
-                if (total < quizQuestions.length) {
+                const badIdx = quizQuestions.findIndex(q => {
+                    const bv = q.bomb_value;
+                    return !q.answers || q.answers.length === 0 || bv == null || isNaN(bv) || bv < 1 || !Number.isInteger(bv);
+                });
+                if (badIdx !== -1) {
                     updateQuizWarnings();
-                    showToast(`Total bombs (${total}) must be at least the number of questions (${quizQuestions.length}).`, 'error');
-                    return;
-                }
-                const emptyIdx = quizQuestions.findIndex(q => !q.answers || q.answers.length === 0);
-                if (emptyIdx !== -1) {
-                    updateQuizWarnings();
-                    showToast(`Question ${emptyIdx + 1} has no answers.`, 'error');
+                    showToast(`Question ${badIdx + 1} has invalid bomb count or no answers.`, 'error');
                     return;
                 }
             }
@@ -405,13 +448,13 @@
 
             if (enabled && quizQuestions.length > 0) {
                 // Auto-distribute bombs
-                const perQ = Math.floor(total / quizQuestions.length);
                 quizQuestions.forEach(q => {
+                    const qv = parseInt(q.bomb_value) || 0;
                     const correct = q.answers.find(a => a.is_correct);
                     q.answers.forEach(a => {
                         if (a.is_correct || !correct) {
-                            a.bomb_value = perQ;
-                        } else if (a.bomb_value === undefined || a.bomb_value === 0) {
+                            a.bomb_value = qv;
+                        } else {
                             a.bomb_value = 0;
                         }
                     });
@@ -421,6 +464,7 @@
                 if (result && result.success) {
                     quizQuestions = result.questions || quizQuestions;
                     renderQuizQuestions();
+                    syncQuizTotal();
                 }
             }
             showToast((result && result.message) || 'Quiz settings saved!', 'success');

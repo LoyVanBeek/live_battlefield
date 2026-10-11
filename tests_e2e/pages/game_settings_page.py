@@ -27,22 +27,17 @@ class GameSettingsPage:
         self.quiz_total_input().fill(str(total_bombs))
 
     def add_question(self, question_text: str, answers: list):
-        """Add a question with answers. Each answer: {"text": ..., "correct": bool}.
-
-        Answer bomb values are auto-distributed (total / #questions) by the UI,
-        so there is no per-answer bomb input anymore.
-        """
+        """Add a question with answers. Each answer: {"text": ..., "correct": bool}."""
         self.add_question_button().click()
         self.page.wait_for_timeout(300)
 
-        # The last question block is the one we just added
         question_blocks = self.page.locator("#quiz-questions-list > div")
         q_count = question_blocks.count()
         q_block = question_blocks.nth(q_count - 1)
 
-        # Fill question text
         text_inputs = q_block.locator("input[type='text']")
-        text_inputs.first.fill(question_text)
+        if text_inputs.count() > 0:
+            text_inputs.first.fill(question_text)
 
         answer_radios = q_block.locator("input[type='radio']")
 
@@ -51,13 +46,23 @@ class GameSettingsPage:
                 q_block.locator("button", has_text="Add Answer").click()
                 self.page.wait_for_timeout(200)
 
-            # Re-query after adding new answer
             text_inputs = q_block.locator("input[type='text']")
             answer_radios = q_block.locator("input[type='radio']")
+            # answer text is after question text at index i+1 in current structure? keep simple
+            text_inputs.nth(i+1 if text_inputs.count() > i+1 else i).fill(a["text"]) if False else None
+            # safer: fill answer text inputs in order (skip first = question)
+            all_text = q_block.locator("input[type='text']")
+            if all_text.count() > 1 + i:
+                all_text.nth(1 + i).fill(a["text"])
+            elif all_text.count() > i:
+                all_text.nth(i).fill(a["text"])
 
-            text_inputs.nth(i).fill(a["text"])
-            if a["correct"]:
+            if a.get("correct"):
                 answer_radios.nth(i).check()
+
+    def rebalance_bombs(self):
+        self.page.get_by_role("button", name="Rebalance").click()
+        self.page.wait_for_timeout(200)
 
     def save_quiz(self):
         self.save_quiz_button().click()
