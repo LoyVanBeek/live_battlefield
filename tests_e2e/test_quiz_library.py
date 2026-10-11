@@ -56,7 +56,6 @@ def test_admin_authors_library_quiz_then_reused_in_two_games(page, app_url, admi
     admin.rebalance_library()
     admin.save_library_quiz()
 
-    admin.select_library_quiz("Capitals")
     assert "Capitals" in admin.library_quiz_list().text_content()
 
     # The same saved quiz is reused in two entirely separate games.

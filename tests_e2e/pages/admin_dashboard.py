@@ -65,9 +65,6 @@ class AdminDashboardPage:
         self.toast().wait_for(state="visible", timeout=5000)
 
     # --- Quiz Library ---
-    def library_select(self):
-        return self.page.locator("#library-quiz-select")
-
     def library_quiz_list(self):
         return self.page.locator("#library-quiz-list")
 
@@ -132,23 +129,6 @@ class AdminDashboardPage:
     def save_library_quiz(self):
         self.page.locator("#library-editor button", has_text="Save Quiz").click()
         self.page.wait_for_timeout(800)
-
-    def select_library_quiz(self, name: str):
-        self.page.wait_for_function(
-            "() => document.getElementById('library-quiz-select').options.length > 1",
-            timeout=5000,
-        )
-        value = self.page.evaluate(
-            """(name) => {
-                const sel = document.getElementById('library-quiz-select');
-                const opt = Array.from(sel.options).find(o => o.textContent.includes(name));
-                return opt ? opt.value : '';
-            }""",
-            name,
-        )
-        assert value, f"library quiz {name!r} not found in the admin select"
-        self.library_select().select_option(value)
-        return value
 
     def library_card(self, name: str):
         """The quiz card in the admin library list whose name contains `name`."""

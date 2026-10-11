@@ -104,7 +104,6 @@
             <h2>📚 Quiz Library</h2>
             <p style="color: #888; margin-bottom: 10px;">Save quizzes ahead of time and reuse them in any game. Saving under an existing name overwrites it. In a game's settings, pick a saved quiz and click Load.</p>
             <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
-                <select id="library-quiz-select" style="flex: 1; min-width: 200px;"></select>
                 <button class="btn btn-success" id="library-new-btn" onclick="newLibraryQuiz()">➕ New</button>
             </div>
             <div id="library-quiz-list" style="margin-bottom: 10px;">
@@ -309,18 +308,13 @@
             const data = await apiCall('/api/quiz-templates');
             if (!data) return;
             const templates = data.templates || [];
-            const select = document.getElementById('library-quiz-select');
-            const current = select.value;
-            select.innerHTML = '<option value="">— New quiz —</option>' + templates.map(t =>
-                '<option value="' + t.id + '">' + esc(t.name) + '</option>').join('');
-            if (templates.some(t => String(t.id) === current)) select.value = current;
 
             const list = document.getElementById('library-quiz-list');
             if (templates.length === 0) {
                 list.innerHTML = '<p style="color: #888;">No saved quizzes yet. Click ➕ New.</p>';
             } else {
                 list.innerHTML = templates.map(t =>
-                    '<div class="game-row" data-template-id="' + t.id + '">' +
+                    '<div class="game-row" data-template-id="' + t.id + '" data-name="' + esc(t.name) + '">' +
                     '<div class="game-info"><div class="name">' + esc(t.name) + '</div>' +
                     '<div class="status">' + t.question_count + ' question(s) — ' + t.total_bombs + ' 💣 total</div></div>' +
                     '<div style="display:flex;gap:8px;">' +
@@ -351,7 +345,6 @@
             document.getElementById('library-quiz-name').value = data.template.name;
             libraryEditor.setQuestions(data.template.questions || []);
             document.getElementById('library-editor').style.display = 'block';
-            document.getElementById('library-quiz-select').value = String(id);
         }
 
         async function saveLibraryQuiz() {
@@ -368,13 +361,12 @@
             editingTemplateId = result.template ? result.template.id : editingTemplateId;
             showToast(result.message || 'Saved!', 'success');
             await loadQuizTemplates();
-            document.getElementById('library-quiz-select').value = String(editingTemplateId);
         }
 
         async function deleteLibraryQuiz(id) {
             if (!id) { showToast('Pick a quiz to delete.', 'error'); return; }
-            const opt = document.querySelector('#library-quiz-select option[value="' + id + '"]');
-            const label = opt ? opt.textContent : id;
+            const card = document.querySelector('.game-row[data-template-id="' + id + '"]');
+            const label = card ? card.getAttribute('data-name') : id;
             if (!confirm('Delete the saved quiz "' + label + '"?')) return;
             const result = await apiCall('/api/quiz-templates/' + id, 'DELETE');
             if (!result || !result.success) {
