@@ -18,6 +18,8 @@ import json
 import math
 import random
 import asyncio
+import re
+from urllib.parse import urlsplit
 from datetime import datetime, timezone, timedelta
 
 from app.config import settings
@@ -2527,12 +2529,35 @@ async def get_quiz_questions(
                     answered_qids.add(p.get("question_id"))
         for q in questions:
             q["answered"] = q["id"] in answered_qids
+            if not q["answered"]:
+                # Never expose the verifying link before the team has answered.
+                q["source_url"] = None
 
     return {"questions": questions}
 
 
 class SaveQuestionsRequest(BaseModel):
     questions: list[dict] = []
+
+
+def _normalize_source_url(raw: object) -> Optional[str]:
+    """Trim a quiz source link, default the scheme to https, and reject anything
+    that isn't a plain http(s) URL (so `javascript:`/`data:` can never be saved).
+
+    Returns None for an empty value. Raises ValueError for an invalid link.
+    """
+    s = str(raw).strip() if raw else ""
+    if not s:
+        return None
+    # A leading "scheme:" (javascript:, data:, mailto:, ...) is the real scheme —
+    # never silently rewrite it into https://, and reject it below. Scheme-less
+    # input (example.com) is treated as a plain https link.
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*:", s):
+        s = "https://" + s
+    parts = urlsplit(s)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        raise ValueError(s)
+    return s
 
 
 def _quiz_validation_error(questions: list[dict]) -> Optional[str]:
@@ -2553,6 +2578,10 @@ def _quiz_validation_error(questions: list[dict]) -> Optional[str]:
                 f"Question {i}{label_suffix} has no bomb-yielding answer - "
                 "give at least one answer a bomb value of 1 or more."
             )
+        try:
+            q["source_url"] = _normalize_source_url(q.get("source_url"))
+        except ValueError:
+            return f"Question {i} has an invalid source link - use an http(s) URL."
     return None
 
 

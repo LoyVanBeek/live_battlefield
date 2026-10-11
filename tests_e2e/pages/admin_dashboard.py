@@ -105,21 +105,22 @@ class AdminDashboardPage:
             "els => els.map(e => e.getBoundingClientRect().width)"
         )
 
-    def add_library_question(self, question_text: str, answers: list):
+    def add_library_question(self, question_text: str, answers: list, source_url: str = ""):
         """Add a question to the library editor. Each answer: {"text", "correct"}."""
         self.page.locator("#library-editor button", has_text="Add Question").click()
         self.page.wait_for_timeout(200)
         blocks = self.page.locator("#library-quiz-questions-list > div")
         q = blocks.nth(blocks.count() - 1)
-        q.locator("input[type='text']").first.fill(question_text)
+        q.locator("input[data-role='question-text']").fill(question_text)
+        if source_url:
+            q.locator("input[data-role='source-url']").fill(source_url)
         for i, a in enumerate(answers):
             if i > 0:
                 q.locator("button", has_text="Add Answer").click()
                 self.page.wait_for_timeout(150)
-            texts = q.locator("input[type='text']")
-            texts.nth(1 + i).fill(a["text"])
+            q.locator("input[data-role='answer-text']").nth(i).fill(a["text"])
             if a.get("correct"):
-                q.locator("input[type='radio']").nth(i).check()
+                q.locator("input[data-role='correct']").nth(i).check()
 
     def set_library_total(self, value: int):
         self.page.locator("#library-quiz-total").fill(str(value))

@@ -362,6 +362,7 @@ async def get_quiz_questions(db: AsyncSession, game_id: uuid.UUID) -> list:
             "question_text": q.question_text,
             "order": q.order,
             "bomb_value": q_bomb,
+            "source_url": q.source_url,
             "answers": [
                 {"id": a.id, "answer_text": a.answer_text, "bomb_value": a.bomb_value, "is_correct": a.is_correct}
                 for a in answers_list
@@ -383,7 +384,12 @@ async def save_quiz_questions(db: AsyncSession, game_id: uuid.UUID, questions_da
 
     result = []
     for i, qd in enumerate(questions_data):
-        q = QuizQuestion(game_id=game_id, question_text=qd.get("question_text", ""), order=i)
+        q = QuizQuestion(
+            game_id=game_id,
+            question_text=qd.get("question_text", ""),
+            order=i,
+            source_url=qd.get("source_url") or None,
+        )
         db.add(q)
         await db.flush()
         answers = qd.get("answers", [])
@@ -458,6 +464,7 @@ async def get_quiz_template(db: AsyncSession, template_id: int) -> Optional[dict
             "question_text": q.question_text,
             "order": q.order,
             "bomb_value": max((a.bomb_value for a in answers_list), default=0),
+            "source_url": q.source_url,
             "answers": [
                 {"id": a.id, "answer_text": a.answer_text, "bomb_value": a.bomb_value, "is_correct": a.is_correct}
                 for a in answers_list
@@ -526,7 +533,10 @@ async def save_quiz_template(
 
     for i, qd in enumerate(questions_data):
         q = QuizTemplateQuestion(
-            template_id=template.id, question_text=qd.get("question_text", ""), order=i
+            template_id=template.id,
+            question_text=qd.get("question_text", ""),
+            order=i,
+            source_url=qd.get("source_url") or None,
         )
         db.add(q)
         await db.flush()

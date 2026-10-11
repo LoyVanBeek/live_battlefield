@@ -122,6 +122,9 @@ class QuizQuestion(Base):
     game_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("games.id"), nullable=False)
     question_text: Mapped[str] = mapped_column(String(500), nullable=False)
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Optional link that verifies the correct answer; revealed to a team only
+    # after they have answered the question.
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class QuizAnswer(Base):
@@ -156,6 +159,7 @@ class QuizTemplateQuestion(Base):
     template_id: Mapped[int] = mapped_column(Integer, ForeignKey("quiz_templates.id"), nullable=False)
     question_text: Mapped[str] = mapped_column(String(500), nullable=False)
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class QuizTemplateAnswer(Base):

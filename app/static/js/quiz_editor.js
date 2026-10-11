@@ -71,6 +71,9 @@
                             '<input type="text" data-role="question-text" data-qi="' + qi + '" value="' + esc(q.question_text) + '" placeholder="Question text" style="flex:1;padding:6px;font-size:13px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">' +
                             '<button class="btn btn-danger" data-action="remove-question" data-qi="' + qi + '" style="padding:4px 8px;font-size:11px;">✕</button>' +
                         '</div>' +
+                        '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;padding-left:20px;">' +
+                            '<input type="text" data-role="source-url" data-qi="' + qi + '" value="' + esc(q.source_url || '') + '" placeholder="Source URL (optional) — link that verifies the answer" style="flex:1;padding:5px;font-size:12px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">' +
+                        '</div>' +
                         answersHtml +
                         '<button class="btn btn-primary" data-action="add-answer" data-qi="' + qi + '" style="padding:4px 10px;font-size:11px;margin-left:20px;margin-top:4px;">+ ' + esc(addAnswerLabel) + '</button>' +
                     '</div>'
@@ -90,6 +93,8 @@
             if (!q) return;
             if (role === 'question-text') {
                 q.question_text = t.value;
+            } else if (role === 'source-url') {
+                q.source_url = t.value;
             } else if (role === 'answer-text') {
                 if (q.answers[ai]) q.answers[ai].answer_text = t.value;
             } else if (role === 'correct') {
@@ -170,6 +175,7 @@
             questions.push({
                 question_text: '',
                 bomb_value: 1,
+                source_url: '',
                 answers: [{ answer_text: '', bomb_value: 0, is_correct: true }],
             });
             rebalance();
@@ -229,6 +235,7 @@
             questions.forEach(function (q) {
                 q.answers = q.answers || [];
                 if (q.bomb_value == null) q.bomb_value = questionMaxYield(q);
+                if (q.source_url == null) q.source_url = '';
                 q.answers.forEach(function (a) {
                     a.bomb_value = parseInt(a.bomb_value, 10) || 0;
                 });
@@ -271,6 +278,7 @@
                             if (!a.answer_text) throw new Error('Invalid answer in question ' + i);
                             a.bomb_value = parseInt(a.bomb_value, 10) || 0;
                         });
+                        q.source_url = String(q.source_url || '').trim();
                         // Exactly one correct answer: keep an explicit one, else the
                         // highest-yield answer, else the first.
                         if (!q.answers.some(function (a) { return a.is_correct; })) {

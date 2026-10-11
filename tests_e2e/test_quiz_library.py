@@ -152,3 +152,35 @@ def test_admin_import_shows_readable_answer_text(page, app_url, admin_token):
     assert len(widths) == 2
     assert all(w > 100 for w in widths), f"answer inputs are too narrow to read: {widths}"
 
+
+def test_quiz_library_source_round_trips(page, app_url, admin_token):
+    """A question's source link survives the library: author → save → re-open in
+    the editor → load into a brand-new game."""
+    admin = AdminDashboardPage(page, admin_token, app_url)
+    admin.goto()
+    admin.open_new_library_quiz("Sourced Quiz")
+    admin.add_library_question("Capital of France?", [
+        {"text": "Paris", "correct": True},
+        {"text": "London", "correct": False},
+    ], source_url="https://en.wikipedia.org/wiki/Paris")
+    admin.set_library_total(10)
+    admin.rebalance_library()
+    admin.save_library_quiz()
+
+    # Re-opening the saved quiz restores the source field in the editor.
+    admin.select_library_quiz("Sourced Quiz")
+    admin.edit_selected_library_quiz()
+    assert admin.page.input_value(
+        "#library-quiz-questions-list input[data-role='source-url'][data-qi='0']"
+    ) == "https://en.wikipedia.org/wiki/Paris"
+
+    # Loading the library quiz into a real game carries the source along.
+    gm_token = _create_game(app_url, admin_token)
+    gs = GameSettingsPage(page, gm_token, app_url)
+    gs.goto()
+    gs.enable_quiz(10)
+    gs.load_library_quiz("Sourced Quiz")
+    gs.save_quiz()
+    questions = _game_questions(app_url, gm_token)
+    assert questions[0]["source_url"] == "https://en.wikipedia.org/wiki/Paris"
+

@@ -1436,17 +1436,61 @@ async function clearAllShips() {
         // the "loading" flash on the quiz section.
         let quizContentSignature = null;
 
+        // Set right after a team answers, so the next render shows the answer
+        // result (correct answer + source link) instead of skipping ahead.
+        let quizPendingResult = null;
+
+        function renderQuizResult(q, success) {
+            const correct = (q.answers || []).find(a => a.is_correct);
+            let html = '<p id="quiz-verdict" style="font-weight:bold;font-size:15px;color:' +
+                (success ? '#4caf50' : '#ff5252') + ';">' +
+                (success ? _('action_quiz.verdict_correct') : _('action_quiz.verdict_wrong')) + '</p>';
+            if (correct) {
+                html += '<p id="quiz-correct-answer" style="margin:6px 0;">' +
+                    _('action_quiz.correct_answer', { answer: esc(correct.answer_text) }) + '</p>';
+            }
+            if (q.source_url && /^https?:\/\//i.test(q.source_url)) {
+                html += '<p id="quiz-source" style="margin:6px 0;word-break:break-all;">' +
+                    esc(_('action_quiz.source_label')) + ': <a id="quiz-source-link" href="' + esc(q.source_url) +
+                    '" target="_blank" rel="noopener noreferrer">' + esc(q.source_url) + '</a></p>';
+            }
+            html += '<button class="btn btn-primary" id="quiz-next" style="padding:8px 12px;" onclick="nextQuizQuestion()">' +
+                _('action_quiz.next') + '</button>';
+            return html;
+        }
+
+        function nextQuizQuestion() {
+            quizPendingResult = null;
+            updateQuizSection();
+        }
+
         async function updateQuizSection() {
             const content = document.getElementById('quiz-content');
             if (!content) return;
             if (!quizEnabled || gameStatus !== 'started') {
                 if (content.textContent) content.innerHTML = '';
                 quizContentSignature = null;
+                quizPendingResult = null;
                 return;
             }
 
             await loadQuizQuestions();
             const questions = quizQuestionsCache || [];
+
+            // A just-answered question gets a result view (correct answer, source
+            // link, "Next") until the team moves on.
+            if (quizPendingResult) {
+                const rq = questions.find(q => q.id === quizPendingResult.questionId);
+                if (rq) {
+                    const resultSignature = 'result|' + rq.id + '|' +
+                        (quizPendingResult.success ? 'ok' : 'no') + '|' + (rq.source_url || '');
+                    if (resultSignature === quizContentSignature) return;
+                    quizContentSignature = resultSignature;
+                    content.innerHTML = renderQuizResult(rq, quizPendingResult.success);
+                    return;
+                }
+                quizPendingResult = null;
+            }
 
             let signature;
             let html = null;
@@ -1491,7 +1535,12 @@ async function clearAllShips() {
                 command: 'quiz',
                 args: { question_id: questionId, answer_id: answerId }
             });
-            showToast(result.message, result.success ? 'success' : 'error');
+            showToast((result && result.message) || '...', result && result.success ? 'success' : 'error');
+            quizPendingResult = {
+                questionId: questionId,
+                answerId: answerId,
+                success: !!(result && result.success)
+            };
             updateQuizSection();
         }
 

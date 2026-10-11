@@ -1435,8 +1435,102 @@ class TestQuizTemplates:
         assert response.status_code == 200
         assert response.json()["success"] is True
 
+    def test_create_template_rejects_invalid_source_url(self):
+        from app.api.routes import app, verify_admin_or_gm
 
-class TestAuthRateLimit:
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
+        try:
+            with patch("app.models.save_quiz_template", new_callable=AsyncMock) as mock_save:
+                client = TestClient(app)
+                response = client.post("/api/quiz-templates", json={
+                    "name": "Xss",
+                    "questions": [{
+                        "question_text": "Q",
+                        "source_url": "javascript:alert(1)",
+                        "answers": [
+                            {"answer_text": "A", "bomb_value": 5, "is_correct": True},
+                            {"answer_text": "B", "bomb_value": 0, "is_correct": False},
+                        ],
+                    }],
+                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is False
+            assert "invalid source link" in data["message"]
+            assert "http(s)" in data["message"]
+            mock_save.assert_not_awaited()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_create_template_normalizes_source_url(self):
+        from app.api.routes import app, verify_admin_or_gm
+
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "gm", "game_id": "x"}
+        try:
+            with patch("app.models.save_quiz_template", new_callable=AsyncMock) as mock_save:
+                mock_save.return_value = {"id": 1, "name": "Sourced", "questions": []}
+                client = TestClient(app)
+                response = client.post("/api/quiz-templates", json={
+                    "name": "Sourced",
+                    "questions": [
+                        {
+                            "question_text": "Q1",
+                            "source_url": "example.com/wiki/France",
+                            "answers": [{"answer_text": "A", "bomb_value": 5, "is_correct": True}],
+                        },
+                        {
+                            "question_text": "Q2",
+                            "source_url": "   ",
+                            "answers": [{"answer_text": "A", "bomb_value": 5, "is_correct": True}],
+                        },
+                    ],
+                })
+
+            assert response.status_code == 200
+            assert response.json()["success"] is True
+            mock_save.assert_awaited_once()
+            sent = mock_save.call_args.args[2]  # questions arg (positional)
+            assert sent[0]["source_url"] == "https://example.com/wiki/France"
+            assert sent[1]["source_url"] is None, "blank source must become None"
+        finally:
+            app.dependency_overrides.clear()
+
+
+class TestQuizSourceVisibility:
+    """The verifying source link is hidden from a team until the question is answered."""
+
+    def test_team_quiz_questions_strip_source_until_answered(self):
+        import uuid
+
+        from app.api.routes import app, verify_team_or_gm
+
+        game_id = str(uuid.uuid4())
+        app.dependency_overrides[verify_team_or_gm] = lambda: {
+            "game_id": game_id,
+            "color": "red",
+        }
+        try:
+            questions = [
+                {"id": 1, "question_text": "Q1", "source_url": "https://a.example", "answers": []},
+                {"id": 2, "question_text": "Q2", "source_url": "https://b.example", "answers": []},
+            ]
+            answer_event = MagicMock()
+            answer_event.event_type.value = "quiz_answered"
+            answer_event.payload = {"color": "red", "question_id": 2}
+            with patch("app.models.get_quiz_questions", new_callable=AsyncMock, return_value=questions):
+                with patch("app.models.get_game_events", new_callable=AsyncMock, return_value=[answer_event]):
+                    client = TestClient(app)
+                    response = client.get("/api/quiz/questions")
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        by_id = {q["id"]: q for q in response.json()["questions"]}
+        assert by_id[2]["answered"] is True
+        assert by_id[2]["source_url"] == "https://b.example"
+        assert by_id[1]["answered"] is False
+        assert by_id[1]["source_url"] is None, "team must not see the source before answering"
     """Failed auth attempts are throttled per client IP."""
 
     def test_failed_auth_attempts_are_rate_limited(self):

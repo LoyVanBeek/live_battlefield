@@ -424,3 +424,70 @@
       `uvx pip-audit` (uv export, no-dev) exit 0.
 - [x] Full E2E as root (avoids the video-teardown permission noise): **56/56 passed**
       (55 + 1 new); quiz file 5/5.
+
+---
+
+# Per-question source links in quizzes (verify the answer after answering)
+
+## Backend
+- [x] Migration `012_add_quiz_source.py` — nullable `source_url VARCHAR(1000)` on
+      `quiz_questions` + `quiz_template_questions` (with downgrade)
+- [x] `app/database.py` + `app/models.py`: `source_url` on `QuizQuestion`/`QuizTemplateQuestion`;
+      carried through `get_quiz_questions` / `save_quiz_questions` / `get_quiz_template` /
+      `save_quiz_template` (empty → NULL), so library load copies it into games for free
+- [x] `app/api/routes.py` `_normalize_source_url()` inside the shared `_quiz_validation_error`:
+      trim, empty → None, scheme-less input → `https://`, reject anything not http(s)
+      (blocks `javascript:`/`data:`), errors name the question index
+- [x] `GET /api/quiz/questions`: team requests get `source_url = None` on unanswered
+      questions; GM requests keep full data
+
+## Frontend
+- [x] Shared editor (`quiz_editor.js`): per-question source-input row
+      (`data-role="source-url"`), change handler, `source_url:''` seed in
+      `addQuestion`/`setQuestions`/`importFile`; export picks it up automatically
+- [x] `team.html`: `quizPendingResult` state; a just-answered question renders a result
+      screen (`#quiz-verdict` Correct/Wrong + `#quiz-correct-answer` + `#quiz-source-link`
+      + `#quiz-next`) under the existing `quizContentSignature` no-flicker guard; the active
+      unanswered question never renders the link; client-side `^https?://` guard before the
+      `<a>`; `target="_blank" rel="noopener noreferrer"`
+- [x] `action_quiz` keys `verdict_correct`, `verdict_wrong`, `correct_answer`, `source_label`,
+      `next` in en + nl (key-parity test green)
+
+## Tests / verification
+- [x] Unit (`tests/test_api.py`): invalid scheme rejected (message names the question);
+      `example.com/wiki/France` → `https://example.com/wiki/France`, blank → None;
+      team request strips `source_url` from unanswered questions (answered keeps it)
+- [x] E2E `test_quiz_source_revealed_after_answer`: link absent pre-answer (and kept out of
+      the API payload), result screen shows verdict + correct answer + link, Next advances
+      to "All questions answered!"
+- [x] `test_quiz_full_flow_browser` updated: each answer now lands on the result screen and
+      moves on via Next (was: auto-advance)
+- [x] E2E `test_quiz_library_source_round_trips`: author with source → re-open restores it →
+      load into a fresh game carries it
+- [x] POMs: role-based selectors (`data-role`) in `add_question`/`add_library_question`
+      (the new source input shifts text-input indices; also deletes a dead `if False` branch),
+      `add_question(..., source_url=)`, TeamPage result-screen helpers
+- [x] `uv run ty check` repo-wide clean; `uv run pytest tests/` **238 passed**;
+      `uvx pip-audit` exit 0
+- [x] Alembic `upgrade head` → `downgrade 011` → `upgrade head` clean against a scratch
+      Postgres; both tables show `source_url`
+- [x] Full E2E as root on a **fresh** DB (**62/62 passed**, quiz+library 11/11)
+
+## Review
+- **Reveal rule**: `source_url` is stripped server-side for unanswered team questions and
+  only client-rendered on the result screen of a question the team just answered — two
+  independent guards, so the link can't leak via the API payload or the DOM ahead of answering.
+- **URL hardening**: a naive "prepend `https://` when there's no `://`" lets
+  `javascript:alert(1)` slip through as `https://javascript:alert(1)`; the scheme
+  `^[a-zA-Z][a-zA-Z0-9+.\-]*:` check treats a leading scheme as the real one and rejects it.
+- **Result screen vs. no-flicker guard**: `updateQuizSection` renders the result branch using
+  the existing signature mechanism (`'result|' + id + '|' + ok/no + '|' + source`), so SSE
+  refreshes during the result view cause zero DOM churn.
+- **`is_correct` leak to unanswered questions is pre-existing and out of scope** — a team
+  could read it from the answer payload anyway; not touched here.
+- **Env gotcha (again)**: `docker compose -f docker-compose.e2e.yml down -v` errors on the
+  shared `live_battlefield_default` network (dev `docker-compose.yml` containers still use
+  it), so the `-v` never deletes the test DB volume; `test_select_all_toggles_all` flakes on a
+  stale DB. Container recreation via `down` + `up` (no volume is declared for test-postgres)
+  is the reliable fresh-DB path. The first full-suite run in this session failed exactly that
+  way (61 passed, 1 failed); a genuinely fresh DB → 62/62. Worth a doc fix in AGENTS.md later.

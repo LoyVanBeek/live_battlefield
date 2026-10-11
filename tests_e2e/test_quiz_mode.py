@@ -72,7 +72,11 @@ def test_quiz_full_flow_browser(page, app_url, admin_token):
     # Step 9: Answer Q1 correctly (first answer button = "4", worth 25 bombs)
     # 50 total / 2 questions = 25 per correct answer
     tp.answer_quiz(0)
-    page.wait_for_timeout(500)
+
+    # The result screen appears instead of auto-advancing: verdict + Next.
+    tp.quiz_next_button().wait_for(state="visible", timeout=5000)
+    assert "Correct" in tp.quiz_verdict().text_content(), tp.quiz_verdict().text_content()
+    tp.next_quiz_question()
 
     # Verify bomb count increased by 25
     bombs_after = tp.get_bomb_count()
@@ -88,7 +92,9 @@ def test_quiz_full_flow_browser(page, app_url, admin_token):
     # Get bomb count before wrong answer
     bombs_before_wrong = tp.get_bomb_count()
     tp.answer_quiz(1)  # Wrong answer
-    page.wait_for_timeout(500)
+    tp.quiz_next_button().wait_for(state="visible", timeout=5000)
+    assert "Wrong" in tp.quiz_verdict().text_content(), tp.quiz_verdict().text_content()
+    tp.next_quiz_question()
 
     # Verify bomb count unchanged
     bombs_after_wrong = tp.get_bomb_count()
@@ -362,3 +368,69 @@ def test_quiz_edit_answer_bombs(page, app_url, admin_token):
     assert (a0["bomb_value"], a0["is_correct"]) == (8, True), a0
     assert (a1["bomb_value"], a1["is_correct"]) == (9, False), a1
     assert questions[1].get("bomb_value") == 5, questions
+
+
+def test_quiz_source_revealed_after_answer(page, app_url, admin_token):
+    """A question's source link stays hidden until that team answers, then the
+    result screen shows the correct answer plus a clickable source link, and the
+    team moves on via the Next button."""
+    import httpx
+    from tests_e2e.config import HTTPX_TIMEOUT
+    from tests_e2e.pages.gm_page import GameMasterPage
+    from tests_e2e.pages.game_settings_page import GameSettingsPage
+    from tests_e2e.pages.team_page import TeamPage
+
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        resp = client.post("/api/admin/create-game", params={"token": admin_token})
+        gm_token = resp.json()["token"]
+
+    gm = GameMasterPage(page, gm_token, app_url)
+    gm.goto()
+    gm.join_team_inline("red", "Red Team")
+    gm.join_team_inline("blue", "Blue Team")
+    gm.auto_place_all_ships()
+    red_token = gm.get_team_token_from_card("red")
+
+    gs = GameSettingsPage(page, gm_token, app_url)
+    gs.goto()
+    gs.enable_quiz(50)
+    gs.add_question(
+        "Capital of France?",
+        [
+            {"text": "Paris", "bombs": 5, "correct": True},
+            {"text": "London", "bombs": 0, "correct": False},
+        ],
+        source_url="https://en.wikipedia.org/wiki/Paris",
+    )
+    gs.save_quiz()
+
+    gm.goto()
+    gm.start_game()
+
+    tp = TeamPage(page, f"/team/{red_token}", app_url)
+    tp.goto()
+    page.wait_for_function(
+        'document.getElementById("quiz-content") && '
+        'document.getElementById("quiz-content").querySelector("button")',
+        timeout=10000,
+    )
+
+    # The link must not be visible (or in the payload) before answering.
+    assert tp.quiz_source_link().count() == 0, "source link leaked before answering"
+
+    tp.answer_quiz(0)
+    tp.quiz_next_button().wait_for(state="visible", timeout=5000)
+    assert "Correct" in tp.quiz_verdict().text_content(), tp.quiz_verdict().text_content()
+    assert "Paris" in tp.quiz_correct_answer().text_content(), tp.quiz_correct_answer().text_content()
+
+    link = tp.quiz_source_link()
+    assert link.count() == 1, "source link missing on the result screen"
+    assert link.get_attribute("href") == "https://en.wikipedia.org/wiki/Paris"
+    assert link.get_attribute("target") == "_blank"
+
+    tp.next_quiz_question()
+    page.wait_for_function(
+        'document.getElementById("quiz-content") && '
+        'document.getElementById("quiz-content").textContent.includes("answered")',
+        timeout=5000,
+    )

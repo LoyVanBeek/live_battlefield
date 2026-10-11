@@ -134,7 +134,12 @@
     "action_quiz": {
         "heading": "\ud83d\udcdd Quiz",
         "loading": "Quiz laden...",
-        "done": "Alle vragen beantwoord!"
+        "done": "Alle vragen beantwoord!",
+        "verdict_correct": "\u2713 Juist!",
+        "verdict_wrong": "\u2717 Fout antwoord",
+        "correct_answer": "Juiste antwoord: {answer}",
+        "source_label": "Bron",
+        "next": "Volgende vraag"
     },
     "bomb_confirm": {
         "title": "\ud83d\udca5 {target} bombarderen?",
