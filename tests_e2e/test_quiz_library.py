@@ -121,3 +121,34 @@ def test_admin_renames_overwrites_and_deletes_library_quiz(page, app_url, admin_
     admin.delete_selected_library_quiz()
     names = [t["name"] for t in _templates(app_url, admin_token)]
     assert "Alpha Renamed" not in names
+
+
+def test_admin_import_shows_readable_answer_text(page, app_url, admin_token):
+    """Imported answers must be visible.
+
+    Regression: the admin page's global `input { width: 100% }` rule once made the
+    correct-answer radio eat the flex row, squashing the answer text inputs to ~14px
+    (text present but unreadable). Assert both the value round-trips and the input
+    is wide enough for a human to read.
+    """
+    admin = AdminDashboardPage(page, admin_token, app_url)
+    admin.goto()
+    admin.open_new_library_quiz("")
+
+    admin.import_library_quiz([
+        {
+            "question_text": "Capital of France?",
+            "bomb_value": 5,
+            "answers": [
+                {"answer_text": "Paris", "bomb_value": 5, "is_correct": True},
+                {"answer_text": "London", "bomb_value": 0, "is_correct": False},
+            ],
+        },
+    ])
+
+    assert admin.library_answer_texts() == ["Paris", "London"]
+
+    widths = admin.library_answer_widths()
+    assert len(widths) == 2
+    assert all(w > 100 for w in widths), f"answer inputs are too narrow to read: {widths}"
+

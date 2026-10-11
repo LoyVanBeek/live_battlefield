@@ -1,5 +1,11 @@
 # Lessons Learned
 
+## Host CSS leaking into a shared widget
+- A generic `input, select { width: 100% }` in a host page also styles `<input type="radio">`; inside a flex row the radio balloons and starves its siblings (the admin quiz editor's answer text collapsed to 14px — imported text was present but unreadable)
+- Make shared widgets self-contained: set explicit sizing inline on controls that must not inherit host width (`style="flex:0 0 auto;width:auto;"` on the radio), rather than relying on the host's CSS being sane
+- Also scope over-broad host rules: `input:not([type="radio"]):not([type="checkbox"]), select { ... }`
+- Playwright gotcha: `fill()` treats a 14px-wide input as visible, so existence/value tests pass while the UI is unreadable. Assert `bounding_box().width` when layout/visibility is what matters
+
 ## SQLAlchemy deletes without ORM relationships
 - When tables are linked only by `ForeignKey` columns (no `relationship()`), the unit of work does NOT know parent/child ordering, so `await db.delete(parent)` can flush before the child rows are gone → `ForeignKeyViolationError: update or delete on table "X" violates foreign key constraint`
 - For tables with no ORM relationships, delete with ordered bulk statements instead of `await db.delete(obj)`:

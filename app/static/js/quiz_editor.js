@@ -56,7 +56,7 @@
                     var bombWeight = val > 0 ? 'bold' : 'normal';
                     return (
                         '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;padding-left:20px;">' +
-                            '<input type="radio" name="correct-' + qi + '" data-role="correct" data-qi="' + qi + '" data-ai="' + ai + '" ' + (a.is_correct ? 'checked' : '') + '>' +
+                            '<input type="radio" name="correct-' + qi + '" data-role="correct" data-qi="' + qi + '" data-ai="' + ai + '" style="flex:0 0 auto;width:auto;margin:0;padding:0;" ' + (a.is_correct ? 'checked' : '') + '>' +
                             '<input type="text" data-role="answer-text" data-qi="' + qi + '" data-ai="' + ai + '" value="' + esc(a.answer_text) + '" placeholder="Answer" style="flex:1;padding:5px;font-size:12px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">' +
                             '<input type="number" id="ans-bombs-' + qi + '-' + ai + '" data-role="answer-bombs" data-qi="' + qi + '" data-ai="' + ai + '" min="0" step="1" value="' + val + '" aria-label="Bombs for answer ' + (ai + 1) + ' of question ' + (qi + 1) + '" style="width:60px;padding:4px;font-size:11px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">' +
                             '<span style="color:' + bombColor + ';font-size:12px;font-weight:' + bombWeight + ';">💣</span>' +

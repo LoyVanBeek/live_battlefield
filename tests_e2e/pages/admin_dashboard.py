@@ -1,3 +1,6 @@
+import json
+
+
 class AdminDashboardPage:
     def __init__(self, page, admin_token: str, app_url: str = "http://localhost:8000"):
         self.page = page
@@ -75,6 +78,32 @@ class AdminDashboardPage:
         self.page.locator("#library-new-btn").click()
         self.page.wait_for_timeout(200)
         self.library_name_input().fill(name)
+
+    def import_library_quiz(self, questions: list):
+        """Import a questions array through the editor's file input (in-memory file)."""
+        self.page.set_input_files(
+            "#library-quiz-import-input",
+            {
+                "name": "quiz.json",
+                "mimeType": "application/json",
+                "buffer": json.dumps(questions).encode(),
+            },
+        )
+        self.page.wait_for_timeout(600)
+
+    def library_question_inputs(self):
+        return self.page.locator('#library-quiz-questions-list input[data-role="question-text"]')
+
+    def library_answer_inputs(self):
+        return self.page.locator('#library-quiz-questions-list input[data-role="answer-text"]')
+
+    def library_answer_texts(self):
+        return self.library_answer_inputs().evaluate_all("els => els.map(e => e.value)")
+
+    def library_answer_widths(self):
+        return self.library_answer_inputs().evaluate_all(
+            "els => els.map(e => e.getBoundingClientRect().width)"
+        )
 
     def add_library_question(self, question_text: str, answers: list):
         """Add a question to the library editor. Each answer: {"text", "correct"}."""
