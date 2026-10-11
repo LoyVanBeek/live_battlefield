@@ -150,16 +150,22 @@ class AdminDashboardPage:
         self.library_select().select_option(value)
         return value
 
-    def edit_selected_library_quiz(self):
-        self.page.locator("#library-edit-btn").click()
+    def library_card(self, name: str):
+        """The quiz card in the admin library list whose name contains `name`."""
+        return self.page.locator("#library-quiz-list .game-row", has_text=name)
+
+    def edit_library_quiz(self, name: str):
+        """Open the library editor for the quiz card named `name`."""
+        self.library_card(name).locator("button", has_text="✏️ Edit").click()
         self.page.wait_for_timeout(500)
 
-    def delete_selected_library_quiz(self, accept: bool = True):
+    def delete_library_quiz(self, name: str, accept: bool = True):
+        """Delete the quiz card named `name`, answering the confirm dialog."""
         def handle_dialog(dialog):
             if accept:
                 dialog.accept()
             else:
                 dialog.dismiss()
         self.page.once("dialog", handle_dialog)
-        self.page.locator("#library-delete-btn").click()
+        self.library_card(name).locator("button", has_text="🗑️ Delete").click()
         self.page.wait_for_timeout(800)

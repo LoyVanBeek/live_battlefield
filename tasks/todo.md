@@ -500,3 +500,34 @@
   stale DB. Container recreation via `down` + `up` (no volume is declared for test-postgres)
   is the reliable fresh-DB path. The first full-suite run in this session failed exactly that
   way (61 passed, 1 failed); a genuinely fresh DB → 62/62. Worth a doc fix in AGENTS.md later.
+
+---
+
+# Per-card Edit/Delete buttons in the admin Quiz Library
+
+## What changed
+- Every quiz card in `#library-quiz-list` now carries its own `✏️ Edit` and `🗑️ Delete`
+  buttons (right-aligned actions div, same pattern as the games list rows). Cards carry
+  `data-template-id`; the buttons call `editLibraryQuiz(id)` / `deleteLibraryQuiz(id)`.
+- The toolbar's selection-based `✏️ Edit` / `🗑️ Delete` buttons (`#library-edit-btn` /
+  `#library-delete-btn`) are **removed** (user choice: per-card is the only path); the
+  dropdown + `➕ New` stay. `editLibraryQuiz(id)` syncs the dropdown value to the card, so
+  save-after-edit keeps the select consistent.
+- POM: `edit_selected_library_quiz` / `delete_selected_library_quiz` → card-based
+  `library_card(name)` + `edit_library_quiz(name)` / `delete_library_quiz(name, accept)`.
+
+## Tests / verification
+- E2E updates: rename/overwrite/delete and source round-trip tests use card buttons; new
+  `test_each_quiz_card_has_edit_and_delete_buttons` (each card has exactly one Edit + one
+  Delete; deleting one card leaves the other) — written resilient to sibling tests' templates
+  already existing in the DB (assert per-card presence, not a total card count).
+- `uv run ty check` clean; `uv run pytest tests/` **239 passed**; `uvx pip-audit` exit 0.
+- Full E2E as root on a fresh DB: **63/63 passed** (62 + 1 new; library file 6/6).
+
+## Review
+- The delete confirm label still looks the template up via `#library-quiz-select option[value=…]`
+  (options stay populated even though the dropdown is no longer the edit/delete trigger).
+- `select_library_quiz` POM helper kept — the dropdown still exists and the "Capitals" test
+  still selects through it.
+- E2E note: this container's pytest-browser rejects `--video=on-fail` (AGENTS.md doc drift,
+  already flagged in the flicker section); ran without video flags.

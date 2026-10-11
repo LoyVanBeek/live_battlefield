@@ -106,8 +106,6 @@
             <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
                 <select id="library-quiz-select" style="flex: 1; min-width: 200px;"></select>
                 <button class="btn btn-success" id="library-new-btn" onclick="newLibraryQuiz()">➕ New</button>
-                <button class="btn btn-primary" id="library-edit-btn" onclick="editLibraryQuiz()">✏️ Edit</button>
-                <button class="btn btn-danger" id="library-delete-btn" onclick="deleteLibraryQuiz()">🗑️ Delete</button>
             </div>
             <div id="library-quiz-list" style="margin-bottom: 10px;">
                 <p style="color: #888;">Loading...</p>
@@ -322,8 +320,13 @@
                 list.innerHTML = '<p style="color: #888;">No saved quizzes yet. Click ➕ New.</p>';
             } else {
                 list.innerHTML = templates.map(t =>
-                    '<div class="game-row"><div class="game-info"><div class="name">' + esc(t.name) + '</div>' +
-                    '<div class="status">' + t.question_count + ' question(s) — ' + t.total_bombs + ' 💣 total</div></div></div>'
+                    '<div class="game-row" data-template-id="' + t.id + '">' +
+                    '<div class="game-info"><div class="name">' + esc(t.name) + '</div>' +
+                    '<div class="status">' + t.question_count + ' question(s) — ' + t.total_bombs + ' 💣 total</div></div>' +
+                    '<div style="display:flex;gap:8px;">' +
+                        '<button class="btn btn-primary" onclick="editLibraryQuiz(' + t.id + ')">✏️ Edit</button>' +
+                        '<button class="btn btn-danger" onclick="deleteLibraryQuiz(' + t.id + ')">🗑️ Delete</button>' +
+                    '</div></div>'
                 ).join('');
             }
         }
@@ -336,8 +339,7 @@
             document.getElementById('library-editor').style.display = 'block';
         }
 
-        async function editLibraryQuiz() {
-            const id = document.getElementById('library-quiz-select').value;
+        async function editLibraryQuiz(id) {
             if (!id) { showToast('Pick a quiz to edit.', 'error'); return; }
             const data = await apiCall('/api/quiz-templates/' + id);
             if (!data || !data.success || !data.template) {
@@ -349,6 +351,7 @@
             document.getElementById('library-quiz-name').value = data.template.name;
             libraryEditor.setQuestions(data.template.questions || []);
             document.getElementById('library-editor').style.display = 'block';
+            document.getElementById('library-quiz-select').value = String(id);
         }
 
         async function saveLibraryQuiz() {
@@ -368,8 +371,7 @@
             document.getElementById('library-quiz-select').value = String(editingTemplateId);
         }
 
-        async function deleteLibraryQuiz() {
-            const id = document.getElementById('library-quiz-select').value;
+        async function deleteLibraryQuiz(id) {
             if (!id) { showToast('Pick a quiz to delete.', 'error'); return; }
             const opt = document.querySelector('#library-quiz-select option[value="' + id + '"]');
             const label = opt ? opt.textContent : id;

@@ -108,8 +108,7 @@ def test_admin_renames_overwrites_and_deletes_library_quiz(page, app_url, admin_
 
     admin = AdminDashboardPage(page, admin_token, app_url)
     admin.goto()
-    admin.select_library_quiz("Alpha")
-    admin.edit_selected_library_quiz()
+    admin.edit_library_quiz("Alpha")
     admin.library_name_input().fill("Alpha Renamed")
     admin.save_library_quiz()
 
@@ -117,10 +116,46 @@ def test_admin_renames_overwrites_and_deletes_library_quiz(page, app_url, admin_
     assert "Alpha Renamed" in names
     assert "Alpha" not in names, "renaming must not leave the old name behind"
 
-    admin.select_library_quiz("Alpha Renamed")
-    admin.delete_selected_library_quiz()
+    admin.delete_library_quiz("Alpha Renamed")
     names = [t["name"] for t in _templates(app_url, admin_token)]
     assert "Alpha Renamed" not in names
+
+
+def test_each_quiz_card_has_edit_and_delete_buttons(page, app_url, admin_token):
+    """Every saved quiz card carries its own Edit + Delete buttons, and deleting
+    one card leaves the other cards untouched."""
+    _create_template(app_url, admin_token, "Card One", [
+        {"question_text": "Q1", "answers": [
+            {"answer_text": "A", "bomb_value": 4, "is_correct": True},
+            {"answer_text": "B", "bomb_value": 0, "is_correct": False},
+        ]},
+    ])
+    _create_template(app_url, admin_token, "Card Two", [
+        {"question_text": "Q2", "answers": [
+            {"answer_text": "A", "bomb_value": 4, "is_correct": True},
+        ]},
+    ])
+
+    admin = AdminDashboardPage(page, admin_token, app_url)
+    admin.goto()
+    page.wait_for_function(
+        "() => document.querySelectorAll('#library-quiz-list .game-row').length >= 2",
+        timeout=5000,
+    )
+
+    for name in ("Card One", "Card Two"):
+        card = admin.library_card(name)
+        assert card.count() == 1, f"expected exactly one card for {name!r}"
+        assert card.locator("button", has_text="✏️ Edit").count() == 1
+        assert card.locator("button", has_text="🗑️ Delete").count() == 1
+
+    admin.delete_library_quiz("Card One")
+    page.wait_for_function(
+        "() => !Array.from(document.querySelectorAll('#library-quiz-list .game-row'))"
+        ".some(r => r.textContent.includes('Card One'))",
+        timeout=5000,
+    )
+    assert "Card Two" in admin.library_quiz_list().text_content()
 
 
 def test_admin_import_shows_readable_answer_text(page, app_url, admin_token):
@@ -168,8 +203,7 @@ def test_quiz_library_source_round_trips(page, app_url, admin_token):
     admin.save_library_quiz()
 
     # Re-opening the saved quiz restores the source field in the editor.
-    admin.select_library_quiz("Sourced Quiz")
-    admin.edit_selected_library_quiz()
+    admin.edit_library_quiz("Sourced Quiz")
     assert admin.page.input_value(
         "#library-quiz-questions-list input[data-role='source-url'][data-qi='0']"
     ) == "https://en.wikipedia.org/wiki/Paris"
