@@ -485,6 +485,15 @@
   refreshes during the result view cause zero DOM churn.
 - **`is_correct` leak to unanswered questions is pre-existing and out of scope** — a team
   could read it from the answer payload anyway; not touched here.
+- **Follow-up fix (link could vanish)**: the result screen originally rendered the source
+  from the refetched question payload. `loadQuizQuestions()` refetches on every call and
+  the last-resolving GET wins, so an SSE-triggered refetch that started before the answer
+  event committed could land after it, caching the pre-answer snapshot (`source_url: null`)
+  and re-rendering the result screen with verdict + correct answer + Next but **no link**.
+  Fixed by revealing the source in the `/api/execute` answer response itself (the team just
+  answered, so it's policy-legal) and carrying it through `quizPendingResult`; the refetch
+  is now just a fallback. Unit test `test_quiz_command_reveals_source_url_in_answer_response`
+  proves the server sends it. Full E2E as root on a fresh DB: **62/62**.
 - **Env gotcha (again)**: `docker compose -f docker-compose.e2e.yml down -v` errors on the
   shared `live_battlefield_default` network (dev `docker-compose.yml` containers still use
   it), so the `-v` never deletes the test DB volume; `test_select_all_toggles_all` flakes on a

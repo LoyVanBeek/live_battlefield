@@ -1828,6 +1828,12 @@ async def execute_command(
             result["success"] = False
             result["message"] = "Wrong answer! No bombs earned."
 
+        # The team just answered this question — reveal its verifying link right
+        # now, in this response. The result screen uses it directly instead of
+        # depending on a (possibly stale) refetch of /api/quiz/questions, so the
+        # link can never vanish from the correct-answer + Next view.
+        result["source_url"] = question_row.source_url
+
     else:
         result["message"] = f"Unknown command: {cmd.command}"
 

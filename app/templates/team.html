@@ -1440,8 +1440,11 @@ async function clearAllShips() {
         // result (correct answer + source link) instead of skipping ahead.
         let quizPendingResult = null;
 
-        function renderQuizResult(q, success) {
+        function renderQuizResult(q, success, sourceUrl) {
             const correct = (q.answers || []).find(a => a.is_correct);
+            // Prefer the source revealed in the answer response; fall back to the
+            // (server-side stripped) cached question, e.g. for stale pages.
+            const src = (sourceUrl || q.source_url || '').trim();
             let html = '<p id="quiz-verdict" style="font-weight:bold;font-size:15px;color:' +
                 (success ? '#4caf50' : '#ff5252') + ';">' +
                 (success ? _('action_quiz.verdict_correct') : _('action_quiz.verdict_wrong')) + '</p>';
@@ -1449,10 +1452,10 @@ async function clearAllShips() {
                 html += '<p id="quiz-correct-answer" style="margin:6px 0;">' +
                     _('action_quiz.correct_answer', { answer: esc(correct.answer_text) }) + '</p>';
             }
-            if (q.source_url && /^https?:\/\//i.test(q.source_url)) {
+            if (src && /^https?:\/\//i.test(src)) {
                 html += '<p id="quiz-source" style="margin:6px 0;word-break:break-all;">' +
-                    esc(_('action_quiz.source_label')) + ': <a id="quiz-source-link" href="' + esc(q.source_url) +
-                    '" target="_blank" rel="noopener noreferrer">' + esc(q.source_url) + '</a></p>';
+                    esc(_('action_quiz.source_label')) + ': <a id="quiz-source-link" href="' + esc(src) +
+                    '" target="_blank" rel="noopener noreferrer">' + esc(src) + '</a></p>';
             }
             html += '<button class="btn btn-primary" id="quiz-next" style="padding:8px 12px;" onclick="nextQuizQuestion()">' +
                 _('action_quiz.next') + '</button>';
@@ -1478,15 +1481,17 @@ async function clearAllShips() {
             const questions = quizQuestionsCache || [];
 
             // A just-answered question gets a result view (correct answer, source
-            // link, "Next") until the team moves on.
+            // link, "Next") until the team moves on. The source comes from the
+            // answer response, not this refetch, so a stale snapshot can't hide it.
             if (quizPendingResult) {
                 const rq = questions.find(q => q.id === quizPendingResult.questionId);
                 if (rq) {
+                    const src = quizPendingResult.sourceUrl || rq.source_url || '';
                     const resultSignature = 'result|' + rq.id + '|' +
-                        (quizPendingResult.success ? 'ok' : 'no') + '|' + (rq.source_url || '');
+                        (quizPendingResult.success ? 'ok' : 'no') + '|' + src;
                     if (resultSignature === quizContentSignature) return;
                     quizContentSignature = resultSignature;
-                    content.innerHTML = renderQuizResult(rq, quizPendingResult.success);
+                    content.innerHTML = renderQuizResult(rq, quizPendingResult.success, src);
                     return;
                 }
                 quizPendingResult = null;
@@ -1539,7 +1544,8 @@ async function clearAllShips() {
             quizPendingResult = {
                 questionId: questionId,
                 answerId: answerId,
-                success: !!(result && result.success)
+                success: !!(result && result.success),
+                sourceUrl: (result && result.source_url) || null
             };
             updateQuizSection();
         }
