@@ -1,3 +1,67 @@
+# Reusable quiz library (save quizzes ahead of time)
+
+## Backend
+- [x] Migration `011_add_quiz_templates.py` — `quiz_templates`, `quiz_template_questions`,
+      `quiz_template_answers` (relational, mirrors the game quiz tables)
+- [x] `app/database.py`: `QuizTemplate`, `QuizTemplateQuestion`, `QuizTemplateAnswer`
+- [x] `app/models.py`: `list_quiz_templates`, `get_quiz_template`, `save_quiz_template`
+      (upsert/overwrite by name, edit/rename), `delete_quiz_template`
+- [x] `app/api/routes.py`: extract `_quiz_validation_error()` and reuse it in
+      `POST /api/quiz/questions`; add `GET /api/quiz-templates`,
+      `GET /api/quiz-templates/{id}` (admin-or-gm), `POST /api/quiz-templates`
+      (admin-or-gm), `DELETE /api/quiz-templates/{id}` (admin only)
+
+## Shared editor
+- [x] Extract the quiz question editor into `app/static/js/quiz_editor.js`
+      (`createQuizEditor`), owned by both pages; persistence stays page-level
+- [x] `game_settings.html` uses the module (game-mode behavior unchanged)
+
+## Frontend
+- [x] `game_settings.html`: library dropdown + Load, and "Save as…" (create/overwrite)
+- [x] `admin_dashboard.html`: Quiz Library section — list + New/Edit/Delete + full editor
+      (name, Rebalance, Save, Export/Import JSON, Add Question)
+- [x] Translation keys `quiz_library`, `quiz_library_load`, `quiz_library_save_as` (en + nl)
+
+## Tests / verification
+- [x] Unit tests `TestQuizTemplates` (list/create/delete, name required, validation reuse)
+- [x] E2E `test_quiz_library.py`: admin author → list → edit/overwrite → delete;
+      game-settings Load + Save-as; load the same quiz into a second game
+- [x] POMs: `AdminDashboardPage` quiz-library helpers, `GameSettingsPage` load/save-as
+- [x] `uv run ty check`, `uv run pytest tests/` (235 passed), `uvx pip-audit`
+- [x] Rebuild `test-app` + `test-e2e`; library/quiz E2E as root; full suite as root (59 passed)
+
+## Review
+- **Storage**: three relational tables (`quiz_templates` / `quiz_template_questions` /
+  `quiz_template_answers`), not a JSON blob. A saved quiz holds questions + per-answer bomb
+  values + the correct flag only — no total budget, no enabled flag. `/api/quiz-templates`
+  list returns `question_count` and `total_bombs` (Σ per-question max answer), computed on read.
+- **Identity = name**: `save_quiz_template` overwrites any existing template with the same
+  name; passing `id` updates in place (enables rename). Both paths bulk-delete the old
+  rows before inserting the new set.
+- **Loading copies**: the game settings `Load` reads the template and copies its questions
+  into the game via the existing save flow, so later library edits never mutate live games.
+- **Shared editor**: `createQuizEditor` owns question/answer state, rendering, per-answer
+  bombs, warnings, rebalance, and JSON import/export. Persistence, the enabled flag, and the
+  template name stay in each host page. Every existing game-settings selector
+  (`#quiz-questions-list > div`, `#ans-bombs-{qi}-{ai}`, `input[name="correct-{qi}"]`,
+  `#quiz-total`, `#quiz-warning-banner`, `#quiz-import-input`) is preserved, so quiz-mode E2E
+  keeps passing unchanged.
+- **Validation reuse**: `_quiz_validation_error()` is now the single rule (every question
+  needs ≥1 answer and ≥1 bomb-yielding answer) shared by the game quiz save and the library
+  save, so both reject the same broken shapes.
+- **Auth**: list/get/create accept admin or GM (`verify_admin_or_gm`); delete is admin-only
+  (`verify_admin`). Delete has a unit test proving a GM token is rejected (404).
+- **Migration verified**: `alembic upgrade head`, `downgrade 010`, and `upgrade head` all
+  run clean against Postgres. `alembic check` flags only the redundant `ix_*_id` PK indexes,
+  the same pre-existing drift as every other table in the repo.
+- **Gotcha found**: deleting the template row with the ORM unit of work failed with an FK
+  violation (no ORM relationships, so it deleted the parent before the children). Switched to
+  ordered bulk `delete()` statements. E2E now covers rename/overwrite and delete.
+- **Not done / out of scope**: no delete control in game settings (as specified); no seeding
+  of a starter quiz; admin library stays an inline section on the single-page dashboard.
+
+---
+
 # 📍 Insert location at current GPS position (GM locations page)
 
 ## Frontend

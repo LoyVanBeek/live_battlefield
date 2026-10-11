@@ -100,6 +100,39 @@
             </div>
         </div>
 
+        <div class="section" id="quiz-library-section">
+            <h2>📚 Quiz Library</h2>
+            <p style="color: #888; margin-bottom: 10px;">Save quizzes ahead of time and reuse them in any game. Saving under an existing name overwrites it. In a game's settings, pick a saved quiz and click Load.</p>
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
+                <select id="library-quiz-select" style="flex: 1; min-width: 200px;"></select>
+                <button class="btn btn-success" id="library-new-btn" onclick="newLibraryQuiz()">➕ New</button>
+                <button class="btn btn-primary" id="library-edit-btn" onclick="editLibraryQuiz()">✏️ Edit</button>
+                <button class="btn btn-danger" id="library-delete-btn" onclick="deleteLibraryQuiz()">🗑️ Delete</button>
+            </div>
+            <div id="library-quiz-list" style="margin-bottom: 10px;">
+                <p style="color: #888;">Loading...</p>
+            </div>
+            <div id="library-editor" style="display: none; border-top: 1px solid #0f3460; padding-top: 15px;">
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                    <label style="color: #aaa; font-size: 14px; white-space: nowrap;">Quiz name:</label>
+                    <input type="text" id="library-quiz-name" placeholder="e.g. Geography round 1" style="flex: 1;">
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary" onclick="libraryEditor.rebalance()" style="background:#0f3460;color:#eee;">Rebalance</button>
+                    <button class="btn btn-success" onclick="saveLibraryQuiz()">Save Quiz</button>
+                    <button class="btn btn-primary" onclick="libraryEditor.exportJSON('quiz_questions.json')">⬇ Export JSON</button>
+                    <button class="btn btn-primary" onclick="document.getElementById('library-quiz-import-input').click()">⬆ Import JSON</button>
+                    <input type="file" id="library-quiz-import-input" accept=".json" style="display: none" onchange="libraryEditor.importFile(event)">
+                    <label style="color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 4px;">Total budget <input type="number" id="library-quiz-total" min="0" value="0" style="width: 70px;"></label>
+                </div>
+                <div id="library-quiz-warning-banner" style="display: none; background: rgba(255,82,82,.12); border: 1px solid #ff5252; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #ff8a80; margin-bottom: 10px;"></div>
+                <div id="library-quiz-questions-list"></div>
+                <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="libraryEditor.addQuestion()">+ Add Question</button>
+                </div>
+            </div>
+        </div>
+
         <div class="section">
             <h2>Super Admin Token</h2>
             <p style="color: #888; margin-bottom: 10px;">Use this to log in at /admin</p>
@@ -118,6 +151,7 @@
 
     <div id="toast" class="toast"></div>
 
+    <script src="/static/js/quiz_editor.js"></script>
     <script>
         function getToken() {
             return window.location.pathname.replace('/admin/', '');
@@ -258,8 +292,104 @@
             }
         }
 
+        // --- Quiz Library ---
+        let libraryEditor = null;
+        let editingTemplateId = null;
+
+        function initLibraryEditor() {
+            if (libraryEditor) return;
+            libraryEditor = createQuizEditor({
+                listId: 'library-quiz-questions-list',
+                totalId: 'library-quiz-total',
+                warningId: 'library-quiz-warning-banner',
+                addAnswerLabel: 'Add Answer',
+                toast: showToast,
+            });
+        }
+
+        async function loadQuizTemplates() {
+            const data = await apiCall('/api/quiz-templates');
+            if (!data) return;
+            const templates = data.templates || [];
+            const select = document.getElementById('library-quiz-select');
+            const current = select.value;
+            select.innerHTML = '<option value="">— New quiz —</option>' + templates.map(t =>
+                '<option value="' + t.id + '">' + esc(t.name) + '</option>').join('');
+            if (templates.some(t => String(t.id) === current)) select.value = current;
+
+            const list = document.getElementById('library-quiz-list');
+            if (templates.length === 0) {
+                list.innerHTML = '<p style="color: #888;">No saved quizzes yet. Click ➕ New.</p>';
+            } else {
+                list.innerHTML = templates.map(t =>
+                    '<div class="game-row"><div class="game-info"><div class="name">' + esc(t.name) + '</div>' +
+                    '<div class="status">' + t.question_count + ' question(s) — ' + t.total_bombs + ' 💣 total</div></div></div>'
+                ).join('');
+            }
+        }
+
+        function newLibraryQuiz() {
+            initLibraryEditor();
+            editingTemplateId = null;
+            document.getElementById('library-quiz-name').value = '';
+            libraryEditor.setQuestions([]);
+            document.getElementById('library-editor').style.display = 'block';
+        }
+
+        async function editLibraryQuiz() {
+            const id = document.getElementById('library-quiz-select').value;
+            if (!id) { showToast('Pick a quiz to edit.', 'error'); return; }
+            const data = await apiCall('/api/quiz-templates/' + id);
+            if (!data || !data.success || !data.template) {
+                showToast((data && data.message) || 'Could not load quiz.', 'error');
+                return;
+            }
+            initLibraryEditor();
+            editingTemplateId = data.template.id;
+            document.getElementById('library-quiz-name').value = data.template.name;
+            libraryEditor.setQuestions(data.template.questions || []);
+            document.getElementById('library-editor').style.display = 'block';
+        }
+
+        async function saveLibraryQuiz() {
+            initLibraryEditor();
+            const name = document.getElementById('library-quiz-name').value.trim();
+            if (!name) { showToast('Name is required.', 'error'); return; }
+            const body = { name: name, questions: libraryEditor.getQuestions() };
+            if (editingTemplateId !== null) body.id = editingTemplateId;
+            const result = await apiCall('/api/quiz-templates', 'POST', body);
+            if (!result || !result.success) {
+                showToast((result && result.message) || 'Could not save quiz.', 'error');
+                return;
+            }
+            editingTemplateId = result.template ? result.template.id : editingTemplateId;
+            showToast(result.message || 'Saved!', 'success');
+            await loadQuizTemplates();
+            document.getElementById('library-quiz-select').value = String(editingTemplateId);
+        }
+
+        async function deleteLibraryQuiz() {
+            const id = document.getElementById('library-quiz-select').value;
+            if (!id) { showToast('Pick a quiz to delete.', 'error'); return; }
+            const opt = document.querySelector('#library-quiz-select option[value="' + id + '"]');
+            const label = opt ? opt.textContent : id;
+            if (!confirm('Delete the saved quiz "' + label + '"?')) return;
+            const result = await apiCall('/api/quiz-templates/' + id, 'DELETE');
+            if (!result || !result.success) {
+                showToast((result && result.message) || 'Could not delete quiz.', 'error');
+                return;
+            }
+            showToast(result.message || 'Deleted!', 'success');
+            if (String(editingTemplateId) === String(id)) {
+                editingTemplateId = null;
+                document.getElementById('library-editor').style.display = 'none';
+            }
+            await loadQuizTemplates();
+        }
+
         loadSuperToken();
         loadGames();
+        loadQuizTemplates();
     </script>
 </body>
 </html>

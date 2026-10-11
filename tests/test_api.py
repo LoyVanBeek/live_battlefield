@@ -1279,6 +1279,163 @@ class TestQuizMode:
             app.dependency_overrides.clear()
 
 
+class TestQuizTemplates:
+    """Reusable quiz library endpoints (/api/quiz-templates)."""
+
+    def test_list_templates(self):
+        from app.api.routes import app, verify_admin_or_gm
+
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
+        try:
+            with patch("app.models.list_quiz_templates", new_callable=AsyncMock) as mock_list:
+                mock_list.return_value = [
+                    {"id": 1, "name": "Basics", "question_count": 2, "total_bombs": 10, "updated_at": None},
+                ]
+                client = TestClient(app)
+                response = client.get("/api/quiz-templates")
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        templates = response.json()["templates"]
+        assert templates[0]["name"] == "Basics"
+        assert templates[0]["total_bombs"] == 10
+
+    def test_get_template_not_found(self):
+        from app.api.routes import app, verify_admin_or_gm
+
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "gm", "game_id": "x"}
+        try:
+            with patch("app.models.get_quiz_template", new_callable=AsyncMock, return_value=None):
+                client = TestClient(app)
+                response = client.get("/api/quiz-templates/999")
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert "not found" in data["message"].lower()
+
+    def test_create_template_requires_name(self):
+        from app.api.routes import app, verify_admin_or_gm
+
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
+        try:
+            with patch("app.models.save_quiz_template", new_callable=AsyncMock) as mock_save:
+                client = TestClient(app)
+                response = client.post("/api/quiz-templates", json={
+                    "name": "   ",
+                    "questions": [{"question_text": "Q", "answers": [
+                        {"answer_text": "A", "bomb_value": 5, "is_correct": True}]}],
+                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is False
+            assert "name is required" in data["message"].lower()
+            mock_save.assert_not_awaited()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_create_template_rejects_question_without_answers(self):
+        from app.api.routes import app, verify_admin_or_gm
+
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
+        try:
+            with patch("app.models.save_quiz_template", new_callable=AsyncMock) as mock_save:
+                client = TestClient(app)
+                response = client.post("/api/quiz-templates", json={
+                    "name": "Broken",
+                    "questions": [{"question_text": "Empty Q", "answers": []}],
+                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is False
+            assert "has no answers" in data["message"]
+            mock_save.assert_not_awaited()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_create_template_rejects_no_bomb_yielding_answer(self):
+        from app.api.routes import app, verify_admin_or_gm
+
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
+        try:
+            with patch("app.models.save_quiz_template", new_callable=AsyncMock) as mock_save:
+                client = TestClient(app)
+                response = client.post("/api/quiz-templates", json={
+                    "name": "ZeroBombs",
+                    "questions": [{"question_text": "Capital of France?", "answers": [
+                        {"answer_text": "Paris", "bomb_value": 0, "is_correct": True},
+                        {"answer_text": "London", "bomb_value": 0, "is_correct": False},
+                    ]}],
+                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is False
+            assert "no bomb-yielding answer" in data["message"]
+            assert "Capital of France" in data["message"]
+            mock_save.assert_not_awaited()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_create_template_accepts_and_forwards_id(self):
+        from app.api.routes import app, verify_admin_or_gm
+
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "gm", "game_id": "x"}
+        try:
+            with patch("app.models.save_quiz_template", new_callable=AsyncMock) as mock_save:
+                mock_save.return_value = {"id": 7, "name": "Basics", "questions": []}
+                client = TestClient(app)
+                response = client.post("/api/quiz-templates", json={
+                    "id": 7,
+                    "name": "Basics",
+                    "questions": [{"question_text": "Q", "answers": [
+                        {"answer_text": "A", "bomb_value": 5, "is_correct": True}]}],
+                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert data["template"]["id"] == 7
+            mock_save.assert_awaited_once()
+            assert mock_save.call_args.kwargs["template_id"] == 7
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_delete_template_requires_admin(self):
+        from app.api.routes import app
+
+        admin = MagicMock()
+        admin.token = "test_admin_token"
+        with patch("app.models.get_admin", new_callable=AsyncMock, return_value=admin):
+            with patch("app.models.delete_quiz_template", new_callable=AsyncMock) as mock_delete:
+                client = TestClient(app)
+                response = client.delete(
+                    "/api/quiz-templates/1?token=wrong_token&gm_token=somegm"
+                )
+
+        assert response.status_code == 404
+        mock_delete.assert_not_awaited()
+
+    def test_delete_template_as_admin(self):
+        from app.api.routes import app, verify_admin
+
+        app.dependency_overrides[verify_admin] = lambda: "test_admin_token"
+        try:
+            with patch("app.models.delete_quiz_template", new_callable=AsyncMock, return_value=True):
+                client = TestClient(app)
+                response = client.delete("/api/quiz-templates/1")
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+
 class TestAuthRateLimit:
     """Failed auth attempts are throttled per client IP."""
 

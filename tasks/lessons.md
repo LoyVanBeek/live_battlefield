@@ -1,5 +1,11 @@
 # Lessons Learned
 
+## SQLAlchemy deletes without ORM relationships
+- When tables are linked only by `ForeignKey` columns (no `relationship()`), the unit of work does NOT know parent/child ordering, so `await db.delete(parent)` can flush before the child rows are gone → `ForeignKeyViolationError: update or delete on table "X" violates foreign key constraint`
+- For tables with no ORM relationships, delete with ordered bulk statements instead of `await db.delete(obj)`:
+  `await db.execute(delete(Child).where(Child.parent_id.in_(ids)))` → `await db.execute(delete(Parent).where(...))`
+- A mocked unit test can't catch this (the FK is a database constraint), so cover delete/replace paths with an E2E test or a real DB
+
 ## Mocking `from X import Y` imports
 - `patch.object(module, "func")` patches the attribute on the module object, but does NOT affect names imported via `from module import func` — those are direct references to the original function
 - Use `patch("importing_module.func")` instead (the dotted path of where the name is used, not where it's defined)

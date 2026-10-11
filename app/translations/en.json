@@ -167,7 +167,10 @@
         "quiz_add_a": "Add Answer",
         "quiz_save": "Save Quiz Settings",
         "quiz_export": "Export JSON",
-        "quiz_import": "Import JSON"
+        "quiz_import": "Import JSON",
+        "quiz_library": "Library",
+        "quiz_library_load": "Load",
+        "quiz_library_save_as": "Save as..."
     },
     "settings_locations": {
         "title": "\ud83d\udccd Locations",

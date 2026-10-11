@@ -77,6 +77,34 @@ class GameSettingsPage:
         self.page.locator("#quiz-import-input").set_input_files(file_path)
         self.page.wait_for_timeout(500)
 
+    def library_select(self):
+        return self.page.locator("#quiz-library-select")
+
+    def load_library_quiz(self, name: str):
+        """Pick a saved library quiz by name and click Load."""
+        self.page.wait_for_function(
+            "() => document.getElementById('quiz-library-select').options.length > 1",
+            timeout=5000,
+        )
+        value = self.page.evaluate(
+            """(name) => {
+                const sel = document.getElementById('quiz-library-select');
+                const opt = Array.from(sel.options).find(o => o.textContent.includes(name));
+                return opt ? opt.value : '';
+            }""",
+            name,
+        )
+        assert value, f"library quiz {name!r} not offered in the settings dropdown"
+        self.library_select().select_option(value)
+        self.page.get_by_role("button", name="Load").click()
+        self.page.wait_for_timeout(500)
+
+    def save_as_library_quiz(self, name: str):
+        """Save the current editor contents to the library under `name`."""
+        self.page.once("dialog", lambda d: d.accept(name))
+        self.page.locator("#quiz-questions-area button", has_text="Save as").click()
+        self.page.wait_for_timeout(800)
+
     def question_blocks(self):
         return self.page.locator("#quiz-questions-list > div")
 

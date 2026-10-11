@@ -167,7 +167,10 @@
         "quiz_add_a": "Antwoord Toevoegen",
         "quiz_save": "Quizinstellingen Opslaan",
         "quiz_export": "Exporteer JSON",
-        "quiz_import": "Importeer JSON"
+        "quiz_import": "Importeer JSON",
+        "quiz_library": "Bibliotheek",
+        "quiz_library_load": "Laden",
+        "quiz_library_save_as": "Opslaan als..."
     },
     "settings_locations": {
         "title": "\ud83d\udccd Locaties",
