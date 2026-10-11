@@ -497,6 +497,8 @@
                     });
                     quizQuestions = imported;
                     renderQuizQuestions();
+                    syncQuizTotal();
+                    updateQuizWarnings();
                     showToast('Imported ' + quizQuestions.length + ' question(s)!', 'success');
                 } catch (err) {
                     showToast('Import failed: ' + err.message, 'error');
