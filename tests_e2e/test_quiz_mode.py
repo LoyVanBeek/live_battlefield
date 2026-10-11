@@ -236,5 +236,5 @@ def test_quiz_manual_bombs_and_rebalance(page, app_url, admin_token):
         data = client.get("/api/quiz/questions", params={"gm_token": gm_token}).json()
     questions = data.get("questions") or []
     assert len(questions) == 2
-    assert questions[0]["bomb_value"] == 5
-    assert questions[1]["bomb_value"] == 5
+    assert questions[0].get("bomb_value") == 5
+    assert questions[1].get("bomb_value") == 5

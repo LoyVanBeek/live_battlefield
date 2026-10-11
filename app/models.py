@@ -353,13 +353,25 @@ async def get_quiz_questions(db: AsyncSession, game_id: uuid.UUID) -> list:
         answers = await db.execute(
             select(QuizAnswer).where(QuizAnswer.question_id == q.id).order_by(QuizAnswer.id)
         )
+        answers_list = [a for a in answers.scalars().all()]
+        q_bomb = 0
+        for a in answers_list:
+            if a.is_correct and a.bomb_value > 0:
+                q_bomb = a.bomb_value
+                break
+        if q_bomb == 0:
+            for a in answers_list:
+                if a.bomb_value > 0:
+                    q_bomb = a.bomb_value
+                    break
         result.append({
             "id": q.id,
             "question_text": q.question_text,
             "order": q.order,
+            "bomb_value": q_bomb,
             "answers": [
                 {"id": a.id, "answer_text": a.answer_text, "bomb_value": a.bomb_value, "is_correct": a.is_correct}
-                for a in answers.scalars().all()
+                for a in answers_list
             ],
         })
     return result

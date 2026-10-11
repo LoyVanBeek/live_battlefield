@@ -347,12 +347,11 @@
         }
 
         function addQuestion() {
-            const total = parseInt(document.getElementById('quiz-total').value) || 100;
-            const perQ = quizQuestions.length > 0 ? Math.floor(total / (quizQuestions.length + 1)) : total;
-            quizQuestions.push({ question_text: '', bomb_value: perQ > 0 ? perQ : 1, answers: [{ answer_text: '', bomb_value: 0, is_correct: true }] });
-            renderQuizQuestions();
-            syncQuizTotal();
-            updateQuizWarnings();
+            const totalInput = document.getElementById('quiz-total');
+            const total = parseInt(totalInput.value) || 100;
+            const n = quizQuestions.length;
+            quizQuestions.push({ question_text: '', bomb_value: 1, answers: [{ answer_text: '', bomb_value: 0, is_correct: true }] });
+            rebalanceBombs();
         }
 
         function addAnswer(qi) {
