@@ -531,3 +531,30 @@
   still selects through it.
 - E2E note: this container's pytest-browser rejects `--video=on-fail` (AGENTS.md doc drift,
   already flagged in the flicker section); ran without video flags.
+
+---
+
+# JSON schema for the quiz questions format
+
+## What shipped
+- `docs/quiz_questions.schema.json` — draft 2020-12 JSON Schema documenting the
+  editor's export/import and API round-trip format:
+  - `question_text` (required, non-empty), `bomb_value` (≥0), `source_url`
+    (null | empty | `^https?://` only — rejects `javascript:`/`data:` and
+    scheme-less strings)
+  - `answers` array (min 1) with each answer having `answer_text` (required,
+    non-empty), `bomb_value` (≥0), `is_correct` (boolean)
+  - `allOf` constraints: ≥1 bomb-yielding answer (`contains` + `bomb_value≥1`),
+    exactly one correct answer (`contains` + `is_correct: true` + `maxContains: 1`)
+  - `additionalProperties: false` on both question and answer objects (catches typos)
+- `jsonschema>=4.18` added to `[project.optional-dependencies] dev`
+- 17 unit tests in `tests/test_quiz_schema.py` covering schema validity,
+  valid examples (full, minimal, empty array, http), and 12 invalid cases
+  (not-array, missing/empty question text, no answers, two correct answers,
+  zero bomb yield, javascript: source, data: source, scheme-less source,
+  negative bomb value, non-boolean is_correct, unknown property)
+
+## Verification
+- `uv run ty check` clean; `uv run pytest tests/` **256 passed** (239 + 17 new);
+  `uvx pip-audit` exit 0
+- No E2E needed (schema is documentation + unit-tested; no runtime impact)
