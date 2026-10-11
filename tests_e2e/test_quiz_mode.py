@@ -238,3 +238,127 @@ def test_quiz_manual_bombs_and_rebalance(page, app_url, admin_token):
     assert len(questions) == 2
     assert questions[0].get("bomb_value") == 5
     assert questions[1].get("bomb_value") == 5
+
+
+def test_quiz_import_uses_json_bomb_values(page, app_url, admin_token, tmp_path):
+    """Import keeps the JSON's per-answer bomb values (wrong answers included),
+    auto-fixes zero-yield questions to 1, derives the total from each question's
+    max yield, and lays the manage buttons out above the questions list
+    (Add Question stays below)."""
+    import json
+    import httpx
+    from tests_e2e.config import HTTPX_TIMEOUT
+    from tests_e2e.pages.game_settings_page import GameSettingsPage
+
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        resp = client.post("/api/admin/create-game", params={"token": admin_token})
+        gm_token = resp.json()["token"]
+
+    quiz_json = [
+        {
+            "question_text": "Q1",
+            "answers": [
+                {"answer_text": "A", "bomb_value": 7, "is_correct": True},
+                # Wrong answer keeps its JSON bomb value as-is (no flattening).
+                {"answer_text": "B", "bomb_value": 2, "is_correct": False},
+            ],
+        },
+        {
+            "question_text": "Q2",
+            "answers": [
+                {"answer_text": "C", "bomb_value": 3, "is_correct": True},
+                {"answer_text": "D", "bomb_value": 0, "is_correct": False},
+            ],
+        },
+        {
+            # No answer yields >= 1 -> auto-fixed to 1 on import.
+            "question_text": "Q3",
+            "answers": [{"answer_text": "E", "bomb_value": 0, "is_correct": True}],
+        },
+    ]
+    import_file = tmp_path / "quiz.json"
+    import_file.write_text(json.dumps(quiz_json), encoding="utf-8")
+
+    gs = GameSettingsPage(page, gm_token, app_url)
+    gs.goto()
+    gs.enable_quiz()
+    gs.import_quiz(str(import_file))
+    # Total = sum of each question's max yield: 7 + 3 + 1
+    page.wait_for_function('document.getElementById("quiz-total").value === "11"', timeout=5000)
+    assert gs.question_blocks().count() == 3
+
+    # Manage buttons above the questions, Add Question below.
+    layout = page.evaluate("""() => {
+        const list = document.getElementById('quiz-questions-list');
+        const findBtn = (text) => Array.from(document.querySelectorAll('#quiz-questions-area button'))
+            .find(b => b.textContent.includes(text));
+        const above = (el) => el.getBoundingClientRect().bottom <= list.getBoundingClientRect().top;
+        return {
+            save_above: above(findBtn('Save Quiz Settings')),
+            rebalance_above: above(findBtn('Rebalance')),
+            export_above: above(findBtn('Export JSON')),
+            import_above: above(findBtn('Import JSON')),
+            add_below: findBtn('Add Question').getBoundingClientRect().top >= list.getBoundingClientRect().bottom,
+        };
+    }""")
+    assert all(layout.values()), layout
+
+    gs.save_quiz()
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        data = client.get("/api/quiz/questions", params={"gm_token": gm_token}).json()
+    questions = data.get("questions") or []
+    assert [q.get("bomb_value") for q in questions] == [7, 3, 1], questions
+    assert questions[0]["answers"][0]["bomb_value"] == 7
+    assert questions[0]["answers"][1]["bomb_value"] == 2, "wrong answer must keep its JSON bomb value"
+    assert questions[2]["answers"][0]["bomb_value"] == 1, "zero-yield question auto-fixed to 1"
+
+
+def test_quiz_edit_answer_bombs(page, app_url, admin_token):
+    """Per-answer bomb values are editable in the editor; the total tracks each
+    question's max yield, and editing bombs never changes which answer is correct."""
+    import httpx
+    from tests_e2e.config import HTTPX_TIMEOUT
+    from tests_e2e.pages.game_settings_page import GameSettingsPage
+
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        resp = client.post("/api/admin/create-game", params={"token": admin_token})
+        gm_token = resp.json()["token"]
+
+    gs = GameSettingsPage(page, gm_token, app_url)
+    gs.goto()
+    gs.enable_quiz(10)
+    for i in range(2):
+        gs.add_question(f"Q{i+1}", [
+            {"text": "A", "correct": True},
+            {"text": "B", "correct": False},
+        ])
+    gs.rebalance_bombs()
+    # 10 / 2 questions -> 5 bombs on each correct answer
+    page.wait_for_function('document.getElementById("quiz-total").value === "10"', timeout=5000)
+
+    # Raise the correct answer (Q1/A) to 8 -> total = 8 + 5 = 13
+    gs.set_answer_bombs(0, 0, 8)
+    page.wait_for_function('document.getElementById("quiz-total").value === "13"', timeout=5000)
+
+    # A wrong answer (Q1/B) below the max leaves the total unchanged
+    gs.set_answer_bombs(0, 1, 3)
+    page.wait_for_function('document.getElementById("quiz-total").value === "13"', timeout=5000)
+
+    # Raising the wrong answer above the correct one -> total follows the max (9 + 5 = 14),
+    # and the radio must NOT move to that answer (correctness is independent).
+    gs.set_answer_bombs(0, 1, 9)
+    page.wait_for_function('document.getElementById("quiz-total").value === "14"', timeout=5000)
+    radio0_checked = page.evaluate(
+        '() => document.querySelector(\'input[name="correct-0"]\').checked'
+    )
+    assert radio0_checked is True, "editing bombs must not re-mark the correct answer"
+
+    gs.save_quiz()
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        data = client.get("/api/quiz/questions", params={"gm_token": gm_token}).json()
+    questions = data.get("questions") or []
+    assert questions[0].get("bomb_value") == 9, questions  # max yield
+    a0, a1 = questions[0]["answers"]
+    assert (a0["bomb_value"], a0["is_correct"]) == (8, True), a0
+    assert (a1["bomb_value"], a1["is_correct"]) == (9, False), a1
+    assert questions[1].get("bomb_value") == 5, questions

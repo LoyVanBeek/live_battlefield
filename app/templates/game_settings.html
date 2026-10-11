@@ -167,17 +167,17 @@
                     </div>
                     <div id="quiz-questions-area" style="display:none;margin-top:15px;">
                         <div style="margin-bottom:8px;"><strong>{{ tr.settings.quiz_questions }}</strong></div>
+                        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+                            <button class="btn btn-secondary" onclick="rebalanceBombs()" style="font-size:12px;padding:5px 10px;">Rebalance</button>
+                            <button class="btn btn-primary" onclick="saveQuiz()" style="font-size:12px;padding:5px 10px;">{{ tr.settings.quiz_save }}</button>
+                            <button class="btn btn-primary" onclick="exportQuiz()" style="font-size:12px;padding:5px 10px;">⬇ {{ tr.settings.quiz_export }}</button>
+                            <button class="btn btn-primary" onclick="document.getElementById('quiz-import-input').click()" style="font-size:12px;padding:5px 10px;">⬆ {{ tr.settings.quiz_import }}</button>
+                            <input type="file" id="quiz-import-input" accept=".json" style="display:none" onchange="importQuiz(event)">
+                        </div>
                         <div id="quiz-warning-banner" style="display:none;background:rgba(255,82,82,.12);border:1px solid #ff5252;border-radius:6px;padding:8px 10px;font-size:12px;color:#ff8a80;margin-bottom:10px;"></div>
                         <div id="quiz-questions-list"></div>
                         <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
                             <button class="btn btn-primary" onclick="addQuestion()" style="font-size:12px;padding:5px 10px;">+ {{ tr.settings.quiz_add_q }}</button>
-                            <button class="btn btn-secondary" onclick="rebalanceBombs()" style="font-size:12px;padding:5px 10px;">Rebalance</button>
-                        </div>
-                        <button class="btn btn-primary" onclick="saveQuiz()" style="margin-top:10px;">{{ tr.settings.quiz_save }}</button>
-                        <div style="display:flex;gap:8px;margin-top:8px;">
-                            <button class="btn btn-primary" onclick="exportQuiz()" style="font-size:12px;padding:5px 10px;">⬇ {{ tr.settings.quiz_export }}</button>
-                            <button class="btn btn-primary" onclick="document.getElementById('quiz-import-input').click()" style="font-size:12px;padding:5px 10px;">⬆ {{ tr.settings.quiz_import }}</button>
-                            <input type="file" id="quiz-import-input" accept=".json" style="display:none" onchange="importQuiz(event)">
                         </div>
                     </div>
                 </div>
@@ -281,25 +281,28 @@
         // --- Quiz ---
         let quizQuestions = [];
 
+        // Max bombs a question can yield = the highest bomb value among its answers.
+        function questionMaxYield(q) {
+            if (!q.answers || q.answers.length === 0) return 0;
+            return q.answers.reduce((m, a) => Math.max(m, parseInt(a.bomb_value) || 0), 0);
+        }
+
         function renderQuizQuestions() {
             const list = document.getElementById('quiz-questions-list');
-            const total = parseInt(document.getElementById('quiz-total').value) || 100;
-            const perQ = quizQuestions.length > 0 ? Math.floor(total / quizQuestions.length) : 0;
             list.innerHTML = quizQuestions.map((q, qi) => {
-                const hasCorrect = q.answers && q.answers.some(a => a.is_correct);
                 return `
                 <div style="background:#0f3460;border-radius:6px;padding:12px;margin-bottom:10px;">
                     <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
                         <span style="color:#888;font-size:12px;">Q${qi + 1}</span>
-                        <label style="color:#aaa;font-size:11px;">Bombs <input type="number" min="0" step="1" value="${q.bomb_value || 0}" onchange="quizQuestions[${qi}].bomb_value=parseInt(this.value)||0; syncQuizTotal(); updateQuizWarnings()" style="width:60px;padding:4px;font-size:11px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;"></label>
                         <input type="text" value="${q.question_text.replace(/"/g,'&quot;')}" onchange="quizQuestions[${qi}].question_text=this.value" placeholder="Question text" style="flex:1;padding:6px;font-size:13px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
                         <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="quizQuestions.splice(${qi},1); renderQuizQuestions(); syncQuizTotal()">✕</button>
                     </div>
                     ${q.answers.map((a, ai) => `
                         <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;padding-left:20px;">
-                            <input type="radio" name="correct-${qi}" ${a.is_correct?'checked':''} onchange="quizQuestions[${qi}].answers.forEach((x,i)=>{x.is_correct=i===${ai}})">
+                            <input type="radio" name="correct-${qi}" ${a.is_correct?'checked':''} onchange="quizQuestions[${qi}].answers.forEach((x,i)=>{x.is_correct=i===${ai}}); updateQuizWarnings()">
                             <input type="text" value="${a.answer_text.replace(/"/g,'&quot;')}" onchange="quizQuestions[${qi}].answers[${ai}].answer_text=this.value" placeholder="Answer" style="flex:1;padding:5px;font-size:12px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
-                            <span style="width:70px;text-align:center;font-size:12px;white-space:nowrap;color:#888;">0 💣</span>
+                            <input type="number" id="ans-bombs-${qi}-${ai}" min="0" step="1" value="${parseInt(a.bomb_value)||0}" aria-label="Bombs for answer ${ai + 1} of question ${qi + 1}" onchange="setAnswerBombs(${qi}, ${ai}, parseInt(this.value)||0)" style="width:60px;padding:4px;font-size:11px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
+                            <span style="color:${(parseInt(a.bomb_value)||0) > 0 ? '#4caf50' : '#888'};font-size:12px;font-weight:${(parseInt(a.bomb_value)||0) > 0 ? 'bold' : 'normal'};">💣</span>
                             <button class="btn btn-danger" style="padding:2px 6px;font-size:10px;" onclick="quizQuestions[${qi}].answers.splice(${ai},1);renderQuizQuestions()">✕</button>
                         </div>
                     `).join('')}
@@ -310,46 +313,62 @@
             updateQuizWarnings();
         }
 
+        // Per-answer bomb editing: the value lives on that single answer only.
+        // Correctness is controlled by the radio and never changes from here.
+        function setAnswerBombs(qi, ai, value) {
+            const q = quizQuestions[qi];
+            if (!q || !q.answers || !q.answers[ai]) return;
+            q.answers[ai].bomb_value = value;
+            syncQuizTotal();
+            renderQuizQuestions();
+        }
+
+        // Total bomb budget = sum of what each question can yield (its max answer).
         function syncQuizTotal() {
             const totalInput = document.getElementById('quiz-total');
             if (!totalInput) return;
-            const sum = quizQuestions.reduce((s, q) => s + (parseInt(q.bomb_value) || 0), 0);
+            const sum = quizQuestions.reduce((s, q) => s + questionMaxYield(q), 0);
             totalInput.value = sum;
         }
 
+        // Spread the total bomb budget evenly over the correct answer of every
+        // question; wrong answers always end up with 0.
         function rebalanceBombs() {
             if (quizQuestions.length === 0) return;
             const totalInput = document.getElementById('quiz-total');
             const total = parseInt(totalInput.value) || 0;
-            if (total < 1) {
-                quizQuestions.forEach(q => { q.bomb_value = 1; });
-                syncQuizTotal();
-                renderQuizQuestions();
-                updateQuizWarnings();
-                return;
-            }
+            // Every question needs exactly one correct answer to distribute onto.
+            quizQuestions.forEach(q => {
+                if (!q.answers || q.answers.length === 0) return;
+                if (!q.answers.some(a => a.is_correct)) {
+                    q.answers.reduce((best, a) => (parseInt(a.bomb_value)||0) > (parseInt(best.bomb_value)||0) ? a : best, q.answers[0]).is_correct = true;
+                }
+            });
             const n = quizQuestions.length;
             if (total < n) {
-                quizQuestions.forEach(q => { q.bomb_value = 1; });
+                quizQuestions.forEach(q => {
+                    const correct = q.answers.find(a => a.is_correct);
+                    if (!correct) return;
+                    correct.bomb_value = 1;
+                    q.answers.forEach(a => { if (a !== correct) a.bomb_value = 0; });
+                });
                 syncQuizTotal();
                 renderQuizQuestions();
-                updateQuizWarnings();
                 return;
             }
             const base = Math.floor(total / n);
             const rem = total % n;
             quizQuestions.forEach((q, qi) => {
-                q.bomb_value = base + (qi < rem ? 1 : 0);
+                const correct = q.answers.find(a => a.is_correct);
+                if (!correct) return;
+                correct.bomb_value = base + (qi < rem ? 1 : 0);
+                q.answers.forEach(a => { if (a !== correct) a.bomb_value = 0; });
             });
             syncQuizTotal();
             renderQuizQuestions();
-            updateQuizWarnings();
         }
 
         function addQuestion() {
-            const totalInput = document.getElementById('quiz-total');
-            const total = parseInt(totalInput.value) || 100;
-            const n = quizQuestions.length;
             quizQuestions.push({ question_text: '', bomb_value: 1, answers: [{ answer_text: '', bomb_value: 0, is_correct: true }] });
             rebalanceBombs();
         }
@@ -388,9 +407,8 @@
             updateQuizWarnings();
         });
 
-        // Flag questions/answers that would leave players unable to earn bombs:
-        // total bombs lower than the number of questions (each correct answer
-        // would be worth Math.floor(total/N) = 0), or a question with no answers.
+        // Flag questions that would leave players unable to earn bombs:
+        // a question with no answers, or one where no answer is worth ≥1 bomb.
         function updateQuizWarnings() {
             const banner = document.getElementById('quiz-warning-banner');
             const list = document.getElementById('quiz-questions-list');
@@ -399,10 +417,8 @@
             quizQuestions.forEach((q, qi) => {
                 if (!q.answers || q.answers.length === 0) {
                     problems.push(`Question ${qi + 1} has no answers.`);
-                }
-                const bv = q.bomb_value;
-                if (bv == null || isNaN(bv) || bv < 1 || !Number.isInteger(bv)) {
-                    problems.push(`Question ${qi + 1} has ${bv || 0} bombs (must be at least 1).`);
+                } else if (questionMaxYield(q) < 1) {
+                    problems.push(`Question ${qi + 1} has no answer worth at least 1 bomb.`);
                 }
             });
 
@@ -416,25 +432,23 @@
             const cards = list.querySelectorAll(':scope > div');
             cards.forEach((card, qi) => {
                 const q = quizQuestions[qi];
-                const bv = q.bomb_value;
-                const badQbv = bv == null || isNaN(bv) || bv < 1 || !Number.isInteger(bv);
-                const broken = badQbv || !q.answers || q.answers.length === 0;
+                const broken = !q.answers || q.answers.length === 0 || questionMaxYield(q) < 1;
                 card.style.outline = broken ? '2px solid #ff5252' : '';
             });
         }
 
         async function saveQuiz() {
             const enabled = document.getElementById('quiz-enabled').checked;
-            const total = parseInt(document.getElementById('quiz-total').value) || 100;
+            const total = parseInt(document.getElementById('quiz-total').value) || 0;
 
             if (enabled && quizQuestions.length > 0) {
+                // Each question must have an answer worth at least 1 bomb.
                 const badIdx = quizQuestions.findIndex(q => {
-                    const bv = q.bomb_value;
-                    return !q.answers || q.answers.length === 0 || bv == null || isNaN(bv) || bv < 1 || !Number.isInteger(bv);
+                    return !q.answers || q.answers.length === 0 || questionMaxYield(q) < 1;
                 });
                 if (badIdx !== -1) {
                     updateQuizWarnings();
-                    showToast(`Question ${badIdx + 1} has invalid bomb count or no answers.`, 'error');
+                    showToast(`Question ${badIdx + 1} has no answer worth at least 1 bomb.`, 'error');
                     return;
                 }
             }
@@ -446,19 +460,8 @@
             }
 
             if (enabled && quizQuestions.length > 0) {
-                // Auto-distribute bombs
-                quizQuestions.forEach(q => {
-                    const qv = parseInt(q.bomb_value) || 0;
-                    const correct = q.answers.find(a => a.is_correct);
-                    q.answers.forEach(a => {
-                        if (a.is_correct || !correct) {
-                            a.bomb_value = qv;
-                        } else {
-                            a.bomb_value = 0;
-                        }
-                    });
-                });
-
+                // Per-answer bomb values are saved exactly as defined (import keeps
+                // its JSON values); nothing is redistributed here.
                 result = await apiCall('/api/quiz/questions', 'POST', { questions: quizQuestions });
                 if (result && result.success) {
                     quizQuestions = result.questions || quizQuestions;
@@ -489,17 +492,40 @@
                 try {
                     const imported = JSON.parse(e.target.result);
                     if (!Array.isArray(imported)) throw new Error('Not an array');
-                    imported.forEach((q, i) => {
+                    let fixed = 0;
+                    const normalized = imported.map((q, i) => {
                         if (!q.question_text || !Array.isArray(q.answers)) throw new Error('Invalid question at index ' + i);
+                        if (q.answers.length === 0) throw new Error('Question at index ' + i + ' has no answers.');
                         q.answers.forEach(a => {
                             if (!a.answer_text) throw new Error('Invalid answer in question ' + i);
+                            a.bomb_value = parseInt(a.bomb_value) || 0;
                         });
+                        // Exactly one correct answer: keep an explicit one, else the
+                        // highest-yield answer, else the first.
+                        if (!q.answers.some(a => a.is_correct)) {
+                            let yielding = null;
+                            for (const a of q.answers) {
+                                if (a.bomb_value > (yielding ? yielding.bomb_value : 0)) yielding = a;
+                            }
+                            (yielding || q.answers[0]).is_correct = true;
+                        }
+                        // Every question must be able to yield at least 1 bomb.
+                        // Auto-fix rather than block (explicit user choice).
+                        if (questionMaxYield(q) < 1) {
+                            const correct = q.answers.find(a => a.is_correct) || q.answers[0];
+                            correct.bomb_value = 1;
+                            fixed++;
+                        }
+                        q.bomb_value = questionMaxYield(q);
+                        return q;
                     });
-                    quizQuestions = imported;
+                    quizQuestions = normalized;
                     renderQuizQuestions();
                     syncQuizTotal();
                     updateQuizWarnings();
-                    showToast('Imported ' + quizQuestions.length + ' question(s)!', 'success');
+                    let msg = 'Imported ' + quizQuestions.length + ' question(s)!';
+                    if (fixed > 0) msg += ' (' + fixed + ' had no bomb-yielding answer, set to 1).';
+                    showToast(msg, 'success');
                 } catch (err) {
                     showToast('Import failed: ' + err.message, 'error');
                 }

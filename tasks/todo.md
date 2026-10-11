@@ -318,3 +318,45 @@
   so every test reports PASS + teardown ERROR, exit 1. That is why CI marks the e2e job
   `continue-on-error`. Wiped `test-results/` locally and verified the same pattern under
   the default (battleship) user; root run → spotless 54/54. Not fixing here.
+
+---
+
+# Quiz import uses JSON bomb values; total = sum of question maxes; rebalance over correct answers
+
+## Frontend (`app/templates/game_settings.html`)
+- [x] Import honors per-answer `bomb_value` from the JSON as-is (wrong answers keep their
+      values — explicit user choice); auto-fixes any question whose max yield < 1 to 1 on the
+      correct answer (user chose auto-fix over block); normalizes to exactly one `is_correct`
+      per question.
+- [x] Total bomb budget = sum of *each question's max yield* (`questionMaxYield(q)` = highest
+      answer bomb value) via `syncQuizTotal()`; the `#quiz-total` input stays editable but is
+      re-synced after every change/import/rebalance/save.
+- [x] Per-answer rows now show the real stored bomb value (`N 💣`, green when > 0) instead of
+      the hardcoded `0 💣`; the per-question "Bombs" field writes to the correct answer.
+- [x] Per-answer bombs are **editable** (inline number input per answer, `#ans-bombs-{qi}-{ai}`);
+      the per-question "Bombs" field was removed. Editing one answer re-syncs the total (max
+      yield per question); correctness is radio-only and never changed by bomb edits.
+- [x] Rebalance distributes the budget over the correct answer of every question (wrong
+      answers → 0, each correct ≥ 1 even when budget < #questions).
+- [x] `saveQuiz()` no longer flattens answer bombs to the per-question value — imported values
+      survive a save round-trip; validation (a question must have an answer worth ≥ 1) is now
+      derived from answers.
+- [x] Management buttons (Rebalance / Save / Export / Import) moved above the questions list;
+      "Add Question" stays below the list.
+
+## Backend (`app/models.py`)
+- [x] `get_quiz_questions()`: a question's `bomb_value` = max over its answers (was: prefer
+      correct-with-bombs, else first bomb-yielding), so the editor's derived total matches the
+      API. Route validation on `POST /api/quiz/questions` unchanged (still the save-time backstop).
+
+## Tests / verification
+- [x] New E2E `test_quiz_import_uses_json_bomb_values`: imports JSON with 7/2, 3/0, 0 bombs →
+      total becomes 11 (7+3+1), wrong answer keeps its 2, zero-yield question auto-fixed to 1;
+      asserts Rebalance/Save/Export/Import render above the question list and Add Question below.
+- [x] New E2E `test_quiz_edit_answer_bombs`: edits per-answer values (8 on correct, then 3 and 9
+      on a wrong answer) → total tracks each question's max (13 → 14), the radio never moves,
+      and saved answers keep `(8, correct)` / `(9, wrong)` with question max 9.
+- [x] `uv run ty check` repo-wide clean; `uv run pytest tests/` **227 passed**;
+      `uvx pip-audit` (uv export, no-dev) exit 0.
+- [x] Full E2E as root (avoids the video-teardown permission noise): **56/56 passed**
+      (55 + 1 new); quiz file 5/5.

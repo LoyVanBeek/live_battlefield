@@ -354,16 +354,9 @@ async def get_quiz_questions(db: AsyncSession, game_id: uuid.UUID) -> list:
             select(QuizAnswer).where(QuizAnswer.question_id == q.id).order_by(QuizAnswer.id)
         )
         answers_list = [a for a in answers.scalars().all()]
-        q_bomb = 0
-        for a in answers_list:
-            if a.is_correct and a.bomb_value > 0:
-                q_bomb = a.bomb_value
-                break
-        if q_bomb == 0:
-            for a in answers_list:
-                if a.bomb_value > 0:
-                    q_bomb = a.bomb_value
-                    break
+        # A question's bomb_value is the most it can yield = the highest value
+        # among its answers (import may put bombs on any answer).
+        q_bomb = max((a.bomb_value for a in answers_list), default=0)
         result.append({
             "id": q.id,
             "question_text": q.question_text,

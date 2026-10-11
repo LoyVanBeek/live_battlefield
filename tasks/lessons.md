@@ -137,3 +137,13 @@
   works; chown doesn't). To see a REAL clean signal locally run
   `docker compose ... run --rm --user root test-e2e` → spotless 54/54.
 - Don't "fix" by editing the compose for a private run; document instead.
+
+## The e2e runner image is baked from source — new test files need a rebuild
+- `test-e2e` mounts nothing from the repo (`Dockerfile.e2e`, context `.`); only
+  `./test-results` is bind-mounted. Adding a test file then running
+  `docker compose ... run --rm test-e2e` silently runs a *stale* suite
+  ("collected 3 items" when the file has 4 tests). Same for `test-app`: template/JS
+  changes require `up -d --build test-app`.
+- Fix: after touching tests_e2e/ → `docker compose -f docker-compose.e2e.yml build test-e2e`;
+  after touching app/ → `... up -d --build test-app`. Verify by checking the collected count
+  matches the test file before trusting a pass/fail.

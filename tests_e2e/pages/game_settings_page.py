@@ -64,6 +64,22 @@ class GameSettingsPage:
         self.page.get_by_role("button", name="Rebalance").click()
         self.page.wait_for_timeout(200)
 
+    def set_answer_bombs(self, qi: int, ai: int, value: int):
+        """Edit the bomb value of answer ai of question qi."""
+        locator = self.page.locator(f"#ans-bombs-{qi}-{ai}")
+        locator.fill(str(value))
+        # Numeric inputs fire `change` on blur/Enter; the handler re-renders the list.
+        locator.press("Enter")
+        self.page.wait_for_timeout(200)
+
+    def import_quiz(self, file_path: str):
+        """Import a quiz JSON file like a human via the file input."""
+        self.page.locator("#quiz-import-input").set_input_files(file_path)
+        self.page.wait_for_timeout(500)
+
+    def question_blocks(self):
+        return self.page.locator("#quiz-questions-list > div")
+
     def save_quiz(self):
         self.save_quiz_button().click()
         self.page.wait_for_timeout(1000)
