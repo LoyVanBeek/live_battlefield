@@ -174,6 +174,31 @@
             padding: 10px;
             border-radius: 8px;
         }
+        .team-card.destroyed {
+            opacity: 0.5;
+            filter: grayscale(0.8);
+        }
+        .team-card.destroyed .team-name-text {
+            text-decoration: line-through;
+        }
+        .destroyed-badge {
+            margin-left: 8px;
+            background: #f44336;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: normal;
+        }
+        .ready-badge {
+            margin-left: 8px;
+            background: #4caf50;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: normal;
+        }
         .team-card-header {
             display: flex;
             align-items: center;
@@ -917,11 +942,13 @@
                     let card = document.getElementById(cardId);
                     
                     const aiIndicator = team.is_ai ? '<span class="ai-badge">🤖 AI</span>' : '';
+                    const destroyedIndicator = team.is_destroyed ? '<span class="destroyed-badge">💀 Eliminated</span>' : '';
+                    const readyIndicator = (gameStatus === 'waiting' && team.has_all_ships && !team.is_destroyed) ? '<span class="ready-badge">✓ Ready</span>' : '';
                     
                     if (!card) {
                         // Create new card
                         card = document.createElement('div');
-                        card.className = 'team-card';
+                        card.className = 'team-card' + (team.is_destroyed ? ' destroyed' : '');
                         card.id = cardId;
                         const canRename = gameStatus === 'waiting' && !team.is_ai;
                         card.innerHTML = `
@@ -930,7 +957,9 @@
                                     <span class="team-color-dot" style="background: ${team.color}"></span>
                                     <span class="team-name-text" id="team-name-label-${team.color}" style="${canRename ? 'cursor:pointer;border-bottom:1px dashed #888;' : ''}">${esc(team.name)}</span>
                                     <span class="trophy-icon" id="trophy-${team.color}" style="display:none">🏆</span>
+                                    ${readyIndicator}
                                     ${aiIndicator}
+                                    ${destroyedIndicator}
                                 </span>
                                 ${gameStatus === 'waiting' ? `<span style="margin-left:auto;cursor:pointer;width:20px;height:20px;border-radius:50%;background:#f44336;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;" onclick="event.stopPropagation();removeTeam('${team.color}')" title="Remove team">✕</span>` : ''}
                                 <div class="rename-input-area" id="rename-input-${team.color}" style="display:none; margin-top:6px;">
@@ -1012,6 +1041,40 @@
                             } else {
                                 aiButtonsContainer.innerHTML = '';
                             }
+                        }
+
+                        // Update destroyed state
+                        if (team.is_destroyed) {
+                            card.classList.add('destroyed');
+                        } else {
+                            card.classList.remove('destroyed');
+                        }
+                        const teamNameSpan = card.querySelector('.team-name');
+                        let destroyedBadge = card.querySelector('.destroyed-badge');
+                        if (team.is_destroyed && !destroyedBadge) {
+                            const badge = document.createElement('span');
+                            badge.className = 'destroyed-badge';
+                            badge.textContent = '💀 Eliminated';
+                            teamNameSpan.appendChild(badge);
+                        } else if (!team.is_destroyed && destroyedBadge) {
+                            destroyedBadge.remove();
+                        }
+
+                        // Update ready badge
+                        let readyBadge = card.querySelector('.ready-badge');
+                        const shouldShowReady = gameStatus === 'waiting' && team.has_all_ships && !team.is_destroyed;
+                        if (shouldShowReady && !readyBadge) {
+                            const badge = document.createElement('span');
+                            badge.className = 'ready-badge';
+                            badge.textContent = '✓ Ready';
+                            const trophyEl = card.querySelector('.trophy-icon');
+                            if (trophyEl) {
+                                trophyEl.insertAdjacentElement('afterend', badge);
+                            } else {
+                                teamNameSpan.appendChild(badge);
+                            }
+                        } else if (!shouldShowReady && readyBadge) {
+                            readyBadge.remove();
                         }
 
                         // Trophy icon on winning team
