@@ -1085,6 +1085,78 @@ class TestQuizMode:
         finally:
             app.dependency_overrides.clear()
 
+    def test_set_auto_start_on_ready_toggles_flag(self):
+        from app.api.routes import app, verify_gm_token
+        from app.game.state import GameState, GameStatusField
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            mock_game = MagicMock()
+            state = GameState()
+            state.status = GameStatusField.PREPARING
+
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", return_value=[]):
+                    with patch("app.models.get_game_locations", return_value=[]):
+                        with patch("app.models.get_game", return_value=mock_game) as mock_get:
+                            with patch("app.api.routes.save_event"):
+                                with patch("app.models.update_game_status"):
+                                    client = TestClient(app)
+                                    response = client.post(
+                                        "/api/quick/set-auto-start-on-ready",
+                                        json={"enabled": True},
+                                    )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert mock_game.auto_start_on_ready is True
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_auto_start_when_all_ships_placed(self):
+        """With auto-start enabled and all preconditions met (2+ teams, all
+        ships placed, bomb source present), enabling the flag starts the game."""
+        from app.api.routes import app, verify_gm_token
+        from app.game.state import GameState, GameStatusField
+        from app.game.ships import SHIP_COUNTS
+
+        app.dependency_overrides[verify_gm_token] = lambda: "00000000-0000-0000-0000-000000000000"
+        try:
+            state = GameState()
+            state.status = GameStatusField.PREPARING
+            state.teams["red"] = create_mock_team(name="Red", color="red")
+            state.teams["blue"] = create_mock_team(name="Blue", color="blue")
+            for team in state.teams.values():
+                for ship_type, count in SHIP_COUNTS.items():
+                    team.placed_ship_types[ship_type] = count
+
+            mock_game = MagicMock()
+            mock_game.auto_start_on_ready = False
+            mock_game.quiz_enabled = True
+            mock_game.trickle_enabled = False
+
+            with patch("app.api.routes.GameState.from_events", return_value=state):
+                with patch("app.models.get_game_events", return_value=[]):
+                    with patch("app.models.get_game_locations", return_value=[{"number": 1, "code": "ABC"}]):
+                        with patch("app.models.get_game", return_value=mock_game):
+                            with patch("app.api.routes.save_event") as mock_save_event:
+                                with patch("app.models.update_game_status") as mock_update_status:
+                                    client = TestClient(app)
+                                    response = client.post(
+                                        "/api/quick/set-auto-start-on-ready",
+                                        json={"enabled": True},
+                                    )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert "Game started" in data["message"]
+            mock_save_event.assert_called_once()
+            mock_update_status.assert_called_once()
+        finally:
+            app.dependency_overrides.clear()
+
     def test_quiz_command_awards_bombs(self):
         import uuid
         from app.api.routes import app, verify_team_or_gm

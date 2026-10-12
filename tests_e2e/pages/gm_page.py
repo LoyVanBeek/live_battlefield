@@ -16,6 +16,15 @@ class GameMasterPage:
     def team_card(self, color: str):
         return self.page.locator(f"#team-card-{color}")
 
+    def ready_badge(self, color: str):
+        return self.team_card(color).locator(".ready-badge")
+
+    def destroyed_badge(self, color: str):
+        return self.team_card(color).locator(".destroyed-badge")
+
+    def auto_start_toggle(self):
+        return self.page.locator("#auto-start-on-ready")
+
     def team_card_name(self, color: str):
         return self.team_card(color).locator(".team-name-text")
 

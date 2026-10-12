@@ -374,6 +374,10 @@
                 <span class="locations" id="location-progress">0 {{ tr.gm.locations }}</span>
             </div>
             <div class="buttons">
+                <label style="color:#aaa;font-size:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer;">
+                    <input type="checkbox" id="auto-start-on-ready" onchange="setAutoStartOnReady(this.checked)">
+                    🚀 Auto-start
+                </label>
                 <button class="btn btn-success" id="btn-start" onclick="startGame()">{{ tr.gm.start_game }}</button>
                 <button class="btn btn-danger" id="btn-end" onclick="endGame()">{{ tr.gm.end_game }}</button>
                 <select id="pause-duration" style="padding:8px;font-size:13px;border-radius:5px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
@@ -820,6 +824,12 @@
             const autoBtn = document.getElementById('btn-auto-place-all');
             if (autoBtn) {
                 autoBtn.style.display = gameStatus === 'waiting' ? '' : 'none';
+            }
+            // Auto-start toggle
+            const autoStartCheck = document.getElementById('auto-start-on-ready');
+            if (autoStartCheck) {
+                autoStartCheck.checked = !!status.auto_start_on_ready;
+                autoStartCheck.disabled = gameStatus !== 'waiting';
             }
         }
 
@@ -1318,6 +1328,15 @@
             loadGameStatus();
             loadPublicBoards();
             loadTeams();
+        }
+
+        async function setAutoStartOnReady(enabled) {
+            const result = await apiCall('/api/quick/set-auto-start-on-ready', 'POST', {enabled: !!enabled});
+            if (result) {
+                showToast(result.message, result.success ? 'success' : 'error');
+                loadGameStatus();
+                loadTeams();
+            }
         }
 
         async function endGame() {

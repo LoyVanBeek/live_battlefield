@@ -104,3 +104,111 @@ def test_start_button_disabled_without_preconditions(page, app_url, seeded_game)
 
     gm.join_team("red", "Lone Team")
     assert gm.start_button().is_disabled()
+
+
+def test_ready_badge_shown_when_all_ships_placed(page, app_url, seeded_game_with_teams):
+    """Teams that placed all ships get a ✓ Ready badge while preparing."""
+    seed = seeded_game_with_teams
+    gm = GameMasterPage(page, seed["gm_token"], app_url)
+    gm.goto()
+
+    for color in ["red", "blue"]:
+        badge = gm.ready_badge(color)
+        badge.wait_for(state="visible", timeout=5000)
+        assert "Ready" in badge.text_content()
+
+
+def test_ready_badge_absent_before_ships_placed(page, app_url, seeded_game):
+    """A fresh team with no ships placed has no ready badge."""
+    gm = GameMasterPage(page, seeded_game["gm_token"], app_url)
+    gm.goto()
+    gm.join_team("red", "Red Team")
+
+    assert gm.ready_badge("red").count() == 0
+
+
+def test_auto_start_on_ready_starts_game(page, app_url, seeded_game_with_teams):
+    """Enabling auto-start on a ready game starts it immediately."""
+    seed = seeded_game_with_teams
+    gm = GameMasterPage(page, seed["gm_token"], app_url)
+    gm.goto()
+
+    toggle = gm.auto_start_toggle()
+    toggle.wait_for(state="visible")
+    toggle.check()
+    page.wait_for_timeout(1500)
+
+    status = gm.get_game_status()
+    assert "STARTED" in status
+
+
+def test_auto_start_waiting_when_ships_missing(page, app_url, seeded_game):
+    """Enabling auto-start before all ships are placed keeps the game waiting."""
+    gm = GameMasterPage(page, seeded_game["gm_token"], app_url)
+    gm.goto()
+    gm.join_team("red", "Red Team")
+    gm.join_team("blue", "Blue Team")
+
+    toggle = gm.auto_start_toggle()
+    toggle.check()
+    page.wait_for_timeout(1000)
+
+    status = gm.get_game_status()
+    assert "WAITING" in status
+
+
+def test_eliminated_badge_on_destroyed_team(page, app_url, seeded_game_with_teams):
+    """Sinking all of a team's ships shows the 💀 Eliminated badge on its card."""
+    import httpx
+
+    from tests_e2e.config import HTTPX_TIMEOUT
+
+    seed = seeded_game_with_teams
+    gm = GameMasterPage(page, seed["gm_token"], app_url)
+    gm.goto()
+
+    # Start the game so bombing is allowed.
+    gm.start_game()
+
+    # Sink every blue-team ship by bombing each cell of its private board that
+    # holds a ship.
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        resp = client.get(
+            "/api/board/blue/private.json",
+            params={"gm_token": seed["gm_token"]},
+        )
+        grid = resp.json()["grid"]
+        ship_cells = [
+            (ri, ci)
+            for ri in range(10)
+            for ci in range(10)
+            if grid[ri][ci].get("has_ship")
+        ]
+        # Give red enough bombs to sink everything, then sweep the ship cells.
+        resp = client.get(
+            "/api/state",
+            params={"gm_token": seed["gm_token"]},
+        )
+        red_team = next(t for t in resp.json()["teams"] if t["color"] == "red")
+        if red_team["bombs"] < len(ship_cells):
+            client.post(
+                "/api/quick/add_bombs",
+                params={"gm_token": seed["gm_token"]},
+                json={"team_color": "red", "count": len(ship_cells) + 5},
+            )
+        for ri, ci in ship_cells:
+            coord = f"{chr(ci + 65)}{ri + 1}"
+            resp = client.post(
+                "/api/execute",
+                params={"team_token": red_team["token"]},
+                json={
+                    "team_color": "red",
+                    "command": "bomb",
+                    "args": {"target": "blue", "coordinate": coord},
+                },
+            )
+
+    # The GM page reflects the destroyed state on the blue team card.
+    badge = gm.destroyed_badge("blue")
+    badge.wait_for(state="visible", timeout=5000)
+    assert "Eliminated" in badge.text_content()
