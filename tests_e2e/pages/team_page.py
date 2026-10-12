@@ -88,6 +88,22 @@ class TeamPage:
         buttons.nth(answer_index).click()
         self.page.wait_for_timeout(500)
 
+    def quiz_verdict(self):
+        return self.page.locator("#quiz-verdict")
+
+    def quiz_correct_answer(self):
+        return self.page.locator("#quiz-correct-answer")
+
+    def quiz_source_link(self):
+        return self.page.locator("#quiz-source-link")
+
+    def quiz_next_button(self):
+        return self.page.locator("#quiz-next")
+
+    def next_quiz_question(self):
+        self.quiz_next_button().click()
+        self.page.wait_for_timeout(500)
+
     def is_quiz_done(self):
         return self.quiz_content().text_content().lower().includes("answered")
 

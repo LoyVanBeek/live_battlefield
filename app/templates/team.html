@@ -994,9 +994,28 @@
             document.getElementById('modal').classList.remove('active');
         }
 
+        // The actions panel's markup depends only on these values. When they do
+        // not change we must leave the DOM alone — rebuilding it on every state
+        // push is what made the quiz section flicker (and wiped typed bomb/code
+        // input and the chosen target team).
+        var actionsShape = null;
+
         function renderActions() {
             var actionsEl = document.getElementById('actions');
             var shipActionsEl = document.getElementById('ship-actions');
+
+            var shape = gameStatus + '|' + quizEnabled + '|' + !!(pausedUntil && pausedUntil > new Date());
+            if (shape === actionsShape) {
+                // Same panel: refresh only the parts that read live state.
+                if (gameStatus === 'preparing') {
+                    renderShipInventory();
+                } else if (gameStatus === 'started') {
+                    if (lastTeamsData) renderTargetTeams(lastTeamsData);
+                    updateQuizSection();
+                }
+                return;
+            }
+            actionsShape = shape;
 
             if (gameStatus === 'ended') {
                 actionsEl.innerHTML = '<p>' + _('action.game_ended') + '</p>';
@@ -1076,18 +1095,28 @@
             }
         }
 
+        // Signature of the opponents currently rendered into #target-team: rebuilding
+        // the <select> on every state push reset the player's chosen target.
+        var targetTeamsSignature = null;
+
         function renderTargetTeams(allTeams) {
             var select = document.getElementById('target-team');
             if (!select) return;
+
+            var opponents = (allTeams || []).filter(function (team) { return team.c !== TEAM_COLOR; });
+            var signature = opponents.map(function (team) { return team.c + ':' + team.n; }).join('|');
+            if (signature === targetTeamsSignature) return;
+            targetTeamsSignature = signature;
+
+            var previous = select.value;
             select.innerHTML = '<option value="">' + _('action.bomb.select_target') + '</option>';
-            allTeams.forEach(function (team) {
-                if (team.c !== TEAM_COLOR) {
-                    var opt = document.createElement('option');
-                    opt.value = team.c;
-                    opt.textContent = _('action.bomb.team_option', {name: team.n, color: team.c});
-                    select.appendChild(opt);
-                }
+            opponents.forEach(function (team) {
+                var opt = document.createElement('option');
+                opt.value = team.c;
+                opt.textContent = _('action.bomb.team_option', {name: team.n, color: team.c});
+                select.appendChild(opt);
             });
+            if (previous) select.value = previous;
         }
 
         async function placeAllShips() {
@@ -1402,34 +1431,107 @@ async function clearAllShips() {
             return quizQuestionsCache || [];
         }
 
+        // Signature of what #quiz-content currently shows. State pushes that don't
+        // change the quiz must not touch the DOM at all — that innerHTML churn was
+        // the "loading" flash on the quiz section.
+        let quizContentSignature = null;
+
+        // Set right after a team answers, so the next render shows the answer
+        // result (correct answer + source link) instead of skipping ahead.
+        let quizPendingResult = null;
+
+        function renderQuizResult(q, success, sourceUrl) {
+            const correct = (q.answers || []).find(a => a.is_correct);
+            // Prefer the source revealed in the answer response; fall back to the
+            // (server-side stripped) cached question, e.g. for stale pages.
+            const src = (sourceUrl || q.source_url || '').trim();
+            let html = '<p id="quiz-verdict" style="font-weight:bold;font-size:15px;color:' +
+                (success ? '#4caf50' : '#ff5252') + ';">' +
+                (success ? _('action_quiz.verdict_correct') : _('action_quiz.verdict_wrong')) + '</p>';
+            if (correct) {
+                html += '<p id="quiz-correct-answer" style="margin:6px 0;">' +
+                    _('action_quiz.correct_answer', { answer: esc(correct.answer_text) }) + '</p>';
+            }
+            if (src && /^https?:\/\//i.test(src)) {
+                html += '<p id="quiz-source" style="margin:6px 0;word-break:break-all;">' +
+                    esc(_('action_quiz.source_label')) + ': <a id="quiz-source-link" href="' + esc(src) +
+                    '" target="_blank" rel="noopener noreferrer">' + esc(src) + '</a></p>';
+            }
+            html += '<button class="btn btn-primary" id="quiz-next" style="padding:8px 12px;" onclick="nextQuizQuestion()">' +
+                _('action_quiz.next') + '</button>';
+            return html;
+        }
+
+        function nextQuizQuestion() {
+            quizPendingResult = null;
+            updateQuizSection();
+        }
+
         async function updateQuizSection() {
             const content = document.getElementById('quiz-content');
             if (!content) return;
-            if (!quizEnabled || gameStatus !== 'started') { content.innerHTML = ''; return; }
+            if (!quizEnabled || gameStatus !== 'started') {
+                if (content.textContent) content.innerHTML = '';
+                quizContentSignature = null;
+                quizPendingResult = null;
+                return;
+            }
 
             await loadQuizQuestions();
             const questions = quizQuestionsCache || [];
+
+            // A just-answered question gets a result view (correct answer, source
+            // link, "Next") until the team moves on. The source comes from the
+            // answer response, not this refetch, so a stale snapshot can't hide it.
+            if (quizPendingResult) {
+                const rq = questions.find(q => q.id === quizPendingResult.questionId);
+                if (rq) {
+                    const src = quizPendingResult.sourceUrl || rq.source_url || '';
+                    const resultSignature = 'result|' + rq.id + '|' +
+                        (quizPendingResult.success ? 'ok' : 'no') + '|' + src;
+                    if (resultSignature === quizContentSignature) return;
+                    quizContentSignature = resultSignature;
+                    content.innerHTML = renderQuizResult(rq, quizPendingResult.success, src);
+                    return;
+                }
+                quizPendingResult = null;
+            }
+
+            let signature;
+            let html = null;
+
             if (questions.length === 0) {
+                signature = 'loading';
+            } else {
+                const unanswered = questions.filter(q => !q.answered);
+                if (unanswered.length === 0) {
+                    signature = 'done';
+                    html = '<p style="color:#4caf50;">✓ ' + _('action_quiz.done') + '</p>';
+                } else {
+                    const q = unanswered[0];
+                    signature = 'q' + q.id + '|' + q.question_text + '|' +
+                        q.answers.map(a => a.id + ':' + a.answer_text).join(',');
+                    html =
+                        '<p style="margin-bottom:8px;font-weight:bold;">' + esc(q.question_text) + '</p>' +
+                        '<div style="display:flex;flex-direction:column;gap:6px;">' +
+                        q.answers.map(a =>
+                            '<button class="btn btn-primary" style="text-align:left;padding:8px 12px;" onclick="answerQuiz(' + String(q.id) + ',' + String(a.id) + ')">' +
+                                esc(a.answer_text) +
+                            '</button>'
+                        ).join('') +
+                        '</div>';
+                }
+            }
+
+            if (signature === quizContentSignature) return;
+            quizContentSignature = signature;
+
+            if (html !== null) {
+                content.innerHTML = html;
+            } else if (!content.firstChild) {
+                // Only show the placeholder when there is nothing on screen yet.
                 content.innerHTML = '<p style="color:#888;">' + _('action_quiz.loading') + '</p>';
-                return;
             }
-            const unanswered = questions.filter(q => !q.answered);
-
-            if (unanswered.length === 0) {
-                content.innerHTML = '<p style="color:#4caf50;">✓ ' + _('action_quiz.done') + '</p>';
-                return;
-            }
-
-            const q = unanswered[0];
-            content.innerHTML =
-                '<p style="margin-bottom:8px;font-weight:bold;">' + esc(q.question_text) + '</p>' +
-                '<div style="display:flex;flex-direction:column;gap:6px;">' +
-                q.answers.map(a =>
-                    '<button class="btn btn-primary" style="text-align:left;padding:8px 12px;" onclick="answerQuiz(' + String(q.id) + ',' + String(a.id) + ')">' +
-                        esc(a.answer_text) +
-                    '</button>'
-                ).join('') +
-                '</div>';
         }
 
         async function answerQuiz(questionId, answerId) {
@@ -1438,7 +1540,13 @@ async function clearAllShips() {
                 command: 'quiz',
                 args: { question_id: questionId, answer_id: answerId }
             });
-            showToast(result.message, result.success ? 'success' : 'error');
+            showToast((result && result.message) || '...', result && result.success ? 'success' : 'error');
+            quizPendingResult = {
+                questionId: questionId,
+                answerId: answerId,
+                success: !!(result && result.success),
+                sourceUrl: (result && result.source_url) || null
+            };
             updateQuizSection();
         }
 

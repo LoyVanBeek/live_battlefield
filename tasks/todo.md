@@ -1,3 +1,67 @@
+# Reusable quiz library (save quizzes ahead of time)
+
+## Backend
+- [x] Migration `011_add_quiz_templates.py` — `quiz_templates`, `quiz_template_questions`,
+      `quiz_template_answers` (relational, mirrors the game quiz tables)
+- [x] `app/database.py`: `QuizTemplate`, `QuizTemplateQuestion`, `QuizTemplateAnswer`
+- [x] `app/models.py`: `list_quiz_templates`, `get_quiz_template`, `save_quiz_template`
+      (upsert/overwrite by name, edit/rename), `delete_quiz_template`
+- [x] `app/api/routes.py`: extract `_quiz_validation_error()` and reuse it in
+      `POST /api/quiz/questions`; add `GET /api/quiz-templates`,
+      `GET /api/quiz-templates/{id}` (admin-or-gm), `POST /api/quiz-templates`
+      (admin-or-gm), `DELETE /api/quiz-templates/{id}` (admin only)
+
+## Shared editor
+- [x] Extract the quiz question editor into `app/static/js/quiz_editor.js`
+      (`createQuizEditor`), owned by both pages; persistence stays page-level
+- [x] `game_settings.html` uses the module (game-mode behavior unchanged)
+
+## Frontend
+- [x] `game_settings.html`: library dropdown + Load, and "Save as…" (create/overwrite)
+- [x] `admin_dashboard.html`: Quiz Library section — list + New/Edit/Delete + full editor
+      (name, Rebalance, Save, Export/Import JSON, Add Question)
+- [x] Translation keys `quiz_library`, `quiz_library_load`, `quiz_library_save_as` (en + nl)
+
+## Tests / verification
+- [x] Unit tests `TestQuizTemplates` (list/create/delete, name required, validation reuse)
+- [x] E2E `test_quiz_library.py`: admin author → list → edit/overwrite → delete;
+      game-settings Load + Save-as; load the same quiz into a second game
+- [x] POMs: `AdminDashboardPage` quiz-library helpers, `GameSettingsPage` load/save-as
+- [x] `uv run ty check`, `uv run pytest tests/` (235 passed), `uvx pip-audit`
+- [x] Rebuild `test-app` + `test-e2e`; library/quiz E2E as root; full suite as root (59 passed)
+
+## Review
+- **Storage**: three relational tables (`quiz_templates` / `quiz_template_questions` /
+  `quiz_template_answers`), not a JSON blob. A saved quiz holds questions + per-answer bomb
+  values + the correct flag only — no total budget, no enabled flag. `/api/quiz-templates`
+  list returns `question_count` and `total_bombs` (Σ per-question max answer), computed on read.
+- **Identity = name**: `save_quiz_template` overwrites any existing template with the same
+  name; passing `id` updates in place (enables rename). Both paths bulk-delete the old
+  rows before inserting the new set.
+- **Loading copies**: the game settings `Load` reads the template and copies its questions
+  into the game via the existing save flow, so later library edits never mutate live games.
+- **Shared editor**: `createQuizEditor` owns question/answer state, rendering, per-answer
+  bombs, warnings, rebalance, and JSON import/export. Persistence, the enabled flag, and the
+  template name stay in each host page. Every existing game-settings selector
+  (`#quiz-questions-list > div`, `#ans-bombs-{qi}-{ai}`, `input[name="correct-{qi}"]`,
+  `#quiz-total`, `#quiz-warning-banner`, `#quiz-import-input`) is preserved, so quiz-mode E2E
+  keeps passing unchanged.
+- **Validation reuse**: `_quiz_validation_error()` is now the single rule (every question
+  needs ≥1 answer and ≥1 bomb-yielding answer) shared by the game quiz save and the library
+  save, so both reject the same broken shapes.
+- **Auth**: list/get/create accept admin or GM (`verify_admin_or_gm`); delete is admin-only
+  (`verify_admin`). Delete has a unit test proving a GM token is rejected (404).
+- **Migration verified**: `alembic upgrade head`, `downgrade 010`, and `upgrade head` all
+  run clean against Postgres. `alembic check` flags only the redundant `ix_*_id` PK indexes,
+  the same pre-existing drift as every other table in the repo.
+- **Gotcha found**: deleting the template row with the ORM unit of work failed with an FK
+  violation (no ORM relationships, so it deleted the parent before the children). Switched to
+  ordered bulk `delete()` statements. E2E now covers rename/overwrite and delete.
+- **Not done / out of scope**: no delete control in game settings (as specified); no seeding
+  of a starter quiz; admin library stays an inline section on the single-page dashboard.
+
+---
+
 # 📍 Insert location at current GPS position (GM locations page)
 
 ## Frontend
@@ -238,3 +302,259 @@
 - Full E2E: **52/52 passed** (first fully green run; previous runs failed ~every other time)
 - CI on `f611fcb`: runs #167/#168 **success** — type checks, tests and audit all pass, and the
   `e2e` job ran for the first time ever (previously always skipped) and passed
+
+---
+
+# Quiz page flicker during a running game (team.html)
+
+## Root cause
+- Not page reloads — the team page never reloads itself (`window.location.reload()` exists
+  only in join.html). The quiz lives in team.html as `#quiz-section` → `#quiz-content`.
+- Every saved event broadcasts (`app/events/saver.py:62` `manager.broadcast("refresh")`; also
+  pause/resume `routes.py:2413/2435`). Each SSE push → `renderState()` → `renderActions()`,
+  which ended with `actionsEl.innerHTML = html` — destroying the whole actions panel and
+  re-creating `#quiz-content` with the literal "loading…" placeholder, then `updateQuizSection()`
+  awaited a `/api/quiz/questions` round trip before repainting. That flash was the flicker.
+- Same mechanism wiped a typed bomb coordinate and reset the chosen `#target-team` (also rebuilt
+  every push). The boards were already fine (`renderGrid` is incremental via `boardGridCache`).
+
+## Fix
+- `renderActions()`: rebuild only when the panel's shape changes (`gameStatus | quizEnabled |
+  isPaused`); same-shape pushes only refresh ship inventory (preparing) / target teams + quiz
+  (started). `renderTargetTeams`/`updateQuizSection` guard their own DOM writes.
+- `updateQuizSection()`: writes only when a content signature (question id + text + answer ids)
+  changes; the "loading…" placeholder now shows only when `#quiz-content` is empty (first load).
+- `renderTargetTeams()`: rebuilds only when the opponent set changes and preserves the chosen value.
+
+## Tests / verification
+- E2E regression test `test_quiz_section_not_rebuilt_on_game_events` (test_quiz_mode.py):
+  tags the quiz button, installs a MutationObserver on `#quiz-content`, picks a bomb target,
+  fires an opponent bomb via the API (broadcasts to the team page), then asserts the button
+  element survived (identity), zero child mutations, and the target select kept its value.
+- Prove-it-ran: test **fails against the old template** (`quiz text is now: 'ParisLondon'`,
+  probe lost) and passes with the fix — it's a real regression test.
+- `uv run ty check` repo-wide clean; `uv run pytest tests/` **223 passed**; `uvx pip-audit` exit 0.
+- Full E2E: **53/53 passed** (52 + 1 new; quiz tests 2/2).
+- Note: the e2e container's compose flag is `--video=on` (AGENTS.md's `--video=on-fail` is
+  rejected by the container's pytest-browser; use `retain-on-failure` if wanted) — doc drift,
+  not fixed here.
+
+---
+
+# Quiz can be saved with zero bomb-yielding answers (settings editor)
+
+## What broke
+- `saveQuiz()` auto-distributed `perQ = Math.floor(total / #questions)` to every correct
+  answer. With total < #questions → perQ = 0 → every answer saved with 0 bombs. No UI
+  warning, no server validation (`routes.py` `save_quiz_questions` accepted anything).
+
+## Fix (user choice: strict block; auto-fix-to-1 explicitly rejected)
+- `game_settings.html`:
+  - live `updateQuizWarnings()` — red banner when total < #questions or a question has
+    no answers; all question cards get a red outline (`outline`, not `border` — no layout
+    shift); re-runs on `#quiz-total` input and after every `renderQuizQuestions()`
+  - `saveQuiz()` blocks **before either API call** with an error toast naming the problem
+- `routes.py` `POST /api/quiz/questions`: backstop for import/API/bot writes — rejects any
+  question with zero answers or zero answers worth 1+ bombs, message names the offending
+  question index (+ first 40 chars of its text), 200 + `success:false` per app convention
+- Honest bomb display: the editable per-answer bomb input was overwritten on save (correct
+  → perQ, others → 0), i.e. a lie. Replaced with a read-only per-answer "N 💣" label
+  (green on the bomb-yielding answer(s), grey 0 elsewhere), recomputed from
+  `Math.floor(total/questions)` at render, red when it would be 0. POM `add_question`
+  stopped filling a bomb input that no longer exists.
+
+## Verification
+- Unit: 4 new `TestQuizMode` tests — all-zero answers rejected (names the question),
+  empty-answers rejected, broken question among valid ones rejected (names `Question 2`),
+  valid set accepted (route awaits model once). `tests/` → **227 passed**
+- E2E (3/3 quiz): new `test_quiz_save_blocks_low_total_bombs` — 3 questions, total 2 →
+  banner shows "lower than the number of questions", save → error toast, `GET
+  /api/quiz/questions` still `[]`. **Proven red against the pre-fix template**
+  (timeout on the missing banner) before landing
+- `uv run ty check` repo-wide clean; `uvx pip-audit` exit 0
+- Full E2E: **54/54 passed** (53 + 1 new), run as root so the video-artifact teardown
+  errors don't mask anything (see pre-existing quirk below)
+
+## Pre-existing quirk, not introduced here
+- The e2e suite ships `--video=on` + `./test-results:/app/test-results` while the
+  container runs as UID 1000. On a per-container-recreated mount nothing writes until
+  teardown, and the first write fails with `PermissionError` (mount is root-owned) —
+  so every test reports PASS + teardown ERROR, exit 1. That is why CI marks the e2e job
+  `continue-on-error`. Wiped `test-results/` locally and verified the same pattern under
+  the default (battleship) user; root run → spotless 54/54. Not fixing here.
+
+---
+
+# Quiz import uses JSON bomb values; total = sum of question maxes; rebalance over correct answers
+
+## Frontend (`app/templates/game_settings.html`)
+- [x] Import honors per-answer `bomb_value` from the JSON as-is (wrong answers keep their
+      values — explicit user choice); auto-fixes any question whose max yield < 1 to 1 on the
+      correct answer (user chose auto-fix over block); normalizes to exactly one `is_correct`
+      per question.
+- [x] Total bomb budget = sum of *each question's max yield* (`questionMaxYield(q)` = highest
+      answer bomb value) via `syncQuizTotal()`; the `#quiz-total` input stays editable but is
+      re-synced after every change/import/rebalance/save.
+- [x] Per-answer rows now show the real stored bomb value (`N 💣`, green when > 0) instead of
+      the hardcoded `0 💣`; the per-question "Bombs" field writes to the correct answer.
+- [x] Per-answer bombs are **editable** (inline number input per answer, `#ans-bombs-{qi}-{ai}`);
+      the per-question "Bombs" field was removed. Editing one answer re-syncs the total (max
+      yield per question); correctness is radio-only and never changed by bomb edits.
+- [x] Rebalance distributes the budget over the correct answer of every question (wrong
+      answers → 0, each correct ≥ 1 even when budget < #questions).
+- [x] `saveQuiz()` no longer flattens answer bombs to the per-question value — imported values
+      survive a save round-trip; validation (a question must have an answer worth ≥ 1) is now
+      derived from answers.
+- [x] Management buttons (Rebalance / Save / Export / Import) moved above the questions list;
+      "Add Question" stays below the list.
+
+## Backend (`app/models.py`)
+- [x] `get_quiz_questions()`: a question's `bomb_value` = max over its answers (was: prefer
+      correct-with-bombs, else first bomb-yielding), so the editor's derived total matches the
+      API. Route validation on `POST /api/quiz/questions` unchanged (still the save-time backstop).
+
+## Tests / verification
+- [x] New E2E `test_quiz_import_uses_json_bomb_values`: imports JSON with 7/2, 3/0, 0 bombs →
+      total becomes 11 (7+3+1), wrong answer keeps its 2, zero-yield question auto-fixed to 1;
+      asserts Rebalance/Save/Export/Import render above the question list and Add Question below.
+- [x] New E2E `test_quiz_edit_answer_bombs`: edits per-answer values (8 on correct, then 3 and 9
+      on a wrong answer) → total tracks each question's max (13 → 14), the radio never moves,
+      and saved answers keep `(8, correct)` / `(9, wrong)` with question max 9.
+- [x] `uv run ty check` repo-wide clean; `uv run pytest tests/` **227 passed**;
+      `uvx pip-audit` (uv export, no-dev) exit 0.
+- [x] Full E2E as root (avoids the video-teardown permission noise): **56/56 passed**
+      (55 + 1 new); quiz file 5/5.
+
+---
+
+# Per-question source links in quizzes (verify the answer after answering)
+
+## Backend
+- [x] Migration `012_add_quiz_source.py` — nullable `source_url VARCHAR(1000)` on
+      `quiz_questions` + `quiz_template_questions` (with downgrade)
+- [x] `app/database.py` + `app/models.py`: `source_url` on `QuizQuestion`/`QuizTemplateQuestion`;
+      carried through `get_quiz_questions` / `save_quiz_questions` / `get_quiz_template` /
+      `save_quiz_template` (empty → NULL), so library load copies it into games for free
+- [x] `app/api/routes.py` `_normalize_source_url()` inside the shared `_quiz_validation_error`:
+      trim, empty → None, scheme-less input → `https://`, reject anything not http(s)
+      (blocks `javascript:`/`data:`), errors name the question index
+- [x] `GET /api/quiz/questions`: team requests get `source_url = None` on unanswered
+      questions; GM requests keep full data
+
+## Frontend
+- [x] Shared editor (`quiz_editor.js`): per-question source-input row
+      (`data-role="source-url"`), change handler, `source_url:''` seed in
+      `addQuestion`/`setQuestions`/`importFile`; export picks it up automatically
+- [x] `team.html`: `quizPendingResult` state; a just-answered question renders a result
+      screen (`#quiz-verdict` Correct/Wrong + `#quiz-correct-answer` + `#quiz-source-link`
+      + `#quiz-next`) under the existing `quizContentSignature` no-flicker guard; the active
+      unanswered question never renders the link; client-side `^https?://` guard before the
+      `<a>`; `target="_blank" rel="noopener noreferrer"`
+- [x] `action_quiz` keys `verdict_correct`, `verdict_wrong`, `correct_answer`, `source_label`,
+      `next` in en + nl (key-parity test green)
+
+## Tests / verification
+- [x] Unit (`tests/test_api.py`): invalid scheme rejected (message names the question);
+      `example.com/wiki/France` → `https://example.com/wiki/France`, blank → None;
+      team request strips `source_url` from unanswered questions (answered keeps it)
+- [x] E2E `test_quiz_source_revealed_after_answer`: link absent pre-answer (and kept out of
+      the API payload), result screen shows verdict + correct answer + link, Next advances
+      to "All questions answered!"
+- [x] `test_quiz_full_flow_browser` updated: each answer now lands on the result screen and
+      moves on via Next (was: auto-advance)
+- [x] E2E `test_quiz_library_source_round_trips`: author with source → re-open restores it →
+      load into a fresh game carries it
+- [x] POMs: role-based selectors (`data-role`) in `add_question`/`add_library_question`
+      (the new source input shifts text-input indices; also deletes a dead `if False` branch),
+      `add_question(..., source_url=)`, TeamPage result-screen helpers
+- [x] `uv run ty check` repo-wide clean; `uv run pytest tests/` **238 passed**;
+      `uvx pip-audit` exit 0
+- [x] Alembic `upgrade head` → `downgrade 011` → `upgrade head` clean against a scratch
+      Postgres; both tables show `source_url`
+- [x] Full E2E as root on a **fresh** DB (**62/62 passed**, quiz+library 11/11)
+
+## Review
+- **Reveal rule**: `source_url` is stripped server-side for unanswered team questions and
+  only client-rendered on the result screen of a question the team just answered — two
+  independent guards, so the link can't leak via the API payload or the DOM ahead of answering.
+- **URL hardening**: a naive "prepend `https://` when there's no `://`" lets
+  `javascript:alert(1)` slip through as `https://javascript:alert(1)`; the scheme
+  `^[a-zA-Z][a-zA-Z0-9+.\-]*:` check treats a leading scheme as the real one and rejects it.
+- **Result screen vs. no-flicker guard**: `updateQuizSection` renders the result branch using
+  the existing signature mechanism (`'result|' + id + '|' + ok/no + '|' + source`), so SSE
+  refreshes during the result view cause zero DOM churn.
+- **`is_correct` leak to unanswered questions is pre-existing and out of scope** — a team
+  could read it from the answer payload anyway; not touched here.
+- **Follow-up fix (link could vanish)**: the result screen originally rendered the source
+  from the refetched question payload. `loadQuizQuestions()` refetches on every call and
+  the last-resolving GET wins, so an SSE-triggered refetch that started before the answer
+  event committed could land after it, caching the pre-answer snapshot (`source_url: null`)
+  and re-rendering the result screen with verdict + correct answer + Next but **no link**.
+  Fixed by revealing the source in the `/api/execute` answer response itself (the team just
+  answered, so it's policy-legal) and carrying it through `quizPendingResult`; the refetch
+  is now just a fallback. Unit test `test_quiz_command_reveals_source_url_in_answer_response`
+  proves the server sends it. Full E2E as root on a fresh DB: **62/62**.
+- **Env gotcha (again)**: `docker compose -f docker-compose.e2e.yml down -v` errors on the
+  shared `live_battlefield_default` network (dev `docker-compose.yml` containers still use
+  it), so the `-v` never deletes the test DB volume; `test_select_all_toggles_all` flakes on a
+  stale DB. Container recreation via `down` + `up` (no volume is declared for test-postgres)
+  is the reliable fresh-DB path. The first full-suite run in this session failed exactly that
+  way (61 passed, 1 failed); a genuinely fresh DB → 62/62. Worth a doc fix in AGENTS.md later.
+
+---
+
+# Per-card Edit/Delete buttons in the admin Quiz Library
+
+## What changed
+- Every quiz card in `#library-quiz-list` now carries its own `✏️ Edit` and `🗑️ Delete`
+  buttons (right-aligned actions div, same pattern as the games list rows). Cards carry
+  `data-template-id`; the buttons call `editLibraryQuiz(id)` / `deleteLibraryQuiz(id)`.
+- The toolbar's selection-based `✏️ Edit` / `🗑️ Delete` buttons (`#library-edit-btn` /
+  `#library-delete-btn`) are **removed** (user choice: per-card is the only path); the
+  dropdown + `➕ New` stay. `editLibraryQuiz(id)` syncs the dropdown value to the card, so
+  save-after-edit keeps the select consistent.
+- POM: `edit_selected_library_quiz` / `delete_selected_library_quiz` → card-based
+  `library_card(name)` + `edit_library_quiz(name)` / `delete_library_quiz(name, accept)`.
+
+## Tests / verification
+- E2E updates: rename/overwrite/delete and source round-trip tests use card buttons; new
+  `test_each_quiz_card_has_edit_and_delete_buttons` (each card has exactly one Edit + one
+  Delete; deleting one card leaves the other) — written resilient to sibling tests' templates
+  already existing in the DB (assert per-card presence, not a total card count).
+- `uv run ty check` clean; `uv run pytest tests/` **239 passed**; `uvx pip-audit` exit 0.
+- Full E2E as root on a fresh DB: **63/63 passed** (62 + 1 new; library file 6/6).
+
+## Review
+- The delete confirm label still looks the template up via `#library-quiz-select option[value=…]`
+  (options stay populated even though the dropdown is no longer the edit/delete trigger).
+- `select_library_quiz` POM helper kept — the dropdown still exists and the "Capitals" test
+  still selects through it.
+- E2E note: this container's pytest-browser rejects `--video=on-fail` (AGENTS.md doc drift,
+  already flagged in the flicker section); ran without video flags.
+
+---
+
+# JSON schema for the quiz questions format
+
+## What shipped
+- `docs/quiz_questions.schema.json` — draft 2020-12 JSON Schema documenting the
+  editor's export/import and API round-trip format:
+  - `question_text` (required, non-empty), `bomb_value` (≥0), `source_url`
+    (null | empty | `^https?://` only — rejects `javascript:`/`data:` and
+    scheme-less strings)
+  - `answers` array (min 1) with each answer having `answer_text` (required,
+    non-empty), `bomb_value` (≥0), `is_correct` (boolean)
+  - `allOf` constraints: ≥1 bomb-yielding answer (`contains` + `bomb_value≥1`),
+    exactly one correct answer (`contains` + `is_correct: true` + `maxContains: 1`)
+  - `additionalProperties: false` on both question and answer objects (catches typos)
+- `jsonschema>=4.18` added to `[project.optional-dependencies] dev`
+- 17 unit tests in `tests/test_quiz_schema.py` covering schema validity,
+  valid examples (full, minimal, empty array, http), and 12 invalid cases
+  (not-array, missing/empty question text, no answers, two correct answers,
+  zero bomb yield, javascript: source, data: source, scheme-less source,
+  negative bomb value, non-boolean is_correct, unknown property)
+
+## Verification
+- `uv run ty check` clean; `uv run pytest tests/` **256 passed** (239 + 17 new);
+  `uvx pip-audit` exit 0
+- No E2E needed (schema is documentation + unit-tested; no runtime impact)

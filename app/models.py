@@ -353,13 +353,19 @@ async def get_quiz_questions(db: AsyncSession, game_id: uuid.UUID) -> list:
         answers = await db.execute(
             select(QuizAnswer).where(QuizAnswer.question_id == q.id).order_by(QuizAnswer.id)
         )
+        answers_list = [a for a in answers.scalars().all()]
+        # A question's bomb_value is the most it can yield = the highest value
+        # among its answers (import may put bombs on any answer).
+        q_bomb = max((a.bomb_value for a in answers_list), default=0)
         result.append({
             "id": q.id,
             "question_text": q.question_text,
             "order": q.order,
+            "bomb_value": q_bomb,
+            "source_url": q.source_url,
             "answers": [
                 {"id": a.id, "answer_text": a.answer_text, "bomb_value": a.bomb_value, "is_correct": a.is_correct}
-                for a in answers.scalars().all()
+                for a in answers_list
             ],
         })
     return result
@@ -378,7 +384,12 @@ async def save_quiz_questions(db: AsyncSession, game_id: uuid.UUID, questions_da
 
     result = []
     for i, qd in enumerate(questions_data):
-        q = QuizQuestion(game_id=game_id, question_text=qd.get("question_text", ""), order=i)
+        q = QuizQuestion(
+            game_id=game_id,
+            question_text=qd.get("question_text", ""),
+            order=i,
+            source_url=qd.get("source_url") or None,
+        )
         db.add(q)
         await db.flush()
         answers = qd.get("answers", [])
@@ -396,6 +407,148 @@ async def save_quiz_questions(db: AsyncSession, game_id: uuid.UUID, questions_da
         result.append(qd)
     await db.commit()
     return result
+
+
+async def list_quiz_templates(db: AsyncSession) -> list:
+    """Named reusable quizzes as summaries (id, name, counts, derived total)."""
+    from app.database import QuizTemplate, QuizTemplateQuestion, QuizTemplateAnswer
+
+    templates = (await db.execute(
+        select(QuizTemplate).order_by(QuizTemplate.name)
+    )).scalars().all()
+    result = []
+    for t in templates:
+        questions = (await db.execute(
+            select(QuizTemplateQuestion).where(QuizTemplateQuestion.template_id == t.id)
+        )).scalars().all()
+        total = 0
+        for q in questions:
+            answers = (await db.execute(
+                select(QuizTemplateAnswer).where(QuizTemplateAnswer.question_id == q.id)
+            )).scalars().all()
+            total += max((a.bomb_value for a in answers), default=0)
+        result.append({
+            "id": t.id,
+            "name": t.name,
+            "question_count": len(questions),
+            "total_bombs": total,
+            "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+        })
+    return result
+
+
+async def get_quiz_template(db: AsyncSession, template_id: int) -> Optional[dict]:
+    """Full template in the same shape as get_quiz_questions (editor-ready)."""
+    from app.database import QuizTemplate, QuizTemplateQuestion, QuizTemplateAnswer
+
+    template = (await db.execute(
+        select(QuizTemplate).where(QuizTemplate.id == template_id)
+    )).scalar_one_or_none()
+    if not template:
+        return None
+    questions = (await db.execute(
+        select(QuizTemplateQuestion)
+        .where(QuizTemplateQuestion.template_id == template.id)
+        .order_by(QuizTemplateQuestion.order)
+    )).scalars().all()
+    q_list = []
+    for q in questions:
+        answers = (await db.execute(
+            select(QuizTemplateAnswer)
+            .where(QuizTemplateAnswer.question_id == q.id)
+            .order_by(QuizTemplateAnswer.id)
+        )).scalars().all()
+        answers_list = [a for a in answers]
+        q_list.append({
+            "id": q.id,
+            "question_text": q.question_text,
+            "order": q.order,
+            "bomb_value": max((a.bomb_value for a in answers_list), default=0),
+            "source_url": q.source_url,
+            "answers": [
+                {"id": a.id, "answer_text": a.answer_text, "bomb_value": a.bomb_value, "is_correct": a.is_correct}
+                for a in answers_list
+            ],
+        })
+    return {"id": template.id, "name": template.name, "questions": q_list}
+
+
+async def delete_quiz_template(db: AsyncSession, template_id: int) -> bool:
+    from app.database import QuizTemplate, QuizTemplateQuestion, QuizTemplateAnswer
+    from sqlalchemy import delete
+
+    template = (await db.execute(
+        select(QuizTemplate).where(QuizTemplate.id == template_id)
+    )).scalar_one_or_none()
+    if not template:
+        return False
+    # Bulk deletes run in this exact order (there are no ORM relationships to
+    # infer parent/child ordering, so the unit of work cannot be trusted here).
+    question_ids = (await db.execute(
+        select(QuizTemplateQuestion.id).where(QuizTemplateQuestion.template_id == template.id)
+    )).scalars().all()
+    if question_ids:
+        await db.execute(delete(QuizTemplateAnswer).where(QuizTemplateAnswer.question_id.in_(question_ids)))
+        await db.execute(delete(QuizTemplateQuestion).where(QuizTemplateQuestion.template_id == template.id))
+    await db.execute(delete(QuizTemplate).where(QuizTemplate.id == template.id))
+    await db.commit()
+    return True
+
+
+async def save_quiz_template(
+    db: AsyncSession, name: str, questions_data: list[dict], template_id: Optional[int] = None
+) -> Optional[dict]:
+    """Create or overwrite a reusable quiz. The name is the identity: saving under
+    an existing name replaces that template (overwrite-by-name). When template_id is
+    given the template is updated in place (allowing a rename)."""
+    from app.database import QuizTemplate, QuizTemplateQuestion, QuizTemplateAnswer
+    from sqlalchemy import delete
+
+    existing = (await db.execute(
+        select(QuizTemplate).where(QuizTemplate.name == name)
+    )).scalar_one_or_none()
+    if existing and (template_id is None or existing.id != template_id):
+        if not await delete_quiz_template(db, existing.id):
+            return None
+
+    if template_id is not None:
+        template = (await db.execute(
+            select(QuizTemplate).where(QuizTemplate.id == template_id)
+        )).scalar_one_or_none()
+        if not template:
+            return None
+        template.name = name
+        template.updated_at = datetime.now(timezone.utc)
+        old_ids = (await db.execute(
+            select(QuizTemplateQuestion.id).where(QuizTemplateQuestion.template_id == template.id)
+        )).scalars().all()
+        if old_ids:
+            await db.execute(delete(QuizTemplateAnswer).where(QuizTemplateAnswer.question_id.in_(old_ids)))
+            await db.execute(delete(QuizTemplateQuestion).where(QuizTemplateQuestion.template_id == template.id))
+        await db.flush()
+    else:
+        template = QuizTemplate(name=name)
+        db.add(template)
+        await db.flush()
+
+    for i, qd in enumerate(questions_data):
+        q = QuizTemplateQuestion(
+            template_id=template.id,
+            question_text=qd.get("question_text", ""),
+            order=i,
+            source_url=qd.get("source_url") or None,
+        )
+        db.add(q)
+        await db.flush()
+        for ad in qd.get("answers", []):
+            db.add(QuizTemplateAnswer(
+                question_id=q.id,
+                answer_text=ad.get("answer_text", ""),
+                bomb_value=ad.get("bomb_value", 0),
+                is_correct=ad.get("is_correct", False),
+            ))
+    await db.commit()
+    return await get_quiz_template(db, template.id)
 
 
 async def is_game_paused(db: AsyncSession, game_id: uuid.UUID) -> tuple[bool, datetime | None]:

@@ -18,6 +18,8 @@ import json
 import math
 import random
 import asyncio
+import re
+from urllib.parse import urlsplit
 from datetime import datetime, timezone, timedelta
 
 from app.config import settings
@@ -1826,6 +1828,12 @@ async def execute_command(
             result["success"] = False
             result["message"] = "Wrong answer! No bombs earned."
 
+        # The team just answered this question — reveal its verifying link right
+        # now, in this response. The result screen uses it directly instead of
+        # depending on a (possibly stale) refetch of /api/quiz/questions, so the
+        # link can never vanish from the correct-answer + Next view.
+        result["source_url"] = question_row.source_url
+
     else:
         result["message"] = f"Unknown command: {cmd.command}"
 
@@ -2527,12 +2535,60 @@ async def get_quiz_questions(
                     answered_qids.add(p.get("question_id"))
         for q in questions:
             q["answered"] = q["id"] in answered_qids
+            if not q["answered"]:
+                # Never expose the verifying link before the team has answered.
+                q["source_url"] = None
 
     return {"questions": questions}
 
 
 class SaveQuestionsRequest(BaseModel):
     questions: list[dict] = []
+
+
+def _normalize_source_url(raw: object) -> Optional[str]:
+    """Trim a quiz source link, default the scheme to https, and reject anything
+    that isn't a plain http(s) URL (so `javascript:`/`data:` can never be saved).
+
+    Returns None for an empty value. Raises ValueError for an invalid link.
+    """
+    s = str(raw).strip() if raw else ""
+    if not s:
+        return None
+    # A leading "scheme:" (javascript:, data:, mailto:, ...) is the real scheme —
+    # never silently rewrite it into https://, and reject it below. Scheme-less
+    # input (example.com) is treated as a plain https link.
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*:", s):
+        s = "https://" + s
+    parts = urlsplit(s)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        raise ValueError(s)
+    return s
+
+
+def _quiz_validation_error(questions: list[dict]) -> Optional[str]:
+    """Return an error message if any question can't yield bombs, else None.
+
+    Every question must give players a way to win: at least one answer, and at
+    least one answer worth bombs. Shared by the game quiz save and the reusable
+    quiz library so both reject the same shapes.
+    """
+    for i, q in enumerate(questions, start=1):
+        answers = q.get("answers") or []
+        if not answers:
+            return f"Question {i} has no answers - add at least one answer."
+        if not any((a.get("bomb_value") or 0) > 0 for a in answers):
+            label = q.get("question_text") or ""
+            label_suffix = f" ('{label[:40]}')" if label else ""
+            return (
+                f"Question {i}{label_suffix} has no bomb-yielding answer - "
+                "give at least one answer a bomb value of 1 or more."
+            )
+        try:
+            q["source_url"] = _normalize_source_url(q.get("source_url"))
+        except ValueError:
+            return f"Question {i} has an invalid source link - use an http(s) URL."
+    return None
 
 
 @app.post("/api/quiz/questions")
@@ -2543,9 +2599,81 @@ async def save_quiz_questions(
 ):
     from app.models import save_quiz_questions
 
+    error = _quiz_validation_error(body.questions)
+    if error:
+        return {"success": False, "message": error}
+
     game_uuid = uuid.UUID(game_id)
     result = await save_quiz_questions(db, game_uuid, body.questions)
     return {"success": True, "questions": result, "message": f"Saved {len(result)} question(s)."}
+
+
+class SaveQuizTemplateRequest(BaseModel):
+    name: str = ""
+    questions: list[dict] = []
+    id: Optional[int] = None
+
+
+@app.get("/api/quiz-templates")
+async def list_quiz_templates(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_or_gm),
+):
+    from app.models import list_quiz_templates
+
+    return {"templates": await list_quiz_templates(db)}
+
+
+@app.get("/api/quiz-templates/{template_id}")
+async def get_quiz_template(
+    template_id: int,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_or_gm),
+):
+    from app.models import get_quiz_template
+
+    template = await get_quiz_template(db, template_id)
+    if not template:
+        return {"success": False, "message": "Quiz template not found."}
+    return {"success": True, "template": template}
+
+
+@app.post("/api/quiz-templates")
+async def save_quiz_template(
+    body: SaveQuizTemplateRequest,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_or_gm),
+):
+    from app.models import save_quiz_template
+
+    name = (body.name or "").strip()
+    if not name:
+        return {"success": False, "message": "A quiz name is required."}
+    if len(name) > 200:
+        return {"success": False, "message": "Quiz name is too long (max 200 characters)."}
+
+    error = _quiz_validation_error(body.questions)
+    if error:
+        return {"success": False, "message": error}
+
+    template = await save_quiz_template(db, name, body.questions, template_id=body.id)
+    if not template:
+        return {"success": False, "message": "Quiz template not found."}
+    return {"success": True, "template": template, "message": f"Saved quiz '{name}'."}
+
+
+@app.delete("/api/quiz-templates/{template_id}")
+async def delete_quiz_template(
+    template_id: int,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin),
+):
+    from app.models import delete_quiz_template
+
+    deleted = await delete_quiz_template(db, template_id)
+    if not deleted:
+        return {"success": False, "message": "Quiz template not found."}
+    return {"success": True, "message": "Quiz deleted."}
 
 
 @app.post("/api/quick/reset-game")

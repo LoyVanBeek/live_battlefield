@@ -26,39 +26,79 @@ class GameSettingsPage:
         self.page.wait_for_timeout(300)
         self.quiz_total_input().fill(str(total_bombs))
 
-    def add_question(self, question_text: str, answers: list):
-        """Add a question with answers. Each answer: {"text": ..., "bombs": ..., "correct": bool}"""
+    def add_question(self, question_text: str, answers: list, source_url: str = ""):
+        """Add a question with answers. Each answer: {"text", "correct", "bombs"?}."""
         self.add_question_button().click()
         self.page.wait_for_timeout(300)
 
-        # The last question block is the one we just added
         question_blocks = self.page.locator("#quiz-questions-list > div")
         q_count = question_blocks.count()
         q_block = question_blocks.nth(q_count - 1)
 
-        # Fill question text
-        text_inputs = q_block.locator("input[type='text']")
-        text_inputs.first.fill(question_text)
-
-        # First answer is auto-created, update it
-        answer_radios = q_block.locator("input[type='radio']")
-        bomb_inputs = q_block.locator("input[type='number']")
+        q_block.locator("input[data-role='question-text']").fill(question_text)
+        if source_url:
+            q_block.locator("input[data-role='source-url']").fill(source_url)
 
         for i, a in enumerate(answers):
             if i > 0:
                 q_block.locator("button", has_text="Add Answer").click()
                 self.page.wait_for_timeout(200)
 
-            # Re-query after adding new answer
-            text_inputs = q_block.locator("input[type='text']")
-            answer_radios = q_block.locator("input[type='radio']")
-            bomb_inputs = q_block.locator("input[type='number']")
+            q_block.locator("input[data-role='answer-text']").nth(i).fill(a["text"])
+            if a.get("correct"):
+                q_block.locator("input[data-role='correct']").nth(i).check()
 
-            text_inputs.nth(i).fill(a["text"])
-            bomb_inputs.nth(i).fill(str(a["bombs"]))
-            if a["correct"]:
-                answer_radios.nth(i).check()
+    def rebalance_bombs(self):
+        self.page.get_by_role("button", name="Rebalance").click()
+        self.page.wait_for_timeout(200)
+
+    def set_answer_bombs(self, qi: int, ai: int, value: int):
+        """Edit the bomb value of answer ai of question qi."""
+        locator = self.page.locator(f"#ans-bombs-{qi}-{ai}")
+        locator.fill(str(value))
+        # Numeric inputs fire `change` on blur/Enter; the handler re-renders the list.
+        locator.press("Enter")
+        self.page.wait_for_timeout(200)
+
+    def import_quiz(self, file_path: str):
+        """Import a quiz JSON file like a human via the file input."""
+        self.page.locator("#quiz-import-input").set_input_files(file_path)
+        self.page.wait_for_timeout(500)
+
+    def library_select(self):
+        return self.page.locator("#quiz-library-select")
+
+    def load_library_quiz(self, name: str):
+        """Pick a saved library quiz by name and click Load."""
+        self.page.wait_for_function(
+            "() => document.getElementById('quiz-library-select').options.length > 1",
+            timeout=5000,
+        )
+        value = self.page.evaluate(
+            """(name) => {
+                const sel = document.getElementById('quiz-library-select');
+                const opt = Array.from(sel.options).find(o => o.textContent.includes(name));
+                return opt ? opt.value : '';
+            }""",
+            name,
+        )
+        assert value, f"library quiz {name!r} not offered in the settings dropdown"
+        self.library_select().select_option(value)
+        self.page.get_by_role("button", name="Load").click()
+        self.page.wait_for_timeout(500)
+
+    def save_as_library_quiz(self, name: str):
+        """Save the current editor contents to the library under `name`."""
+        self.page.once("dialog", lambda d: d.accept(name))
+        self.page.locator("#quiz-questions-area button", has_text="Save as").click()
+        self.page.wait_for_timeout(800)
+
+    def question_blocks(self):
+        return self.page.locator("#quiz-questions-list > div")
 
     def save_quiz(self):
         self.save_quiz_button().click()
         self.page.wait_for_timeout(1000)
+
+    def quiz_warning_banner(self):
+        return self.page.locator("#quiz-warning-banner")

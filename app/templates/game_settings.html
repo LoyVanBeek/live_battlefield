@@ -163,17 +163,28 @@
                 <div class="mode-controls" style="flex-direction:column;align-items:stretch;">
                     <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;">
                         <label><input type="checkbox" id="quiz-enabled"> {{ tr.settings.enable }}</label>
-                        <label>{{ tr.settings.quiz_total }} <input type="number" id="quiz-total" value="100" min="1" style="width:60px;"></label>
+                        <label>{{ tr.settings.quiz_total }} <input type="number" id="quiz-total" value="100" min="0" style="width:70px;"></label>
                     </div>
                     <div id="quiz-questions-area" style="display:none;margin-top:15px;">
                         <div style="margin-bottom:8px;"><strong>{{ tr.settings.quiz_questions }}</strong></div>
-                        <div id="quiz-questions-list"></div>
-                        <button class="btn btn-primary" onclick="addQuestion()" style="font-size:12px;padding:5px 10px;margin-top:8px;">+ {{ tr.settings.quiz_add_q }}</button>
-                        <button class="btn btn-primary" onclick="saveQuiz()" style="margin-top:10px;">{{ tr.settings.quiz_save }}</button>
-                        <div style="display:flex;gap:8px;margin-top:8px;">
-                            <button class="btn btn-primary" onclick="exportQuiz()" style="font-size:12px;padding:5px 10px;">⬇ {{ tr.settings.quiz_export }}</button>
+                        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+                            <button class="btn btn-secondary" onclick="quizEditor.rebalance()" style="font-size:12px;padding:5px 10px;">Rebalance</button>
+                            <button class="btn btn-primary" onclick="saveQuiz()" style="font-size:12px;padding:5px 10px;">{{ tr.settings.quiz_save }}</button>
+                            <button class="btn btn-primary" onclick="quizEditor.exportJSON('quiz_questions.json')" style="font-size:12px;padding:5px 10px;">⬇ {{ tr.settings.quiz_export }}</button>
                             <button class="btn btn-primary" onclick="document.getElementById('quiz-import-input').click()" style="font-size:12px;padding:5px 10px;">⬆ {{ tr.settings.quiz_import }}</button>
-                            <input type="file" id="quiz-import-input" accept=".json" style="display:none" onchange="importQuiz(event)">
+                            <input type="file" id="quiz-import-input" accept=".json" style="display:none" onchange="quizEditor.importFile(event)">
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+                            <label style="color:#aaa;font-size:12px;display:flex;align-items:center;gap:4px;">{{ tr.settings.quiz_library }}
+                                <select id="quiz-library-select" style="padding:4px;font-size:12px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;max-width:240px;"></select>
+                            </label>
+                            <button class="btn btn-secondary" onclick="loadLibraryQuiz()" style="font-size:12px;padding:5px 10px;">{{ tr.settings.quiz_library_load }}</button>
+                            <button class="btn btn-secondary" onclick="saveAsLibraryQuiz()" style="font-size:12px;padding:5px 10px;">{{ tr.settings.quiz_library_save_as }}</button>
+                        </div>
+                        <div id="quiz-warning-banner" style="display:none;background:rgba(255,82,82,.12);border:1px solid #ff5252;border-radius:6px;padding:8px 10px;font-size:12px;color:#ff8a80;margin-bottom:10px;"></div>
+                        <div id="quiz-questions-list"></div>
+                        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+                            <button class="btn btn-primary" onclick="quizEditor.addQuestion()" style="font-size:12px;padding:5px 10px;">+ {{ tr.settings.quiz_add_q }}</button>
                         </div>
                     </div>
                 </div>
@@ -183,6 +194,7 @@
 
     <div id="toast"></div>
 
+    <script src="/static/js/quiz_editor.js"></script>
     <script>
         const TR = {{ tr_json|safe }};
         function _(key, params) {
@@ -275,47 +287,13 @@
         }
 
         // --- Quiz ---
-        let quizQuestions = [];
-
-        function renderQuizQuestions() {
-            const list = document.getElementById('quiz-questions-list');
-            list.innerHTML = quizQuestions.map((q, qi) => `
-                <div style="background:#0f3460;border-radius:6px;padding:12px;margin-bottom:10px;">
-                    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
-                        <span style="color:#888;font-size:12px;">Q${qi + 1}</span>
-                        <input type="text" value="${q.question_text.replace(/"/g,'&quot;')}" onchange="quizQuestions[${qi}].question_text=this.value" placeholder="Question text" style="flex:1;padding:6px;font-size:13px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
-                        <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="removeQuestion(${qi})">✕</button>
-                    </div>
-                    ${q.answers.map((a, ai) => `
-                        <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;padding-left:20px;">
-                            <input type="radio" name="correct-${qi}" ${a.is_correct?'checked':''} onchange="quizQuestions[${qi}].answers.forEach((x,i)=>{x.is_correct=i===${ai}})">
-                            <input type="text" value="${a.answer_text.replace(/"/g,'&quot;')}" onchange="quizQuestions[${qi}].answers[${ai}].answer_text=this.value" placeholder="Answer" style="flex:1;padding:5px;font-size:12px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
-                            <input type="number" value="${a.bomb_value}" onchange="quizQuestions[${qi}].answers[${ai}].bomb_value=parseInt(this.value)||0" style="width:50px;padding:5px;font-size:12px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;" title="Bombs">
-                            <span style="font-size:11px;color:#888;">💣</span>
-                            <button class="btn btn-danger" style="padding:2px 6px;font-size:10px;" onclick="quizQuestions[${qi}].answers.splice(${ai},1);renderQuizQuestions()">✕</button>
-                        </div>
-                    `).join('')}
-                    <button class="btn btn-primary" style="padding:4px 10px;font-size:11px;margin-left:20px;margin-top:4px;" onclick="addAnswer(${qi})">+ {{ tr.settings.quiz_add_a }}</button>
-                </div>
-            `).join('');
-        }
-
-        function addQuestion() {
-            const total = parseInt(document.getElementById('quiz-total').value) || 100;
-            const perQ = quizQuestions.length > 0 ? Math.floor(total / (quizQuestions.length + 1)) : total;
-            quizQuestions.push({ question_text: '', answers: [{ answer_text: '', bomb_value: perQ, is_correct: true }] });
-            renderQuizQuestions();
-        }
-
-        function addAnswer(qi) {
-            quizQuestions[qi].answers.push({ answer_text: '', bomb_value: 0, is_correct: false });
-            renderQuizQuestions();
-        }
-
-        function removeQuestion(qi) {
-            quizQuestions.splice(qi, 1);
-            renderQuizQuestions();
-        }
+        const quizEditor = createQuizEditor({
+            listId: 'quiz-questions-list',
+            totalId: 'quiz-total',
+            warningId: 'quiz-warning-banner',
+            addAnswerLabel: TR.settings.quiz_add_a,
+            toast: showToast,
+        });
 
         async function loadQuiz() {
             const state = await apiCall('/api/state');
@@ -326,18 +304,36 @@
 
             const data = await apiCall('/api/quiz/questions');
             if (data && data.questions) {
-                quizQuestions = data.questions;
-                renderQuizQuestions();
+                quizEditor.setQuestions(data.questions);
             }
+            loadQuizLibraryOptions();
         }
 
         document.getElementById('quiz-enabled').addEventListener('change', function() {
             document.getElementById('quiz-questions-area').style.display = this.checked ? 'block' : 'none';
         });
 
+        document.getElementById('quiz-total').addEventListener('input', function() {
+            // Don't auto-rebalance on manual total edit; just validate.
+            quizEditor.updateWarnings();
+        });
+
         async function saveQuiz() {
             const enabled = document.getElementById('quiz-enabled').checked;
-            const total = parseInt(document.getElementById('quiz-total').value) || 100;
+            const total = parseInt(document.getElementById('quiz-total').value) || 0;
+            const questions = quizEditor.getQuestions();
+
+            if (enabled && questions.length > 0) {
+                // Each question must have an answer worth at least 1 bomb.
+                const badIdx = questions.findIndex(q => {
+                    return !q.answers || q.answers.length === 0 || quizEditor.questionMaxYield(q) < 1;
+                });
+                if (badIdx !== -1) {
+                    quizEditor.updateWarnings();
+                    showToast(`Question ${badIdx + 1} has no answer worth at least 1 bomb.`, 'error');
+                    return;
+                }
+            }
 
             let result = await apiCall('/api/quick/quiz_settings', 'POST', { enabled: enabled, total_bombs: total });
             if (!result || !result.success) {
@@ -345,64 +341,63 @@
                 return;
             }
 
-            if (enabled && quizQuestions.length > 0) {
-                // Auto-distribute bombs
-                const perQ = Math.floor(total / quizQuestions.length);
-                quizQuestions.forEach(q => {
-                    const correct = q.answers.find(a => a.is_correct);
-                    q.answers.forEach(a => {
-                        if (a.is_correct || !correct) {
-                            a.bomb_value = perQ;
-                        } else if (a.bomb_value === undefined || a.bomb_value === 0) {
-                            a.bomb_value = 0;
-                        }
-                    });
-                });
-
-                result = await apiCall('/api/quiz/questions', 'POST', { questions: quizQuestions });
+            if (enabled && questions.length > 0) {
+                // Per-answer bomb values are saved exactly as defined (import keeps
+                // its JSON values); nothing is redistributed here.
+                result = await apiCall('/api/quiz/questions', 'POST', { questions: questions });
                 if (result && result.success) {
-                    quizQuestions = result.questions || quizQuestions;
-                    renderQuizQuestions();
+                    quizEditor.setQuestions(result.questions || questions);
                 }
             }
             showToast((result && result.message) || 'Quiz settings saved!', 'success');
         }
 
-        function exportQuiz() {
-            const data = JSON.stringify(quizQuestions, null, 2);
-            const blob = new Blob([data], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'quiz_questions.json';
-            a.click();
-            URL.revokeObjectURL(url);
-            showToast('Exported ' + quizQuestions.length + ' question(s)!', 'success');
+        // --- Quiz library (reusable saved quizzes) ---
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         }
 
-        function importQuiz(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const imported = JSON.parse(e.target.result);
-                    if (!Array.isArray(imported)) throw new Error('Not an array');
-                    imported.forEach((q, i) => {
-                        if (!q.question_text || !Array.isArray(q.answers)) throw new Error('Invalid question at index ' + i);
-                        q.answers.forEach(a => {
-                            if (!a.answer_text) throw new Error('Invalid answer in question ' + i);
-                        });
-                    });
-                    quizQuestions = imported;
-                    renderQuizQuestions();
-                    showToast('Imported ' + quizQuestions.length + ' question(s)!', 'success');
-                } catch (err) {
-                    showToast('Import failed: ' + err.message, 'error');
-                }
-            };
-            reader.readAsText(file);
-            event.target.value = '';
+        async function loadQuizLibraryOptions() {
+            const select = document.getElementById('quiz-library-select');
+            if (!select) return;
+            const data = await apiCall('/api/quiz-templates');
+            const templates = (data && data.templates) || [];
+            const current = select.value;
+            select.innerHTML = '<option value="">—</option>' + templates.map(t =>
+                `<option value="${t.id}">${escapeHtml(t.name)} (${t.question_count} Q, ${t.total_bombs} 💣)</option>`
+            ).join('');
+            if (templates.some(t => String(t.id) === current)) select.value = current;
+        }
+
+        async function loadLibraryQuiz() {
+            const select = document.getElementById('quiz-library-select');
+            const id = select && select.value;
+            if (!id) { showToast('Pick a saved quiz first.', 'error'); return; }
+            const data = await apiCall('/api/quiz-templates/' + id);
+            if (!data || !data.success || !data.template) {
+                showToast((data && data.message) || 'Could not load quiz.', 'error');
+                return;
+            }
+            quizEditor.setQuestions(data.template.questions || []);
+            showToast('Loaded "' + data.template.name + '".', 'success');
+        }
+
+        async function saveAsLibraryQuiz() {
+            const questions = quizEditor.getQuestions();
+            if (questions.length === 0) { showToast('Add at least one question first.', 'error'); return; }
+            const entered = prompt('Save this quiz to the library as:', '');
+            if (entered === null) return;
+            const name = entered.trim();
+            if (!name) { showToast('A name is required.', 'error'); return; }
+            const result = await apiCall('/api/quiz-templates', 'POST', { name: name, questions: questions });
+            if (!result || !result.success) {
+                showToast((result && result.message) || 'Could not save quiz.', 'error');
+                return;
+            }
+            showToast(result.message || 'Saved to library!', 'success');
+            await loadQuizLibraryOptions();
+            const select = document.getElementById('quiz-library-select');
+            if (select && result.template) select.value = String(result.template.id);
         }
 
         loadBombDrip();

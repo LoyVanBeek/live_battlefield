@@ -1,5 +1,17 @@
 # Lessons Learned
 
+## Host CSS leaking into a shared widget
+- A generic `input, select { width: 100% }` in a host page also styles `<input type="radio">`; inside a flex row the radio balloons and starves its siblings (the admin quiz editor's answer text collapsed to 14px — imported text was present but unreadable)
+- Make shared widgets self-contained: set explicit sizing inline on controls that must not inherit host width (`style="flex:0 0 auto;width:auto;"` on the radio), rather than relying on the host's CSS being sane
+- Also scope over-broad host rules: `input:not([type="radio"]):not([type="checkbox"]), select { ... }`
+- Playwright gotcha: `fill()` treats a 14px-wide input as visible, so existence/value tests pass while the UI is unreadable. Assert `bounding_box().width` when layout/visibility is what matters
+
+## SQLAlchemy deletes without ORM relationships
+- When tables are linked only by `ForeignKey` columns (no `relationship()`), the unit of work does NOT know parent/child ordering, so `await db.delete(parent)` can flush before the child rows are gone → `ForeignKeyViolationError: update or delete on table "X" violates foreign key constraint`
+- For tables with no ORM relationships, delete with ordered bulk statements instead of `await db.delete(obj)`:
+  `await db.execute(delete(Child).where(Child.parent_id.in_(ids)))` → `await db.execute(delete(Parent).where(...))`
+- A mocked unit test can't catch this (the FK is a database constraint), so cover delete/replace paths with an E2E test or a real DB
+
 ## Mocking `from X import Y` imports
 - `patch.object(module, "func")` patches the attribute on the module object, but does NOT affect names imported via `from module import func` — those are direct references to the original function
 - Use `patch("importing_module.func")` instead (the dotted path of where the name is used, not where it's defined)
@@ -95,3 +107,55 @@
 - The wrong-direction total was the tell. Know the expected count *before* running the suite
 - Rule: `ls`/`git status` a populated directory before writing a "new" file there, and name test files
   after the module they cover (`test_ship_placement_service.py` for `app/services/ship_placement.py`)
+
+## Flicker = destructive `innerHTML` churn, not page reloads — prove the test goes red first
+- "The quiz page flickers, I think due to page reloads": the team page never reloads; every SSE state
+  push ran `renderActions()` → `actionsEl.innerHTML = html`, destroying and re-creating `#quiz-content`
+  with a "loading…" placeholder followed by an async `updateQuizSection()` repaint. Boards were already
+  incremental (`renderGrid` caches DOM in `boardGridCache`); `#actions` was the only destructive render.
+- Fix pattern: shape-key guard (`gameStatus|quizEnabled|isPaused`) — rebuild only when the panel's shape
+  changes, otherwise refresh the few live sub-parts; each sub-render (`updateQuizSection`,
+  `renderTargetTeams`) gets its own content signature and writes nothing when unchanged. Side effects of
+  the same bug: typed bomb coordinate and chosen `#target-team` were wiped by every opponent move.
+- DOM-identity regression test: tag a live element (`dataset.probe`), install a `MutationObserver`
+  counting child mutations, trigger a state push via the API (opponent bomb → broadcast), assert the
+  tagged element survived and mutations == 0. Existing waits for "a button exists" can't see churn.
+- Rule: registered a regression E2E and verified it FAILS against the old template
+  (`quiz text is now: 'ParisLondon'`) before shipping — a test that only passes both ways guards nothing.
+- Doc drift noticed, not fixed: AGENTS.md's `--video=on-fail` is rejected by the e2e container's
+  pytest-browser (`invalid choice`, picks are on/off/retain-on-failure); compose already uses `--video=on`.
+
+## Routed `await` on a patched model → patch with `AsyncMock`, not `MagicMock`
+- A route that does `await save_quiz_questions(...)` (model imported inside the function)
+  breaks under `patch("app.models.save_quiz_questions")`: a MagicMock is not awaitable →
+  `client.post(...)` raises before returning → the test "fails" at the request, not at an assert
+- Fix: `patch(..., new_callable=AsyncMock)`; set `mock.return_value` to a real list because
+  the route calls `len(result)` (a bare AsyncMock has no `__len__`) — then
+  `mock.assert_awaited_once()` matches the awaited call
+
+## `git checkout <ref> -- <file>` stages; `git restore <file>` restores from the INDEX
+- "Prove-the-e2e-is-red" flow: `git checkout 63f262a -- app/templates/game_settings.html`
+  updates AND stages the old file. After the red run, `git restore <file>` pulled the *old*
+  content back (from the index), re-staging the broken template — only a
+  `git checkout HEAD -- <file>` (or `git restore --source=HEAD --staged --worktree <file>`)
+  recovers. `git status --short` shows a staged `M` when this state bites
+
+## The e2e "54 passed, 54 errors" pattern is a permissions teardown noise, not failures
+- The compose ships `--video=on` with `./test-results:/app/test-results` and the container
+  as UID 1000. Docker creates a *fresh* mount root-owned, so Playwright's teardown
+  `video.save_as()` raises `PermissionError` for EVERY test (PASS + teardown ERROR, exit 1).
+  That is why CI marks the e2e job `continue-on-error`.
+- One-off debug runs leave root-owned `test-results/` on the host behind (rm-as-yourself
+  works; chown doesn't). To see a REAL clean signal locally run
+  `docker compose ... run --rm --user root test-e2e` → spotless 54/54.
+- Don't "fix" by editing the compose for a private run; document instead.
+
+## The e2e runner image is baked from source — new test files need a rebuild
+- `test-e2e` mounts nothing from the repo (`Dockerfile.e2e`, context `.`); only
+  `./test-results` is bind-mounted. Adding a test file then running
+  `docker compose ... run --rm test-e2e` silently runs a *stale* suite
+  ("collected 3 items" when the file has 4 tests). Same for `test-app`: template/JS
+  changes require `up -d --build test-app`.
+- Fix: after touching tests_e2e/ → `docker compose -f docker-compose.e2e.yml build test-e2e`;
+  after touching app/ → `... up -d --build test-app`. Verify by checking the collected count
+  matches the test file before trusting a pass/fail.
