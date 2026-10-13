@@ -17,6 +17,7 @@
         "ended": "\ud83c\udfc1 Game Ended",
         "waiting": "\u23f3 Waiting to Start",
         "paused": "\u23f8\ufe0f Paused",
+        "eliminated": "\ud83d\udc80 Eliminated",
         "loading": "Loading..."
     },
     "nav": {
