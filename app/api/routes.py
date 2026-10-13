@@ -1108,6 +1108,14 @@ async def get_game_state(
     all_players = await get_all_players_in_game(db, game_uuid)
     db_ai_colors = {p.color for p in all_players if p.role == Role.AI}
 
+    # Re-hydrate AI players that exist in DB but not yet in the in-memory dict
+    # (survives server restarts)
+    from app.services.ai_player import add_ai_player, get_ai_player
+
+    for p in all_players:
+        if p.role == Role.AI and get_ai_player(str(game_uuid), p.color) is None:
+            add_ai_player(str(game_uuid), p.color, p.name)
+
     teams = []
     for color, team in state.teams.items():
         is_ai = False
@@ -1118,7 +1126,6 @@ async def get_game_state(
                 is_ai = True
         if not is_ai and color in db_ai_colors:
             is_ai = True
-            from app.services.ai_player import get_ai_player
             ai_obj = get_ai_player(str(game_uuid), color)
 
         token = next((t for t, c in state.team_tokens.items() if c == color), "")

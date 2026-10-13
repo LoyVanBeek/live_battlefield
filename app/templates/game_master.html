@@ -1028,6 +1028,12 @@
                                 const intervalVal = _aiAutoIntervalValues[team.color] || team.auto_move_interval || 60;
                                 const isAuto = team.auto_move_enabled || _aiAutoTimers[team.color] === 'running';
                                 _renderAIAutoButtons(aiContainer, team.color, intervalVal, isAuto);
+                                // Start the timer on creation (was only in the update path)
+                                if (team.auto_move_enabled && _aiAutoTimers[team.color] === undefined) {
+                                    _aiAutoIntervalValues[team.color] = team.auto_move_interval || 60;
+                                    _aiAutoTimers[team.color] = 'running';
+                                    _aiAutoLoop(team.color, (team.auto_move_interval || 60) * 1000);
+                                }
                             }
                         }
                     } else {
