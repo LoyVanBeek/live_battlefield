@@ -1028,8 +1028,8 @@
                                 const intervalVal = _aiAutoIntervalValues[team.color] || team.auto_move_interval || 60;
                                 const isAuto = team.auto_move_enabled || _aiAutoTimers[team.color] === 'running';
                                 _renderAIAutoButtons(aiContainer, team.color, intervalVal, isAuto);
-                                // Start the timer on creation (was only in the update path)
-                                if (team.auto_move_enabled && _aiAutoTimers[team.color] === undefined) {
+                                // Start the timer on creation (survives page refresh)
+                                if (team.auto_move_enabled) {
                                     _aiAutoIntervalValues[team.color] = team.auto_move_interval || 60;
                                     _aiAutoTimers[team.color] = 'running';
                                     _aiAutoLoop(team.color, (team.auto_move_interval || 60) * 1000);
@@ -1088,10 +1088,12 @@
                         // Restore AI auto-move state from server (survives page refresh)
                         if (team.is_ai && team.auto_move_enabled) {
                             _aiAutoIntervalValues[team.color] = team.auto_move_interval || 60;
-                            if (_aiAutoTimers[team.color] === undefined) {
-                                _aiAutoTimers[team.color] = 'running';
-                                _aiAutoLoop(team.color, (team.auto_move_interval || 60) * 1000);
-                            }
+                            // Always restart to recover from crashed loops
+                            _aiAutoTimers[team.color] = 'running';
+                            _aiAutoLoop(team.color, (team.auto_move_interval || 60) * 1000);
+                        } else if (_aiAutoTimers[team.color] !== undefined) {
+                            // Server says auto is off but timer is running — stop it
+                            delete _aiAutoTimers[team.color];
                         }
 
                         // Update destroyed state
@@ -1382,7 +1384,7 @@
                     <label style="display:inline-flex;align-items:center;gap:2px;cursor:pointer;font-size:11px;color:#aaa;padding:4px 0;">
                         <input type="checkbox" class="ai-auto-toggle" data-color="${color}" onchange="toggleAIAuto('${color}', this.checked)" ${isAuto ? 'checked' : ''}> 🤖 Auto
                     </label>
-                    <input type="number" class="ai-auto-interval" data-color="${color}" value="${intervalVal}" min="5" step="5" onchange="apiCall('/api/quick/ai-auto-settings', 'POST', {team_color:'${color}', enabled:${isAuto}, interval:parseInt(this.value)||60})" oninput="_aiAutoIntervalValues['${color}']=parseInt(this.value)||60" style="width:52px;padding:4px 6px;font-size:11px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;text-align:center;">
+                    <input type="number" class="ai-auto-interval" data-color="${color}" value="${intervalVal}" min="5" step="5" onchange="aiAutoIntervalChanged('${color}', this)" oninput="_aiAutoIntervalValues['${color}']=parseInt(this.value)||60" style="width:52px;padding:4px 6px;font-size:11px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;text-align:center;">
                     <span style="font-size:11px;color:#888;">s</span>
                     <button class="btn btn-danger" style="font-size:11px;padding:4px 8px;" onclick="removeAI('${color}')">✕ AI</button>
                 </div>
@@ -1403,25 +1405,44 @@
             
             await new Promise(r => setTimeout(r, intervalMs));
             
-            if (!toggle || !toggle.checked) return;
-            await triggerAIMove(color);
+            const stillOn = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
+            if (!stillOn || !stillOn.checked) return;
+            try {
+                await triggerAIMove(color);
+            } catch (e) {
+                console.error('AI auto-move loop error', e);
+            }
             _aiAutoLoop(color, intervalMs);
         }
 
         async function toggleAIAuto(color, enabled) {
             const intervalInput = document.querySelector(`.ai-auto-interval[data-color="${color}"]`);
             const interval = Math.max(5, parseInt(intervalInput?.value || '60', 10) || 60);
-            const result = await apiCall('/api/quick/ai-auto-settings', 'POST', {
+            await apiCall('/api/quick/ai-auto-settings', 'POST', {
                 team_color: color, enabled: !!enabled, interval: interval
             });
+            _aiAutoIntervalValues[color] = interval;
             if (enabled) {
-                if (_aiAutoTimers[color] === undefined) {
-                    _aiAutoIntervalValues[color] = interval;
-                    _aiAutoTimers[color] = 'running';
-                    _aiAutoLoop(color, interval * 1000);
-                }
+                _aiAutoTimers[color] = 'running';
+                _aiAutoLoop(color, interval * 1000);
             } else {
-                stopAIAuto(color);
+                delete _aiAutoTimers[color];
+                const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
+                if (toggle) toggle.checked = false;
+            }
+        }
+
+        async function aiAutoIntervalChanged(color, input) {
+            const interval = Math.max(5, parseInt(input.value) || 60);
+            const enabled = _aiAutoTimers[color] === 'running';
+            await apiCall('/api/quick/ai-auto-settings', 'POST', {
+                team_color: color, enabled: enabled, interval: interval
+            });
+            _aiAutoIntervalValues[color] = interval;
+            // Restart timer with new interval if auto is running
+            if (enabled) {
+                _aiAutoTimers[color] = 'running';
+                _aiAutoLoop(color, interval * 1000);
             }
         }
 
