@@ -266,3 +266,36 @@ def test_ai_auto_move_controls_visible(page, app_url, seeded_game_with_teams):
     toggle.uncheck()
     page.wait_for_timeout(500)
     assert not toggle.is_checked()
+
+
+def test_ai_auto_move_waits_for_interval(page, app_url, seeded_game_with_teams):
+    """Auto-move must not fire before the configured interval elapses.
+
+    Regression: the 2 s /api/state poll used to clear the timer flag while
+    the timer was running, so the loop restarted on the next poll and fired
+    a move almost immediately (and then every poll).  With a long interval
+    there must be no trigger-ai-move request during several poll cycles.
+    """
+    seed = seeded_game_with_teams
+    gm = GameMasterPage(page, seed["gm_token"], app_url)
+    gm.goto()
+
+    moves: list[str] = []
+
+    def _record(request):
+        if "/api/quick/trigger-ai-move" in request.url:
+            moves.append(request.url)
+
+    page.on("request", _record)
+
+    # Add an AI and enable auto-move with a long interval.
+    gm.add_ai("purple", "AutoBot")
+    toggle = gm.ai_auto_toggle("purple")
+    toggle.wait_for(state="visible", timeout=5000)
+    gm.ai_auto_interval("purple").fill("300")
+    toggle.check()
+
+    # Observe across several 2 s poll cycles.
+    page.wait_for_timeout(6000)
+
+    assert moves == [], f"auto-move fired before the interval elapsed: {moves}"
