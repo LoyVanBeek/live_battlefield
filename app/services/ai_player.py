@@ -23,6 +23,8 @@ class AIPlayer:
         self.min_bombs_threshold = AI_MIN_BOMBS_THRESHOLD
         self.last_bomb_request = 0
         self.is_paused = False
+        self.auto_move_enabled = False
+        self.auto_move_interval = 60
 
     async def is_active(self, game_state: GameState) -> bool:
         """Check if AI should be active"""
@@ -88,8 +90,6 @@ class AIPlayer:
 
         for row in range(BOARD_SIZE):
             for col in range(BOARD_SIZE):
-                if (row, col) in attacker.bombed_cells:
-                    continue
                 if (row, col) in target.bombed_cells:
                     continue
                 valid_coords.append((row, col))

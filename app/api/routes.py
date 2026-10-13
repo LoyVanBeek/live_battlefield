@@ -279,6 +279,12 @@ class AutoStartOnReadySettings(BaseModel):
     enabled: bool
 
 
+class AIAutoSettings(BaseModel):
+    team_color: str
+    enabled: bool
+    interval: int = 60
+
+
 class QuizQuestionData(BaseModel):
     id: Optional[int] = None
     question_text: str = ""
@@ -1105,12 +1111,15 @@ async def get_game_state(
     teams = []
     for color, team in state.teams.items():
         is_ai = False
+        ai_obj = None
         if color in ai_players:
-            ai = ai_players.get(color)
-            if ai and hasattr(ai, "color") and ai.color == color:
+            ai_obj = ai_players.get(color)
+            if ai_obj and hasattr(ai_obj, "color") and ai_obj.color == color:
                 is_ai = True
         if not is_ai and color in db_ai_colors:
             is_ai = True
+            from app.services.ai_player import get_ai_player
+            ai_obj = get_ai_player(str(game_uuid), color)
 
         token = next((t for t, c in state.team_tokens.items() if c == color), "")
         teams.append(
@@ -1127,6 +1136,8 @@ async def get_game_state(
                 "placed_ship_types": team.placed_ship_types,
                 "is_ai": is_ai,
                 "token": token,
+                "ai_auto_move_enabled": ai_obj.auto_move_enabled if ai_obj else False,
+                "ai_auto_move_interval": ai_obj.auto_move_interval if ai_obj else 60,
             }
         )
 
@@ -1990,10 +2001,58 @@ async def trigger_ai_move(
 
     success = await ai.execute_bomb(db, state, game_id)
     if success:
+        # Reconstruct state after the bomb to check for a winner
+        events = await get_game_events(db, game_uuid)
+        state = GameState.from_events(events)
+        winner = state.get_winner()
+        if winner is not None and state.status == GameStatusField.STARTED:
+            from app.models import update_game_status
+            from app.database import GameStatus
+            end_event = GameEndedEvent(winner=winner.name)
+            new_state, updated_event = end_event.apply(state)
+            await save_event(db, updated_event, game_uuid)
+            await update_game_status(db, game_uuid, GameStatus.ENDED)
+            return {
+                "success": True,
+                "message": f"AI {action.team_color} threw a bomb! 🏆 {winner.name} ({winner.color}) wins!",
+            }
         return {"success": True, "message": f"AI {action.team_color} threw a bomb!"}
     return {
         "success": False,
         "message": f"AI {action.team_color} couldn't throw a bomb (no targets or no bombs)",
+    }
+
+
+@app.post("/api/quick/ai-auto-settings")
+async def set_ai_auto_settings(
+    data: AIAutoSettings,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.services.ai_player import get_ai_player, add_ai_player
+    from app.database import Role
+    from app.models import get_all_players_in_game
+
+    game_uuid = uuid.UUID(game_id)
+    ai = get_ai_player(game_id, data.team_color)
+    if not ai:
+        all_players = await get_all_players_in_game(db, game_uuid)
+        for p in all_players:
+            if p.color == data.team_color and p.role == Role.AI:
+                ai = add_ai_player(game_id, p.color, p.name)
+                break
+
+    if not ai:
+        return {
+            "success": False,
+            "message": f"No AI player with color {data.team_color}",
+        }
+
+    ai.auto_move_enabled = data.enabled
+    ai.auto_move_interval = max(5, data.interval)
+    return {
+        "success": True,
+        "message": f"AI {data.team_color} auto-move {'enabled' if data.enabled else 'disabled'} ({ai.auto_move_interval}s).",
     }
 
 
