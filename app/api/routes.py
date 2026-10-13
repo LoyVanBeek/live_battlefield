@@ -1143,8 +1143,8 @@ async def get_game_state(
                 "placed_ship_types": team.placed_ship_types,
                 "is_ai": is_ai,
                 "token": token,
-                "ai_auto_move_enabled": ai_obj.auto_move_enabled if ai_obj else False,
-                "ai_auto_move_interval": ai_obj.auto_move_interval if ai_obj else 60,
+                "auto_move_enabled": ai_obj.auto_move_enabled if ai_obj else False,
+                "auto_move_interval": ai_obj.auto_move_interval if ai_obj else 60,
             }
         )
 
