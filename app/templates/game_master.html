@@ -1063,11 +1063,12 @@
                         if (aiButtonsContainer) {
                             if (team.is_ai) {
                                 const intervalVal = _aiAutoIntervalValues[team.color] || 60;
+                                const isAuto = _aiAutoTimers[team.color] === 'running';
                                 aiButtonsContainer.innerHTML = `
                                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                         <button class="btn btn-primary" style="font-size:11px;padding:4px 8px;" onclick="triggerAIMove('${team.color}')">⚡ Move</button>
                                         <label style="display:inline-flex;align-items:center;gap:2px;cursor:pointer;font-size:11px;color:#aaa;padding:4px 0;">
-                                            <input type="checkbox" class="ai-auto-toggle" data-color="${team.color}" onchange="toggleAIAuto('${team.color}', this.checked)"> 🤖 Auto
+                                            <input type="checkbox" class="ai-auto-toggle" data-color="${team.color}" onchange="toggleAIAuto('${team.color}', this.checked)" ${isAuto ? 'checked' : ''}> 🤖 Auto
                                         </label>
                                         <input type="number" class="ai-auto-interval" data-color="${team.color}" value="${intervalVal}" min="5" step="5" oninput="_aiAutoIntervalValues['${team.color}']=parseInt(this.value)||60" style="width:52px;padding:4px 6px;font-size:11px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;text-align:center;">
                                         <span style="font-size:11px;color:#888;">s</span>
