@@ -83,6 +83,20 @@ docker compose -f docker-compose.e2e.yml down -v
 ### Architecture
 - `tests_e2e/conftest.py` — Fixtures: `seeded_game` (fresh game via API), `seeded_game_with_teams` (game + 2 teams + ships + locations)
 
+## Running the App Locally
+
+After making ANY change (backend, templates, static files, migrations), rebuild
+and restart the development stack:
+
+```bash
+docker compose up --build -d
+```
+
+The app starts at http://localhost:8000 (the GM page requires an admin token).
+
+For E2E tests, use the dedicated test stack (`docker-compose.e2e.yml`), not the
+development compose — see the E2E section above.
+
 ## Running Lint & Type Checks
 
 Dev dependencies are under `[project.optional-dependencies] dev` in pyproject.toml (PEP 621 extras).
