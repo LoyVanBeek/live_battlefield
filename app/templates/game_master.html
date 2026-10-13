@@ -1021,6 +1021,15 @@
                             });
                         }
                         teamsGrid.appendChild(card);
+                        // Render AI buttons immediately instead of waiting for the next poll
+                        if (team.is_ai) {
+                            const aiContainer = card.querySelector(`#ai-buttons-${team.color}`);
+                            if (aiContainer) {
+                                const intervalVal = _aiAutoIntervalValues[team.color] || team.auto_move_interval || 60;
+                                const isAuto = team.auto_move_enabled || _aiAutoTimers[team.color] === 'running';
+                                _renderAIAutoButtons(aiContainer, team.color, intervalVal, isAuto);
+                            }
+                        }
                     } else {
                         // Update existing card content
                         const nameElement = card.querySelector('.team-name-text');
@@ -1064,17 +1073,7 @@
                             if (team.is_ai) {
                                 const intervalVal = _aiAutoIntervalValues[team.color] || team.auto_move_interval || 60;
                                 const isAuto = team.auto_move_enabled || _aiAutoTimers[team.color] === 'running';
-                                aiButtonsContainer.innerHTML = `
-                                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                        <button class="btn btn-primary" style="font-size:11px;padding:4px 8px;" onclick="triggerAIMove('${team.color}')">⚡ Move</button>
-                                        <label style="display:inline-flex;align-items:center;gap:2px;cursor:pointer;font-size:11px;color:#aaa;padding:4px 0;">
-                                            <input type="checkbox" class="ai-auto-toggle" data-color="${team.color}" onchange="toggleAIAuto('${team.color}', this.checked)" ${isAuto ? 'checked' : ''}> 🤖 Auto
-                                        </label>
-                                        <input type="number" class="ai-auto-interval" data-color="${team.color}" value="${intervalVal}" min="5" step="5" onchange="apiCall('/api/quick/ai-auto-settings', 'POST', {team_color:'${team.color}', enabled:${isAuto}, interval:parseInt(this.value)||60})" oninput="_aiAutoIntervalValues['${team.color}']=parseInt(this.value)||60" style="width:52px;padding:4px 6px;font-size:11px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;text-align:center;">
-                                        <span style="font-size:11px;color:#888;">s</span>
-                                        <button class="btn btn-danger" style="font-size:11px;padding:4px 8px;" onclick="removeAI('${team.color}')">✕ AI</button>
-                                    </div>
-                                `;
+                                _renderAIAutoButtons(aiButtonsContainer, team.color, intervalVal, isAuto);
                             } else {
                                 aiButtonsContainer.innerHTML = '';
                             }
@@ -1369,6 +1368,20 @@
         // --- AI auto-move timer ---
         const _aiAutoTimers = {};
         const _aiAutoIntervalValues = {};
+
+        function _renderAIAutoButtons(container, color, intervalVal, isAuto) {
+            container.innerHTML = `
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <button class="btn btn-primary" style="font-size:11px;padding:4px 8px;" onclick="triggerAIMove('${color}')">⚡ Move</button>
+                    <label style="display:inline-flex;align-items:center;gap:2px;cursor:pointer;font-size:11px;color:#aaa;padding:4px 0;">
+                        <input type="checkbox" class="ai-auto-toggle" data-color="${color}" onchange="toggleAIAuto('${color}', this.checked)" ${isAuto ? 'checked' : ''}> 🤖 Auto
+                    </label>
+                    <input type="number" class="ai-auto-interval" data-color="${color}" value="${intervalVal}" min="5" step="5" onchange="apiCall('/api/quick/ai-auto-settings', 'POST', {team_color:'${color}', enabled:${isAuto}, interval:parseInt(this.value)||60})" oninput="_aiAutoIntervalValues['${color}']=parseInt(this.value)||60" style="width:52px;padding:4px 6px;font-size:11px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;text-align:center;">
+                    <span style="font-size:11px;color:#888;">s</span>
+                    <button class="btn btn-danger" style="font-size:11px;padding:4px 8px;" onclick="removeAI('${color}')">✕ AI</button>
+                </div>
+            `;
+        }
 
         function stopAIAuto(color) {
             if (_aiAutoTimers[color] === undefined) return;
