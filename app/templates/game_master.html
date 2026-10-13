@@ -952,13 +952,14 @@
                     let card = document.getElementById(cardId);
                     
                     const aiIndicator = team.is_ai ? '<span class="ai-badge">🤖 AI</span>' : '';
-                    const destroyedIndicator = team.is_destroyed ? '<span class="destroyed-badge">💀 Eliminated</span>' : '';
+                    const destroyedIndicator = (team.is_destroyed && gameStatus !== 'waiting') ? '<span class="destroyed-badge">💀 Eliminated</span>' : '';
                     const readyIndicator = (gameStatus === 'waiting' && team.has_all_ships && !team.is_destroyed) ? '<span class="ready-badge">✓ Ready</span>' : '';
                     
                     if (!card) {
                         // Create new card
+                        const isDestroyed = team.is_destroyed && gameStatus !== 'waiting';
                         card = document.createElement('div');
-                        card.className = 'team-card' + (team.is_destroyed ? ' destroyed' : '');
+                        card.className = 'team-card' + (isDestroyed ? ' destroyed' : '');
                         card.id = cardId;
                         const canRename = gameStatus === 'waiting' && !team.is_ai;
                         card.innerHTML = `
@@ -1054,19 +1055,20 @@
                         }
 
                         // Update destroyed state
-                        if (team.is_destroyed) {
+                        const isDestroyed = team.is_destroyed && gameStatus !== 'waiting';
+                        if (isDestroyed) {
                             card.classList.add('destroyed');
                         } else {
                             card.classList.remove('destroyed');
                         }
                         const teamNameSpan = card.querySelector('.team-name');
                         let destroyedBadge = card.querySelector('.destroyed-badge');
-                        if (team.is_destroyed && !destroyedBadge) {
+                        if (isDestroyed && !destroyedBadge) {
                             const badge = document.createElement('span');
                             badge.className = 'destroyed-badge';
                             badge.textContent = '💀 Eliminated';
                             teamNameSpan.appendChild(badge);
-                        } else if (!team.is_destroyed && destroyedBadge) {
+                        } else if (!isDestroyed && destroyedBadge) {
                             destroyedBadge.remove();
                         }
 
