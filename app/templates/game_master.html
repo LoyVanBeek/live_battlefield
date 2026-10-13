@@ -1029,9 +1029,8 @@
                                 const isAuto = team.auto_move_enabled || _aiAutoTimers[team.color] === 'running';
                                 _renderAIAutoButtons(aiContainer, team.color, intervalVal, isAuto);
                                 // Start the timer on creation (survives page refresh)
-                                if (team.auto_move_enabled) {
+                                if (team.auto_move_enabled && _aiAutoTimers[team.color] === undefined) {
                                     _aiAutoIntervalValues[team.color] = team.auto_move_interval || 60;
-                                    _aiAutoTimers[team.color] = 'running';
                                     _aiAutoLoop(team.color, (team.auto_move_interval || 60) * 1000);
                                 }
                             }
@@ -1085,11 +1084,9 @@
                             }
                         }
 
-                        // Restore AI auto-move state from server (survives page refresh)
-                        if (team.is_ai && team.auto_move_enabled) {
+                        // Restore AI auto-move state from server (survives page refresh / crashed loops)
+                        if (team.is_ai && team.auto_move_enabled && _aiAutoTimers[team.color] === undefined) {
                             _aiAutoIntervalValues[team.color] = team.auto_move_interval || 60;
-                            // Always restart to recover from crashed loops
-                            _aiAutoTimers[team.color] = 'running';
                             _aiAutoLoop(team.color, (team.auto_move_interval || 60) * 1000);
                         } else if (_aiAutoTimers[team.color] !== undefined) {
                             // Server says auto is off but timer is running — stop it
@@ -1370,7 +1367,7 @@
             if (result) {
                 showToast(result.message, result.success ? 'success' : 'error');
             }
-            loadTeams();
+            await loadTeams();
             return result ? result.success : false;
         }
 
@@ -1401,30 +1398,32 @@
         }
 
         async function _aiAutoLoop(color, intervalMs) {
-            const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
-            if (!toggle || !toggle.checked) return;
-            
-            await new Promise(r => setTimeout(r, intervalMs));
-            
-            const stillOn = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
-            if (!stillOn || !stillOn.checked) return;
-            try {
-                const success = await triggerAIMove(color);
-                if (!success) {
-                    // AI can't move (no bombs / no targets) — stop the timer
-                    // and persist the disabled state so loadTeams doesn't restart it
-                    apiCall('/api/quick/ai-auto-settings', 'POST', {
-                        team_color: color, enabled: false, interval: _aiAutoIntervalValues[color] || 60
-                    });
-                    const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
-                    if (toggle) toggle.checked = false;
-                    delete _aiAutoTimers[color];
-                    return;
+            if (_aiAutoTimers[color] === 'running') return;
+            _aiAutoTimers[color] = 'running';
+
+            while (_aiAutoTimers[color] === 'running') {
+                await new Promise(r => setTimeout(r, intervalMs));
+
+                const stillOn = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
+                if (!stillOn || !stillOn.checked) break;
+
+                try {
+                    const success = await triggerAIMove(color);
+                    if (!success) {
+                        apiCall('/api/quick/ai-auto-settings', 'POST', {
+                            team_color: color, enabled: false,
+                            interval: _aiAutoIntervalValues[color] || 60
+                        });
+                        break;
+                    }
+                } catch (e) {
+                    console.error('AI auto-move loop error', e);
                 }
-            } catch (e) {
-                console.error('AI auto-move loop error', e);
             }
-            _aiAutoLoop(color, intervalMs);
+
+            const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
+            if (toggle) toggle.checked = false;
+            delete _aiAutoTimers[color];
         }
 
         async function toggleAIAuto(color, enabled) {
@@ -1435,7 +1434,6 @@
             });
             _aiAutoIntervalValues[color] = interval;
             if (enabled) {
-                _aiAutoTimers[color] = 'running';
                 _aiAutoLoop(color, interval * 1000);
             } else {
                 delete _aiAutoTimers[color];
