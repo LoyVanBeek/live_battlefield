@@ -840,6 +840,12 @@
                 autoStartCheck.checked = !!status.auto_start_on_ready;
                 autoStartCheck.disabled = gameStatus !== 'waiting';
             }
+            // Stop AI auto-timers when the game is no longer running
+            if (gameStatus !== 'started') {
+                for (const color of Object.keys(_aiAutoTimers)) {
+                    stopAIAuto(color);
+                }
+            }
         }
 
         async function loadPublicBoards() {
@@ -1057,8 +1063,16 @@
                         if (aiButtonsContainer) {
                             if (team.is_ai) {
                                 aiButtonsContainer.innerHTML = `
-                                    <button class="btn btn-primary" style="margin-top: 4px; margin-right: 4px;font-size:11px;" onclick="triggerAIMove('${team.color}')">⚡ Move</button>
-                                    <button class="btn btn-danger" style="margin-top: 4px;font-size:11px;" onclick="removeAI('${team.color}')">✕ AI</button>
+                                    <div style="display:flex;align-items:center;gap:4px;">
+                                        <button class="btn btn-primary" style="font-size:11px;padding:4px 8px;" onclick="triggerAIMove('${team.color}')">⚡ Move</button>
+                                        <button class="btn btn-danger" style="font-size:11px;padding:4px 8px;" onclick="removeAI('${team.color}')">✕ AI</button>
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:#aaa;">
+                                        <label style="display:inline-flex;align-items:center;gap:2px;cursor:pointer;">
+                                            <input type="checkbox" class="ai-auto-toggle" data-color="${team.color}" onchange="toggleAIAuto('${team.color}', this.checked)"> 🤖 Auto
+                                        </label>
+                                        <input type="number" class="ai-auto-interval" data-color="${team.color}" value="60" min="5" step="5" style="width:50px;padding:2px;font-size:11px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;text-align:center;"> s
+                                    </div>
                                 `;
                             } else {
                                 aiButtonsContainer.innerHTML = '';
@@ -1322,6 +1336,7 @@
         }
 
         async function removeAI(color) {
+            stopAIAuto(color);
             if (!confirm(`Remove AI player ${color}?`)) return;
             
             const result = await apiCall('/api/execute', 'POST', {
@@ -1337,6 +1352,40 @@
             const result = await apiCall('/api/quick/trigger-ai-move', 'POST', { team_color: color });
             showToast(result.message, result.success ? 'success' : 'error');
             loadTeams();
+        }
+
+        // --- AI auto-move timer ---
+        const _aiAutoTimers = {};
+
+        function stopAIAuto(color) {
+            if (_aiAutoTimers[color] === undefined) return;
+            clearTimeout(_aiAutoTimers[color]);
+            delete _aiAutoTimers[color];
+            const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
+            if (toggle) toggle.checked = false;
+        }
+
+        async function _aiAutoLoop(color, intervalMs) {
+            const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
+            if (!toggle || !toggle.checked) return;
+            
+            await new Promise(r => setTimeout(r, intervalMs));
+            
+            if (!toggle || !toggle.checked) return;
+            await triggerAIMove(color);
+            _aiAutoLoop(color, intervalMs);
+        }
+
+        function toggleAIAuto(color, enabled) {
+            if (enabled) {
+                if (_aiAutoTimers[color] !== undefined) return;
+                const intervalInput = document.querySelector(`.ai-auto-interval[data-color="${color}"]`);
+                const seconds = Math.max(5, parseInt(intervalInput?.value || '60', 10) || 60);
+                _aiAutoTimers[color] = 'running';
+                _aiAutoLoop(color, seconds * 1000);
+            } else {
+                stopAIAuto(color);
+            }
         }
 
         async function pauseAllAI() {

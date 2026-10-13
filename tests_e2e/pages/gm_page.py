@@ -22,6 +22,12 @@ class GameMasterPage:
     def pending_badge(self, color: str):
         return self.team_card(color).locator(".pending-badge")
 
+    def ai_auto_toggle(self, color: str):
+        return self.team_card(color).locator(".ai-auto-toggle")
+
+    def ai_auto_interval(self, color: str):
+        return self.team_card(color).locator(".ai-auto-interval")
+
     def destroyed_badge(self, color: str):
         return self.team_card(color).locator(".destroyed-badge")
 

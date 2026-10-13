@@ -232,3 +232,37 @@ def test_pending_badge_on_team_without_ships(page, app_url, seeded_game):
     ready = gm.ready_badge("red")
     ready.wait_for(state="visible", timeout=5000)
     assert "Ready" in ready.text_content()
+
+
+def test_ai_auto_move_controls_visible(page, app_url, seeded_game_with_teams):
+    """AI players have the auto-move toggle and interval input visible."""
+    import httpx
+    from tests_e2e.config import HTTPX_TIMEOUT
+
+    seed = seeded_game_with_teams
+    gm = GameMasterPage(page, seed["gm_token"], app_url)
+    gm.goto()
+
+    # No AI yet — controls should not exist.
+    assert gm.ai_auto_toggle("purple").count() == 0
+
+    # Add an AI player.
+    gm.add_ai("purple", "AutoBot")
+    toggle = gm.ai_auto_toggle("purple")
+    toggle.wait_for(state="visible", timeout=5000)
+    assert toggle.is_visible()
+
+    interval = gm.ai_auto_interval("purple")
+    assert interval.is_visible()
+    # Default interval is 60 s.
+    assert interval.input_value() == "60"
+
+    # Toggle on, then check the state persists.
+    toggle.check()
+    page.wait_for_timeout(500)
+    assert toggle.is_checked()
+
+    # Toggle off.
+    toggle.uncheck()
+    page.wait_for_timeout(500)
+    assert not toggle.is_checked()
