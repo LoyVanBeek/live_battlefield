@@ -1062,16 +1062,16 @@
                         const aiButtonsContainer = card.querySelector(`#ai-buttons-${team.color}`);
                         if (aiButtonsContainer) {
                             if (team.is_ai) {
+                                const intervalVal = _aiAutoIntervalValues[team.color] || 60;
                                 aiButtonsContainer.innerHTML = `
-                                    <div style="display:flex;align-items:center;gap:4px;">
+                                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                         <button class="btn btn-primary" style="font-size:11px;padding:4px 8px;" onclick="triggerAIMove('${team.color}')">⚡ Move</button>
-                                        <button class="btn btn-danger" style="font-size:11px;padding:4px 8px;" onclick="removeAI('${team.color}')">✕ AI</button>
-                                    </div>
-                                    <div style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:#aaa;">
-                                        <label style="display:inline-flex;align-items:center;gap:2px;cursor:pointer;">
+                                        <label style="display:inline-flex;align-items:center;gap:2px;cursor:pointer;font-size:11px;color:#aaa;">
                                             <input type="checkbox" class="ai-auto-toggle" data-color="${team.color}" onchange="toggleAIAuto('${team.color}', this.checked)"> 🤖 Auto
                                         </label>
-                                        <input type="number" class="ai-auto-interval" data-color="${team.color}" value="60" min="5" step="5" style="width:50px;padding:2px;font-size:11px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;text-align:center;"> s
+                                        <input type="number" class="ai-auto-interval" data-color="${team.color}" value="${intervalVal}" min="5" step="5" oninput="_aiAutoIntervalValues['${team.color}']=parseInt(this.value)||60" style="width:48px;padding:2px;font-size:11px;border-radius:3px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;text-align:center;">
+                                        <span style="font-size:11px;color:#888;">s</span>
+                                        <button class="btn btn-danger" style="font-size:11px;padding:4px 8px;" onclick="removeAI('${team.color}')">✕ AI</button>
                                     </div>
                                 `;
                             } else {
@@ -1356,11 +1356,12 @@
 
         // --- AI auto-move timer ---
         const _aiAutoTimers = {};
+        const _aiAutoIntervalValues = {};
 
         function stopAIAuto(color) {
             if (_aiAutoTimers[color] === undefined) return;
-            clearTimeout(_aiAutoTimers[color]);
             delete _aiAutoTimers[color];
+            delete _aiAutoIntervalValues[color];
             const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
             if (toggle) toggle.checked = false;
         }
