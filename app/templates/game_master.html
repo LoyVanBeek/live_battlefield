@@ -1026,12 +1026,12 @@
                             const aiContainer = card.querySelector(`#ai-buttons-${team.color}`);
                             if (aiContainer) {
                                 const intervalVal = _aiAutoIntervalValues[team.color] || team.auto_move_interval || 60;
-                                const isAuto = team.auto_move_enabled || _aiAutoTimers[team.color] === 'running';
+                                const isAuto = team.auto_move_enabled || _aiAutoTimers[team.color] !== undefined;
                                 _renderAIAutoButtons(aiContainer, team.color, intervalVal, isAuto);
                                 // Start the timer on creation (survives page refresh)
                                 if (team.auto_move_enabled && _aiAutoTimers[team.color] === undefined) {
                                     _aiAutoIntervalValues[team.color] = team.auto_move_interval || 60;
-                                    _aiAutoLoop(team.color, (team.auto_move_interval || 60) * 1000);
+                                    _scheduleAIMove(team.color);
                                 }
                             }
                         }
@@ -1077,19 +1077,20 @@
                         if (aiButtonsContainer) {
                             if (team.is_ai) {
                                 const intervalVal = _aiAutoIntervalValues[team.color] || team.auto_move_interval || 60;
-                                const isAuto = team.auto_move_enabled || _aiAutoTimers[team.color] === 'running';
+                                const isAuto = team.auto_move_enabled || _aiAutoTimers[team.color] !== undefined;
                                 _renderAIAutoButtons(aiButtonsContainer, team.color, intervalVal, isAuto);
                             } else {
                                 aiButtonsContainer.innerHTML = '';
                             }
                         }
 
-                        // Restore AI auto-move state from server (survives page refresh / crashed loops)
+                        // Restore AI auto-move state from server (survives page refresh / server restart)
                         if (team.is_ai && team.auto_move_enabled && _aiAutoTimers[team.color] === undefined) {
                             _aiAutoIntervalValues[team.color] = team.auto_move_interval || 60;
-                            _aiAutoLoop(team.color, (team.auto_move_interval || 60) * 1000);
-                        } else if (_aiAutoTimers[team.color] !== undefined) {
-                            // Server says auto is off but timer is running — stop it
+                            _scheduleAIMove(team.color);
+                        } else if (team.is_ai && !team.auto_move_enabled && _aiAutoTimers[team.color] !== undefined) {
+                            // Server says auto is off but a timer is pending — stop it
+                            clearTimeout(_aiAutoTimers[team.color]);
                             delete _aiAutoTimers[team.color];
                         }
 
@@ -1391,38 +1392,49 @@
 
         function stopAIAuto(color) {
             if (_aiAutoTimers[color] === undefined) return;
+            clearTimeout(_aiAutoTimers[color]);
             delete _aiAutoTimers[color];
             delete _aiAutoIntervalValues[color];
             const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
             if (toggle) toggle.checked = false;
         }
 
-        async function _aiAutoLoop(color, intervalMs) {
-            if (_aiAutoTimers[color] === 'running') return;
-            _aiAutoTimers[color] = 'running';
+        // Start (or restart) the single pending timer for this AI.
+        // Timers only run while the game is actually in progress.
+        function _scheduleAIMove(color) {
+            if (gameStatus !== 'started') return;
+            const intervalMs = Math.max(5, _aiAutoIntervalValues[color] || 60) * 1000;
+            clearTimeout(_aiAutoTimers[color]);
+            _aiAutoTimers[color] = setTimeout(() => _onAITimerFire(color), intervalMs);
+        }
 
+        // Called only when the timer fires. This is the single place that
+        // schedules the next timer, and only when auto-mode is still on and
+        // the AI actually had enough bombs/targets.
+        async function _onAITimerFire(color) {
+            if (_aiAutoTimers[color] === undefined) return;  // cancelled
+            _aiAutoTimers[color] = 'running';  // keep the slot truthy so the poll won't restart it
+
+            let result = null;
             try {
-                const result = await apiCall('/api/quick/trigger-ai-move', 'POST', { team_color: color });
+                result = await apiCall('/api/quick/trigger-ai-move', 'POST', { team_color: color });
                 if (result) {
                     showToast(result.message, result.success ? 'success' : 'error');
                 }
-                await loadTeams();
-
-                // Schedule next move at the configured interval only if
-                // auto-mode is still on AND the AI had enough bombs/targets.
-                const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
-                if (toggle && toggle.checked && result && result.success) {
-                    setTimeout(() => _aiAutoLoop(color, intervalMs), intervalMs);
-                } else {
-                    await apiCall('/api/quick/ai-auto-settings', 'POST', {
-                        team_color: color, enabled: false,
-                        interval: _aiAutoIntervalValues[color] || 60
-                    });
-                    if (toggle) toggle.checked = false;
-                    delete _aiAutoTimers[color];
-                }
             } catch (e) {
-                console.error('AI auto-move loop error', e);
+                console.error('AI auto-move error', e);
+            }
+            await loadTeams();
+
+            const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
+            if (toggle && toggle.checked && result && result.success) {
+                _scheduleAIMove(color);
+            } else {
+                await apiCall('/api/quick/ai-auto-settings', 'POST', {
+                    team_color: color, enabled: false,
+                    interval: _aiAutoIntervalValues[color] || 60
+                });
+                if (toggle) toggle.checked = false;
                 delete _aiAutoTimers[color];
             }
         }
@@ -1435,8 +1447,9 @@
             });
             _aiAutoIntervalValues[color] = interval;
             if (enabled) {
-                _aiAutoLoop(color, interval * 1000);
+                _scheduleAIMove(color);
             } else {
+                clearTimeout(_aiAutoTimers[color]);
                 delete _aiAutoTimers[color];
                 const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
                 if (toggle) toggle.checked = false;
@@ -1445,15 +1458,14 @@
 
         async function aiAutoIntervalChanged(color, input) {
             const interval = Math.max(5, parseInt(input.value) || 60);
-            const enabled = _aiAutoTimers[color] === 'running';
+            const enabled = _aiAutoTimers[color] !== undefined;
             await apiCall('/api/quick/ai-auto-settings', 'POST', {
                 team_color: color, enabled: enabled, interval: interval
             });
             _aiAutoIntervalValues[color] = interval;
             // Restart timer with new interval if auto is running
             if (enabled) {
-                _aiAutoTimers[color] = 'running';
-                _aiAutoLoop(color, interval * 1000);
+                _scheduleAIMove(color);
             }
         }
 
