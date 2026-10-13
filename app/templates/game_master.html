@@ -1412,6 +1412,10 @@
                 const success = await triggerAIMove(color);
                 if (!success) {
                     // AI can't move (no bombs / no targets) — stop the timer
+                    // and persist the disabled state so loadTeams doesn't restart it
+                    apiCall('/api/quick/ai-auto-settings', 'POST', {
+                        team_color: color, enabled: false, interval: _aiAutoIntervalValues[color] || 60
+                    });
                     const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
                     if (toggle) toggle.checked = false;
                     delete _aiAutoTimers[color];
