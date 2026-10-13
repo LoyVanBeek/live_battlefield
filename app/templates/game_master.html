@@ -1412,10 +1412,7 @@
                 // auto-mode is still on AND the AI had enough bombs/targets.
                 const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
                 if (toggle && toggle.checked && result && result.success) {
-                    _aiAutoTimers[color] = setTimeout(
-                        () => _aiAutoLoop(color, intervalMs),
-                        intervalMs
-                    );
+                    setTimeout(() => _aiAutoLoop(color, intervalMs), intervalMs);
                 } else {
                     await apiCall('/api/quick/ai-auto-settings', 'POST', {
                         team_color: color, enabled: false,
