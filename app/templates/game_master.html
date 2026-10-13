@@ -1371,6 +1371,7 @@
                 showToast(result.message, result.success ? 'success' : 'error');
             }
             loadTeams();
+            return result ? result.success : false;
         }
 
         // --- AI auto-move timer ---
@@ -1408,7 +1409,14 @@
             const stillOn = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
             if (!stillOn || !stillOn.checked) return;
             try {
-                await triggerAIMove(color);
+                const success = await triggerAIMove(color);
+                if (!success) {
+                    // AI can't move (no bombs / no targets) — stop the timer
+                    const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
+                    if (toggle) toggle.checked = false;
+                    delete _aiAutoTimers[color];
+                    return;
+                }
             } catch (e) {
                 console.error('AI auto-move loop error', e);
             }
