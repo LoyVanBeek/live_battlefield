@@ -199,6 +199,15 @@
             font-size: 12px;
             font-weight: normal;
         }
+        .pending-badge {
+            margin-left: 8px;
+            background: #ff9800;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: normal;
+        }
         .team-card-header {
             display: flex;
             align-items: center;
@@ -954,6 +963,7 @@
                     const aiIndicator = team.is_ai ? '<span class="ai-badge">🤖 AI</span>' : '';
                     const destroyedIndicator = (team.is_destroyed && gameStatus !== 'waiting') ? '<span class="destroyed-badge">💀 Eliminated</span>' : '';
                     const readyIndicator = (gameStatus === 'waiting' && team.has_all_ships && !team.is_destroyed) ? '<span class="ready-badge">✓ Ready</span>' : '';
+                    const pendingIndicator = (gameStatus === 'waiting' && team.ships_placed === 0) ? '<span class="pending-badge">⏳ Waiting</span>' : '';
                     
                     if (!card) {
                         // Create new card
@@ -968,6 +978,7 @@
                                     <span class="team-color-dot" style="background: ${team.color}"></span>
                                     <span class="team-name-text" id="team-name-label-${team.color}" style="${canRename ? 'cursor:pointer;border-bottom:1px dashed #888;' : ''}">${esc(team.name)}</span>
                                     <span class="trophy-icon" id="trophy-${team.color}" style="display:none">🏆</span>
+                                    ${pendingIndicator}
                                     ${readyIndicator}
                                     ${aiIndicator}
                                     ${destroyedIndicator}
@@ -1087,6 +1098,23 @@
                             }
                         } else if (!shouldShowReady && readyBadge) {
                             readyBadge.remove();
+                        }
+
+                        // Update pending badge
+                        let pendingBadge = card.querySelector('.pending-badge');
+                        const shouldShowPending = gameStatus === 'waiting' && team.ships_placed === 0;
+                        if (shouldShowPending && !pendingBadge) {
+                            const badge = document.createElement('span');
+                            badge.className = 'pending-badge';
+                            badge.textContent = '⏳ Waiting';
+                            const trophyEl = card.querySelector('.trophy-icon');
+                            if (trophyEl) {
+                                trophyEl.insertAdjacentElement('afterend', badge);
+                            } else {
+                                teamNameSpan.appendChild(badge);
+                            }
+                        } else if (!shouldShowPending && pendingBadge) {
+                            pendingBadge.remove();
                         }
 
                         // Trophy icon on winning team

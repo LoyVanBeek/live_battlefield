@@ -212,3 +212,23 @@ def test_eliminated_badge_on_destroyed_team(page, app_url, seeded_game_with_team
     badge = gm.destroyed_badge("blue")
     badge.wait_for(state="visible", timeout=5000)
     assert "Eliminated" in badge.text_content()
+
+
+def test_pending_badge_on_team_without_ships(page, app_url, seeded_game):
+    """A team that has joined but placed zero ships shows the ⏳ Waiting badge."""
+    gm = GameMasterPage(page, seeded_game["gm_token"], app_url)
+    gm.goto()
+    gm.join_team("red", "No Ships Yet")
+
+    badge = gm.pending_badge("red")
+    badge.wait_for(state="visible", timeout=5000)
+    assert "Waiting" in badge.text_content()
+
+    # After placing all ships the pending badge disappears and ready appears.
+    gm.auto_place_all_ships()
+    page.wait_for_timeout(1000)
+
+    assert gm.pending_badge("red").count() == 0
+    ready = gm.ready_badge("red")
+    ready.wait_for(state="visible", timeout=5000)
+    assert "Ready" in ready.text_content()

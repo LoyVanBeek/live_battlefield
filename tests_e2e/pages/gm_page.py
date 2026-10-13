@@ -19,6 +19,9 @@ class GameMasterPage:
     def ready_badge(self, color: str):
         return self.team_card(color).locator(".ready-badge")
 
+    def pending_badge(self, color: str):
+        return self.team_card(color).locator(".pending-badge")
+
     def destroyed_badge(self, color: str):
         return self.team_card(color).locator(".destroyed-badge")
 
