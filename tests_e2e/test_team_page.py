@@ -136,3 +136,94 @@ def test_map_link_in_redeem_form(page, app_url, admin_token, seeded_game_with_te
 
     assert link.get_attribute("href") == f"/map?game_id={game_id}"
     assert link.get_attribute("target") == "_blank"
+
+
+def _add_team_with_ships(client, gm_token: str, color: str, name: str) -> str:
+    """Join a team via the API and place all of its ships; return its token."""
+    client.post(
+        "/api/execute",
+        params={"gm_token": gm_token},
+        json={"team_color": color, "command": "join", "args": {"name": name}},
+    )
+    state = client.get("/api/state", params={"gm_token": gm_token}).json()
+    token = next(t for t in state["teams"] if t["color"] == color)["token"]
+    for _ in range(20):
+        client.post(
+            "/api/quick/place_all_ships",
+            params={"team_token": token},
+            json={"team_color": color},
+        )
+        status = client.get("/api/game-status", params={"gm_token": gm_token}).json()
+        if status.get("teams_with_all_ships", 0) >= len(state["teams"]):
+            break
+    return token
+
+
+def _sink_team(client, gm_token: str, attacker_token: str, attacker_color: str, target_color: str) -> None:
+    """Bomb every ship cell of the target team until it is eliminated."""
+    grid = client.get(
+        f"/api/board/{target_color}/private.json",
+        params={"gm_token": gm_token},
+    ).json()["grid"]
+    ship_cells = [
+        (ri, ci) for ri in range(10) for ci in range(10) if grid[ri][ci].get("has_ship")
+    ]
+    state = client.get("/api/state", params={"gm_token": gm_token}).json()
+    attacker = next(t for t in state["teams"] if t["color"] == attacker_color)
+    if attacker["bombs"] < len(ship_cells):
+        client.post(
+            "/api/quick/add_bombs",
+            params={"gm_token": gm_token},
+            json={"team_color": attacker_color, "count": len(ship_cells) + 5},
+        )
+    for ri, ci in ship_cells:
+        client.post(
+            "/api/execute",
+            params={"team_token": attacker_token},
+            json={
+                "team_color": attacker_color,
+                "command": "bomb",
+                "args": {"target": target_color, "coordinate": f"{chr(ci + 65)}{ri + 1}"},
+            },
+        )
+
+
+def test_eliminated_indicator_on_team_pages(page, app_url, seeded_game_with_teams):
+    """A sunk team shows 💀 on its own page and on the opponents' view."""
+    seed = seeded_game_with_teams
+    gm_token = seed["gm_token"]
+
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        # Third team so the game keeps running after blue is eliminated.
+        _add_team_with_ships(client, gm_token, "green", "Green Team")
+
+        resp = client.post("/api/quick/start-game", params={"gm_token": gm_token})
+        assert resp.json().get("success") is True, resp.text
+
+        _sink_team(
+            client,
+            gm_token,
+            seed["teams"]["red"]["token"],
+            "red",
+            "blue",
+        )
+
+    # The eliminated team's own page shows the header badge and dims its board.
+    blue = TeamPage(page, seed["team_urls"]["blue"], app_url)
+    blue.goto()
+    self_badge = blue.self_eliminated_badge()
+    self_badge.wait_for(state="visible", timeout=15000)
+    assert "Eliminated" in self_badge.text_content()
+    assert "eliminated" in (blue.private_board().get_attribute("class") or "")
+
+    # An opponent sees blue badged on its public board and flagged in the target list.
+    red = TeamPage(page, seed["team_urls"]["red"], app_url)
+    red.goto()
+    public_badge = red.public_board_eliminated_badge("blue")
+    public_badge.wait_for(state="visible", timeout=15000)
+    assert "Eliminated" in public_badge.text_content()
+    assert "eliminated" in (red.public_board_item("blue").get_attribute("class") or "")
+
+    option = red.target_team_option("blue")
+    option.wait_for(state="attached", timeout=15000)
+    assert "💀" in (option.text_content() or "")

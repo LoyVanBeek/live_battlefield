@@ -149,3 +149,21 @@ class TeamPage:
     def get_ship_placed_count(self):
         text = self.page.locator("#ship-count").text_content()
         return int(text) if text and text != "-" else 0
+
+    # --- Game-state indicators ---
+
+    def self_eliminated_badge(self):
+        """Header badge shown when this team has lost all its ships."""
+        return self.page.locator("#eliminated-badge")
+
+    def private_board(self):
+        return self.page.locator("#private-board")
+
+    def public_board_item(self, color: str):
+        return self.page.locator(f"#public-board-item-{color}")
+
+    def public_board_eliminated_badge(self, color: str):
+        return self.public_board_item(color).locator(".eliminated-badge")
+
+    def target_team_option(self, color: str):
+        return self.page.locator(f"#target-team option[value='{color}']")
