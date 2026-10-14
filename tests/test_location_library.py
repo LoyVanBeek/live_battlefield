@@ -301,3 +301,29 @@ class TestLocationSets:
             assert response.json()["locations"][0]["code"] == "ABC"
         finally:
             app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# clear-locations emits removal events (event-derived codes must not go stale)
+# ---------------------------------------------------------------------------
+
+
+class TestClearLocationsState:
+    def test_clear_locations_emits_removal_events(self):
+        from app.api.routes import app, verify_gm_token
+
+        app.dependency_overrides[verify_gm_token] = lambda: GAME_ID
+        loc1 = MagicMock(number=1, bomb_value=5)
+        loc2 = MagicMock(number=2, bomb_value=7)
+        try:
+            with patch("app.models.get_game_locations", new_callable=AsyncMock, return_value=[loc1, loc2]):
+                with patch("app.models.delete_all_locations", new_callable=AsyncMock, return_value=2):
+                    with patch("app.api.routes.save_event", new_callable=AsyncMock) as mock_save:
+                        response = TestClient(app).post("/api/quick/clear-locations")
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.json()["success"] is True
+        assert mock_save.await_count == 2
+        numbers = sorted(call.args[1].number for call in mock_save.await_args_list)
+        assert numbers == [1, 2]

@@ -3222,10 +3222,23 @@ async def clear_locations(
     db: AsyncSession = Depends(get_api_db),
     game_id: str = Depends(verify_gm_token),
 ):
-    from app.models import delete_all_locations
+    from app.models import delete_all_locations, get_game_locations
+    from app.events.models import LocationRemovedEvent
 
     game_uuid = uuid.UUID(game_id)
+    existing = await get_game_locations(db, game_uuid)
+    # Capture before the delete expires these rows.
+    removed = [(loc.number, loc.bomb_value) for loc in existing]
     count = await delete_all_locations(db, game_uuid)
+
+    # Codes are event-sourced (state.location_codes): without removal events a
+    # cleared location's code would stay redeemable.
+    for number, bomb_value in removed:
+        await save_event(
+            db,
+            LocationRemovedEvent(number=number, bomb_value=bomb_value),
+            game_uuid,
+        )
 
     return {
         "success": True,
