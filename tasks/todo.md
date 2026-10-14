@@ -35,12 +35,18 @@ Semantics locked with the user:
 - [x] E2E `tests_e2e/test_location_quiz.py` + POM helpers (3 tests)
 - [x] `uv run ty check`, `uv run pytest tests/`, E2E, deploy, atomic commits
 
-## Bonus fix
+## Bonus fixes
 - [x] Auto-start race: `asyncio.ensure_future(_auto_start_if_ready(db, ...))` shared the
       request session, which `get_api_db` closes on response. Added
       `_auto_start_if_ready_detached(game_uuid)` that opens its own session; used by the
       `place` command and `quick_place_all_ships`. This was causing a deterministic
       `InterfaceError: another operation is in progress` during E2E ship placement.
+- [x] Quiz cleanup on removal: `location_quiz_questions` are keyed by
+      `(game_id, location_number)`. Without cleanup, the `game_id` FK blocked deleting a
+      game that had a location quiz, and a removed location's questions could attach to a
+      later location reusing the number. Added `delete_location_quiz_questions`, called
+      from `delete_all_locations` (game delete / reset / clear-locations) and the
+      single-location remove endpoint.
 
 ## Review
 - `uv run ty check` — All checks passed (repo-wide)
@@ -51,3 +57,8 @@ Semantics locked with the user:
   and `source_url` are stripped until the team has answered that question.
 - `both` mode verified to reward the code (`TestCodeCommandModeGating`) and the quiz
   (`TestLocationQuizCommand.test_both_mode_location_offers_the_quiz`) independently.
+- E2E ran green (76 passed) on a **fresh** test DB. Note: the long-lived test volume
+  accumulates quiz-library templates, and `AdminDashboardPage.game_rows()` matches
+  `.game-row`, a class shared with library cards, so `test_select_all_toggles_all`
+  flakes (checked < rows) once templates pile up. Recreate the volume with
+  `docker compose -f docker-compose.e2e.yml down -v` for a clean run.
