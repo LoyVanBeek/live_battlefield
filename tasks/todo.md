@@ -24,3 +24,27 @@ Decisions (confirmed with the user):
 
 ## Related fix
 - [x] `clear-locations` emits removal events (stale `location_codes` fix)
+
+## Results
+
+Local `alembic upgrade head` creates all five library tables. A dev-stack
+smoke test (create game → locations + quiz + mode `both` → save set →
+apply to a second game) restored the same codes, modes and quiz JSON.
+
+Verified, in the order CI runs them:
+
+1. `uv run ty check` — pass
+2. `uv run pytest tests/` — 305 pass (19 new library tests)
+3. `uvx pip-audit` against `uv export ...` — no known vulnerabilities
+4. `docker compose -f docker-compose.e2e.yml run --rm test-e2e` —
+   83 pass (6 new library E2E tests)
+
+Note: locally `--video=on` failed with `PermissionError` writing
+`./test-results` (root-owned mount); running the test-e2e container with
+`--user root` fixed it. That is an environment issue, not the change.
+
+Commits:
+- `cbfb36f` — feature: migration 015, models, routes, UI, tests
+- `b29560f` — fix: `clear-locations` removal events
+
+Pushed `feature/quiz_at_locations` to `origin`.
