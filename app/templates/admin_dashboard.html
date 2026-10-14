@@ -64,6 +64,18 @@
         .game-row .status.waiting { color: #ff9800; }
         .game-row .status.started { color: #4caf50; }
         .game-row .status.ended { color: #f44336; }
+        .library-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: #0f3460;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .library-row .game-info { flex: 1; min-width: 0; }
+        .library-row .name { font-size: 16px; font-weight: bold; }
+        .library-row .status { font-size: 13px; color: #888; }
         .toast {
             position: fixed; bottom: 20px; right: 20px;
             padding: 15px 25px; border-radius: 8px;
@@ -127,6 +139,44 @@
                 <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap;">
                     <button class="btn btn-primary" onclick="libraryEditor.addQuestion()">+ Add Question</button>
                 </div>
+            </div>
+        </div>
+
+        <div class="section" id="location-quiz-library-section">
+            <h2>📍 Location Quiz Library</h2>
+            <p style="color: #888; margin-bottom: 10px;">Save location check-in quizzes ahead of time and reuse them on any location. Saving under an existing name overwrites it. In a game's locations page, open a location's quiz and pick a saved quiz to load.</p>
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
+                <button class="btn btn-success" id="lql-new-btn" onclick="newLocationLibraryQuiz()">➕ New</button>
+            </div>
+            <div id="location-quiz-library-list" style="margin-bottom: 10px;">
+                <p style="color: #888;">Loading...</p>
+            </div>
+            <div id="location-quiz-library-editor" style="display: none; border-top: 1px solid #0f3460; padding-top: 15px;">
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                    <label style="color: #aaa; font-size: 14px; white-space: nowrap;">Quiz name:</label>
+                    <input type="text" id="location-quiz-library-name" placeholder="e.g. Museum check-in" style="flex: 1;">
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary" onclick="locationLibraryEditor.rebalance()" style="background:#0f3460;color:#eee;">Rebalance</button>
+                    <button class="btn btn-success" onclick="saveLocationLibraryQuiz()">Save Quiz</button>
+                    <button class="btn btn-primary" onclick="locationLibraryEditor.exportJSON('location_quiz.json')">⬇ Export JSON</button>
+                    <button class="btn btn-primary" onclick="document.getElementById('location-quiz-library-import-input').click()">⬆ Import JSON</button>
+                    <input type="file" id="location-quiz-library-import-input" accept=".json" style="display: none" onchange="locationLibraryEditor.importFile(event)">
+                    <label style="color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 4px;">Total budget <input type="number" id="location-quiz-library-total" min="0" value="0" style="width: 70px;"></label>
+                </div>
+                <div id="location-quiz-library-warning-banner" style="display: none; background: rgba(255,82,82,.12); border: 1px solid #ff5252; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #ff8a80; margin-bottom: 10px;"></div>
+                <div id="location-quiz-library-questions-list"></div>
+                <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="locationLibraryEditor.addQuestion()">+ Add Question</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="section" id="location-sets-section">
+            <h2>📍 Location Sets</h2>
+            <p style="color: #888; margin-bottom: 10px;">Saved layouts (positions, codes, bombs, modes and quizzes). Save the current locations from a game's locations page, then apply them to another game.</p>
+            <div id="location-sets-list">
+                <p style="color: #888;">Loading...</p>
             </div>
         </div>
 
@@ -381,9 +431,136 @@
             await loadQuizTemplates();
         }
 
+        // --- Location Quiz Library ---
+        let locationLibraryEditor = null;
+        let editingLocationTemplateId = null;
+
+        function initLocationLibraryEditor() {
+            if (locationLibraryEditor) return;
+            locationLibraryEditor = createQuizEditor({
+                listId: 'location-quiz-library-questions-list',
+                totalId: 'location-quiz-library-total',
+                warningId: 'location-quiz-library-warning-banner',
+                addAnswerLabel: 'Add Answer',
+                toast: showToast,
+            });
+        }
+
+        async function loadLocationQuizTemplates() {
+            const data = await apiCall('/api/location-quiz-templates');
+            if (!data) return;
+            const templates = data.templates || [];
+            const list = document.getElementById('location-quiz-library-list');
+            if (templates.length === 0) {
+                list.innerHTML = '<p style="color: #888;">No saved location quizzes yet. Click ➕ New.</p>';
+            } else {
+                list.innerHTML = templates.map(t =>
+                    '<div class="library-row" data-location-template-id="' + t.id + '" data-name="' + esc(t.name) + '">' +
+                    '<div class="game-info"><div class="name">' + esc(t.name) + '</div>' +
+                    '<div class="status">' + t.question_count + ' question(s) — ' + t.total_bombs + ' 💣 total</div></div>' +
+                    '<div style="display:flex;gap:8px;">' +
+                        '<button class="btn btn-primary" onclick="editLocationLibraryQuiz(' + t.id + ')">✏️ Edit</button>' +
+                        '<button class="btn btn-danger" onclick="deleteLocationLibraryQuiz(' + t.id + ')">🗑️ Delete</button>' +
+                    '</div></div>'
+                ).join('');
+            }
+        }
+
+        function newLocationLibraryQuiz() {
+            initLocationLibraryEditor();
+            editingLocationTemplateId = null;
+            document.getElementById('location-quiz-library-name').value = '';
+            locationLibraryEditor.setQuestions([]);
+            document.getElementById('location-quiz-library-editor').style.display = 'block';
+        }
+
+        async function editLocationLibraryQuiz(id) {
+            if (!id) { showToast('Pick a quiz to edit.', 'error'); return; }
+            const data = await apiCall('/api/location-quiz-templates/' + id);
+            if (!data || !data.success || !data.template) {
+                showToast((data && data.message) || 'Could not load quiz.', 'error');
+                return;
+            }
+            initLocationLibraryEditor();
+            editingLocationTemplateId = data.template.id;
+            document.getElementById('location-quiz-library-name').value = data.template.name;
+            locationLibraryEditor.setQuestions(data.template.questions || []);
+            document.getElementById('location-quiz-library-editor').style.display = 'block';
+        }
+
+        async function saveLocationLibraryQuiz() {
+            initLocationLibraryEditor();
+            const name = document.getElementById('location-quiz-library-name').value.trim();
+            if (!name) { showToast('Name is required.', 'error'); return; }
+            const body = { name: name, questions: locationLibraryEditor.getQuestions() };
+            if (editingLocationTemplateId !== null) body.id = editingLocationTemplateId;
+            const result = await apiCall('/api/location-quiz-templates', 'POST', body);
+            if (!result || !result.success) {
+                showToast((result && result.message) || 'Could not save quiz.', 'error');
+                return;
+            }
+            editingLocationTemplateId = result.template ? result.template.id : editingLocationTemplateId;
+            showToast(result.message || 'Saved!', 'success');
+            await loadLocationQuizTemplates();
+        }
+
+        async function deleteLocationLibraryQuiz(id) {
+            if (!id) { showToast('Pick a quiz to delete.', 'error'); return; }
+            const card = document.querySelector('.library-row[data-location-template-id="' + id + '"]');
+            const label = card ? card.getAttribute('data-name') : id;
+            if (!confirm('Delete the saved location quiz "' + label + '"?')) return;
+            const result = await apiCall('/api/location-quiz-templates/' + id, 'DELETE');
+            if (!result || !result.success) {
+                showToast((result && result.message) || 'Could not delete quiz.', 'error');
+                return;
+            }
+            showToast(result.message || 'Deleted!', 'success');
+            if (String(editingLocationTemplateId) === String(id)) {
+                editingLocationTemplateId = null;
+                document.getElementById('location-quiz-library-editor').style.display = 'none';
+            }
+            await loadLocationQuizTemplates();
+        }
+
+        // --- Location Sets ---
+        async function loadLocationSets() {
+            const data = await apiCall('/api/location-sets');
+            if (!data) return;
+            const sets = data.sets || [];
+            const list = document.getElementById('location-sets-list');
+            if (sets.length === 0) {
+                list.innerHTML = '<p style="color: #888;">No saved location sets yet. Save one from a game\'s locations page.</p>';
+            } else {
+                list.innerHTML = sets.map(s =>
+                    '<div class="library-row" data-location-set-id="' + s.id + '" data-name="' + esc(s.name) + '">' +
+                    '<div class="game-info"><div class="name">' + esc(s.name) + '</div>' +
+                    '<div class="status">' + s.location_count + ' location(s) — ' + s.quiz_count + ' with a quiz</div></div>' +
+                    '<div style="display:flex;gap:8px;">' +
+                        '<button class="btn btn-danger" onclick="deleteAdminLocationSet(' + s.id + ')">🗑️ Delete</button>' +
+                    '</div></div>'
+                ).join('');
+            }
+        }
+
+        async function deleteAdminLocationSet(id) {
+            if (!id) { showToast('Pick a set to delete.', 'error'); return; }
+            const card = document.querySelector('.library-row[data-location-set-id="' + id + '"]');
+            const label = card ? card.getAttribute('data-name') : id;
+            if (!confirm('Delete the saved location set "' + label + '"?')) return;
+            const result = await apiCall('/api/location-sets/' + id, 'DELETE');
+            if (!result || !result.success) {
+                showToast((result && result.message) || 'Could not delete set.', 'error');
+                return;
+            }
+            showToast(result.message || 'Deleted!', 'success');
+            await loadLocationSets();
+        }
+
         loadSuperToken();
         loadGames();
         loadQuizTemplates();
+        loadLocationQuizTemplates();
+        loadLocationSets();
     </script>
 </body>
 </html>

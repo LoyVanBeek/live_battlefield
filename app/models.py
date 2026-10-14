@@ -701,6 +701,349 @@ async def save_quiz_template(
     return await get_quiz_template(db, template.id)
 
 
+# --- Location-quiz library (reusable location quizzes) ---
+
+
+async def list_location_quiz_templates(db: AsyncSession) -> list:
+    """Named reusable location quizzes as summaries (id, name, counts, total)."""
+    from app.database import (
+        LocationQuizTemplate,
+        LocationQuizTemplateQuestion,
+        LocationQuizTemplateAnswer,
+    )
+
+    templates = (await db.execute(
+        select(LocationQuizTemplate).order_by(LocationQuizTemplate.name)
+    )).scalars().all()
+    result = []
+    for t in templates:
+        questions = (await db.execute(
+            select(LocationQuizTemplateQuestion).where(LocationQuizTemplateQuestion.template_id == t.id)
+        )).scalars().all()
+        total = 0
+        for q in questions:
+            answers = (await db.execute(
+                select(LocationQuizTemplateAnswer).where(LocationQuizTemplateAnswer.question_id == q.id)
+            )).scalars().all()
+            total += max((a.bomb_value for a in answers), default=0)
+        result.append({
+            "id": t.id,
+            "name": t.name,
+            "question_count": len(questions),
+            "total_bombs": total,
+            "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+        })
+    return result
+
+
+async def get_location_quiz_template(db: AsyncSession, template_id: int) -> Optional[dict]:
+    """Full template in the same shape as get_location_quiz_questions (editor-ready)."""
+    from app.database import (
+        LocationQuizTemplate,
+        LocationQuizTemplateQuestion,
+        LocationQuizTemplateAnswer,
+    )
+
+    template = (await db.execute(
+        select(LocationQuizTemplate).where(LocationQuizTemplate.id == template_id)
+    )).scalar_one_or_none()
+    if not template:
+        return None
+    questions = (await db.execute(
+        select(LocationQuizTemplateQuestion)
+        .where(LocationQuizTemplateQuestion.template_id == template.id)
+        .order_by(LocationQuizTemplateQuestion.order)
+    )).scalars().all()
+    q_list = []
+    for q in questions:
+        answers = (await db.execute(
+            select(LocationQuizTemplateAnswer)
+            .where(LocationQuizTemplateAnswer.question_id == q.id)
+            .order_by(LocationQuizTemplateAnswer.id)
+        )).scalars().all()
+        answers_list = list(answers)
+        q_list.append({
+            "id": q.id,
+            "question_text": q.question_text,
+            "order": q.order,
+            "bomb_value": max((a.bomb_value for a in answers_list), default=0),
+            "source_url": q.source_url,
+            "answers": [
+                {"id": a.id, "answer_text": a.answer_text, "bomb_value": a.bomb_value, "is_correct": a.is_correct}
+                for a in answers_list
+            ],
+        })
+    return {"id": template.id, "name": template.name, "questions": q_list}
+
+
+async def delete_location_quiz_template(db: AsyncSession, template_id: int) -> bool:
+    from app.database import (
+        LocationQuizTemplate,
+        LocationQuizTemplateQuestion,
+        LocationQuizTemplateAnswer,
+    )
+
+    template = (await db.execute(
+        select(LocationQuizTemplate).where(LocationQuizTemplate.id == template_id)
+    )).scalar_one_or_none()
+    if not template:
+        return False
+    # Ordered bulk deletes: no ORM relationships to infer parent/child ordering.
+    question_ids = (await db.execute(
+        select(LocationQuizTemplateQuestion.id).where(LocationQuizTemplateQuestion.template_id == template.id)
+    )).scalars().all()
+    if question_ids:
+        await db.execute(delete(LocationQuizTemplateAnswer).where(LocationQuizTemplateAnswer.question_id.in_(list(question_ids))))
+        await db.execute(delete(LocationQuizTemplateQuestion).where(LocationQuizTemplateQuestion.template_id == template.id))
+    await db.execute(delete(LocationQuizTemplate).where(LocationQuizTemplate.id == template.id))
+    await db.commit()
+    return True
+
+
+async def save_location_quiz_template(
+    db: AsyncSession, name: str, questions_data: list[dict], template_id: Optional[int] = None
+) -> Optional[dict]:
+    """Create or overwrite a reusable location quiz (overwrite-by-name).
+
+    Mirrors save_quiz_template: the name is the identity, and passing template_id
+    updates in place (allowing a rename).
+    """
+    from app.database import (
+        LocationQuizTemplate,
+        LocationQuizTemplateQuestion,
+        LocationQuizTemplateAnswer,
+    )
+
+    existing = (await db.execute(
+        select(LocationQuizTemplate).where(LocationQuizTemplate.name == name)
+    )).scalar_one_or_none()
+    if existing and (template_id is None or existing.id != template_id):
+        if not await delete_location_quiz_template(db, existing.id):
+            return None
+
+    if template_id is not None:
+        template = (await db.execute(
+            select(LocationQuizTemplate).where(LocationQuizTemplate.id == template_id)
+        )).scalar_one_or_none()
+        if not template:
+            return None
+        template.name = name
+        template.updated_at = datetime.now(timezone.utc)
+        old_ids = (await db.execute(
+            select(LocationQuizTemplateQuestion.id).where(LocationQuizTemplateQuestion.template_id == template.id)
+        )).scalars().all()
+        if old_ids:
+            await db.execute(delete(LocationQuizTemplateAnswer).where(LocationQuizTemplateAnswer.question_id.in_(list(old_ids))))
+            await db.execute(delete(LocationQuizTemplateQuestion).where(LocationQuizTemplateQuestion.template_id == template.id))
+        await db.flush()
+    else:
+        template = LocationQuizTemplate(name=name)
+        db.add(template)
+        await db.flush()
+
+    for i, qd in enumerate(questions_data):
+        q = LocationQuizTemplateQuestion(
+            template_id=template.id,
+            question_text=qd.get("question_text", ""),
+            order=i,
+            source_url=qd.get("source_url") or None,
+        )
+        db.add(q)
+        await db.flush()
+        for ad in qd.get("answers", []):
+            db.add(LocationQuizTemplateAnswer(
+                question_id=q.id,
+                answer_text=ad.get("answer_text", ""),
+                bomb_value=ad.get("bomb_value", 0),
+                is_correct=ad.get("is_correct", False),
+            ))
+    await db.commit()
+    return await get_location_quiz_template(db, template.id)
+
+
+# --- Location sets (reusable location layouts) ---
+
+
+async def list_location_sets(db: AsyncSession) -> list:
+    """Named reusable layouts as summaries (id, name, counts, updated)."""
+    from app.database import LocationSet, LocationSetLocation
+
+    sets = (await db.execute(
+        select(LocationSet).order_by(LocationSet.name)
+    )).scalars().all()
+    result = []
+    for s in sets:
+        locations = (await db.execute(
+            select(LocationSetLocation).where(LocationSetLocation.set_id == s.id)
+        )).scalars().all()
+        result.append({
+            "id": s.id,
+            "name": s.name,
+            "location_count": len(locations),
+            "quiz_count": sum(1 for loc in locations if loc.quiz_json),
+            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+        })
+    return result
+
+
+async def get_location_set(db: AsyncSession, set_id: int) -> Optional[dict]:
+    """Full set: every saved location (with its parsed quiz) in number order."""
+    from app.database import LocationSet, LocationSetLocation
+    import json as _json
+
+    loc_set = (await db.execute(
+        select(LocationSet).where(LocationSet.id == set_id)
+    )).scalar_one_or_none()
+    if not loc_set:
+        return None
+    locations = (await db.execute(
+        select(LocationSetLocation)
+        .where(LocationSetLocation.set_id == loc_set.id)
+        .order_by(LocationSetLocation.number, LocationSetLocation.id)
+    )).scalars().all()
+    entries = []
+    for loc in locations:
+        questions: list = []
+        if loc.quiz_json:
+            try:
+                questions = _json.loads(loc.quiz_json)
+            except (ValueError, TypeError):
+                questions = []
+        entries.append({
+            "id": loc.id,
+            "number": loc.number,
+            "latitude": loc.latitude,
+            "longitude": loc.longitude,
+            "code": loc.code,
+            "bomb_value": loc.bomb_value,
+            "quiz_mode": loc.quiz_mode,
+            "questions": questions,
+        })
+    return {"id": loc_set.id, "name": loc_set.name, "locations": entries}
+
+
+async def delete_location_set(db: AsyncSession, set_id: int) -> bool:
+    from app.database import LocationSet, LocationSetLocation
+
+    loc_set = (await db.execute(
+        select(LocationSet).where(LocationSet.id == set_id)
+    )).scalar_one_or_none()
+    if not loc_set:
+        return False
+    await db.execute(delete(LocationSetLocation).where(LocationSetLocation.set_id == loc_set.id))
+    await db.execute(delete(LocationSet).where(LocationSet.id == loc_set.id))
+    await db.commit()
+    return True
+
+
+async def save_locations_as_set(db: AsyncSession, game_id: uuid.UUID, name: str) -> Optional[dict]:
+    """Snapshot a game's current locations (with quizzes) into a named set.
+
+    Overwrite-by-name, mirroring the quiz library. Codes are captured verbatim so
+    a re-applied layout keeps its printed number -> code mapping.
+    """
+    from app.database import LocationSet, LocationSetLocation
+    import json as _json
+
+    locations = await get_game_locations(db, game_id)
+    if not locations:
+        return None
+    # Capture primitives before any commit expires these rows.
+    rows = [
+        (loc.number, loc.latitude, loc.longitude, loc.code, loc.bomb_value, loc.quiz_mode)
+        for loc in locations
+    ]
+
+    existing = (await db.execute(
+        select(LocationSet).where(LocationSet.name == name)
+    )).scalar_one_or_none()
+    if existing:
+        await delete_location_set(db, existing.id)
+
+    loc_set = LocationSet(name=name)
+    db.add(loc_set)
+    await db.flush()
+
+    for number, latitude, longitude, code, bomb_value, quiz_mode in rows:
+        questions = await get_location_quiz_questions(db, game_id, number)
+        # Strip row ids: applying a set always creates fresh question/answer rows.
+        for q in questions:
+            q.pop("id", None)
+            q.pop("location_number", None)
+            for a in q.get("answers", []):
+                a.pop("id", None)
+        db.add(LocationSetLocation(
+            set_id=loc_set.id,
+            number=number,
+            latitude=latitude,
+            longitude=longitude,
+            code=code,
+            bomb_value=bomb_value,
+            quiz_mode=quiz_mode,
+            quiz_json=_json.dumps(questions) if questions else None,
+        ))
+    await db.commit()
+    return await get_location_set(db, loc_set.id)
+
+
+async def apply_location_set(db: AsyncSession, game_id: uuid.UUID, set_id: int) -> Optional[dict]:
+    """Replace a game's locations with a saved set.
+
+    Restores numbers, coordinates, codes, bomb values, modes and quizzes 1:1.
+    Existing locations (and their quizzes) are removed first, with removal events,
+    so the saved codes stay unique and event-derived location state stays correct.
+    """
+    from app.database import Location
+    from app.events.models import LocationAddedEvent, LocationRemovedEvent
+    from app.events.saver import save_event
+
+    loc_set = await get_location_set(db, set_id)
+    if not loc_set:
+        return None
+
+    current = await get_game_locations(db, game_id)
+    if current:
+        removed = [(loc.number, loc.bomb_value) for loc in current]
+        await delete_all_locations(db, game_id)
+        for number, bomb_value in removed:
+            await save_event(
+                db,
+                LocationRemovedEvent(number=number, bomb_value=bomb_value),
+                game_id,
+            )
+
+    created = []
+    for entry in loc_set["locations"]:
+        number = entry["number"]
+        db.add(Location(
+            game_id=game_id,
+            number=number,
+            latitude=entry["latitude"],
+            longitude=entry["longitude"],
+            code=entry["code"],
+            bomb_value=entry["bomb_value"],
+            quiz_mode=entry["quiz_mode"],
+        ))
+        await save_event(
+            db,
+            LocationAddedEvent(
+                number=number,
+                latitude=entry["latitude"],
+                longitude=entry["longitude"],
+                code=entry["code"],
+                bomb_value=entry["bomb_value"],
+            ),
+            game_id,
+        )
+        questions = entry.get("questions") or []
+        if questions:
+            await save_location_quiz_questions(db, game_id, number, questions)
+        created.append({"number": number, "code": entry["code"]})
+
+    await db.commit()
+    return {"id": loc_set["id"], "name": loc_set["name"], "locations": created}
+
+
 async def is_game_paused(db: AsyncSession, game_id: uuid.UUID) -> tuple[bool, datetime | None]:
     game = await get_game(db, game_id)
     if not game or not game.paused_until:

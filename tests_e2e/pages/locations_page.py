@@ -212,3 +212,31 @@ class LocationsPage:
         self.start_cell_edit(field, number)
         self.edit_input().fill(value)
         self.save_cell_edit(expect=expect)
+
+    # --- Location libraries (reusable location quizzes + location sets) ---
+
+    def quiz_library_select(self):
+        return self.page.locator("#lq-library-select")
+
+    def load_library_quiz_button(self):
+        return self.page.locator("#lq-modal button", has_text="Load")
+
+    def save_as_library_quiz_button(self):
+        return self.page.locator("#lq-modal button", has_text="Save as")
+
+    def quiz_question_text_input(self, qi: int):
+        return self.page.locator(
+            f"#lq-questions-list input[data-role='question-text'][data-qi='{qi}']"
+        )
+
+    def location_set_select(self):
+        return self.page.locator("#location-set-select")
+
+    def apply_set_button(self):
+        return self.page.locator("button", has_text="Apply set")
+
+    def save_set_button(self):
+        return self.page.locator("button", has_text="Save current as set")
+
+    def delete_set_button(self):
+        return self.page.locator("button", has_text="Delete set")

@@ -302,6 +302,14 @@
                 <button class="btn-remove" onclick="clearAllLocations()" style="margin-top: 18px; height: fit-content;">🗑️ Clear All</button>
             </div>
             <p style="color: #888; font-size: 12px; margin-top: 5px;">Leave count=1 for single location, or set higher for random batch. Or click on the map below to pick a location, or use 📍 My location to drop one at your current GPS position.</p>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap;border-top:1px solid #0f3460;padding-top:12px;">
+                <label style="font-size:12px;color:#888;">Location sets</label>
+                <select id="location-set-select" style="padding:5px;font-size:12px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;max-width:280px;"></select>
+                <button class="btn-add" onclick="applyLocationSet()" style="height:fit-content;">📥 Apply set</button>
+                <button class="btn btn-secondary" onclick="saveCurrentAsSet()" style="height:fit-content;">💾 Save current as set…</button>
+                <button class="btn-remove" onclick="deleteSelectedSet()" style="height:fit-content;">🗑 Delete set</button>
+                <span style="font-size:12px;color:#888;">Applying a set replaces all current locations (codes included).</span>
+            </div>
         </div>
         
         <!-- Map -->
@@ -351,6 +359,16 @@
                     </select>
                 </label>
                 <span style="color:#888;font-size:12px;">Quiz = no code; Both = either code or quiz.</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+                <label style="font-size:13px;color:#aaa;display:flex;align-items:center;gap:4px;">Quiz library
+                    <select id="lq-library-select" style="padding:4px;font-size:12px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;max-width:240px;"></select>
+                </label>
+                <button class="btn btn-secondary" onclick="loadLibraryLocationQuiz()" style="font-size:12px;padding:5px 10px;">Load</button>
+                <button class="btn btn-secondary" onclick="saveAsLibraryLocationQuiz()" style="font-size:12px;padding:5px 10px;">Save as…</button>
+                <button class="btn btn-secondary" onclick="lqEditor.exportJSON('location_quiz.json')" style="font-size:12px;padding:5px 10px;">⬇ Export</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('lq-import-input').click()" style="font-size:12px;padding:5px 10px;">⬆ Import</button>
+                <input type="file" id="lq-import-input" accept=".json" style="display:none" onchange="lqEditor.importFile(event)">
             </div>
             <div id="lq-warning-banner" style="display:none;background:rgba(255,82,82,.12);border:1px solid #ff5252;border-radius:6px;padding:8px 10px;font-size:12px;color:#ff8a80;margin-bottom:10px;"></div>
             <div id="lq-questions-list"></div>
@@ -937,6 +955,7 @@
             document.getElementById('lq-mode').value = 'code';
             lqEditor.setQuestions([]);
             document.getElementById('lq-modal').style.display = 'flex';
+            loadLocationQuizLibraryOptions();
 
             try {
                 const resp = await fetch('/api/location-quiz/questions?gm_token=' + encodeURIComponent(getGmToken()) + '&location_number=' + number);
@@ -1004,7 +1023,169 @@
             }
         }
 
+        // ---- Location libraries (reusable location quizzes + location sets) ----
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        function authQuery() {
+            return 'gm_token=' + encodeURIComponent(getGmToken());
+        }
+
+        async function loadLocationQuizLibraryOptions() {
+            const select = document.getElementById('lq-library-select');
+            if (!select) return;
+            try {
+                const resp = await fetch('/api/location-quiz-templates?' + authQuery());
+                const data = await resp.json();
+                const templates = (data && data.templates) || [];
+                const current = select.value;
+                select.innerHTML = '<option value="">—</option>' + templates.map(t =>
+                    `<option value="${t.id}">${escapeHtml(t.name)} (${t.question_count} Q, ${t.total_bombs} 💣)</option>`
+                ).join('');
+                if (templates.some(t => String(t.id) === current)) select.value = current;
+            } catch (e) {
+                console.error('Error loading location quiz library:', e);
+            }
+        }
+
+        async function loadLibraryLocationQuiz() {
+            const select = document.getElementById('lq-library-select');
+            const id = select && select.value;
+            if (!id) { showToast('Pick a saved quiz first.', 'error'); return; }
+            try {
+                const resp = await fetch('/api/location-quiz-templates/' + id + '?' + authQuery());
+                const data = await resp.json();
+                if (!data || !data.success || !data.template) {
+                    showToast((data && data.message) || 'Could not load quiz.', 'error');
+                    return;
+                }
+                lqEditor.setQuestions(data.template.questions || []);
+                showToast('Loaded "' + data.template.name + '".', 'success');
+            } catch (e) {
+                console.error('Error loading location quiz:', e);
+                showToast('Could not load quiz.', 'error');
+            }
+        }
+
+        async function saveAsLibraryLocationQuiz() {
+            const questions = lqEditor.getQuestions();
+            if (questions.length === 0) { showToast('Add at least one question first.', 'error'); return; }
+            const entered = prompt('Save this location quiz to the library as:', '');
+            if (entered === null) return;
+            const name = entered.trim();
+            if (!name) { showToast('A name is required.', 'error'); return; }
+            try {
+                const resp = await fetch('/api/location-quiz-templates?' + authQuery(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, questions: questions }),
+                });
+                const result = await resp.json();
+                if (!result || !result.success) {
+                    showToast((result && result.message) || 'Could not save quiz.', 'error');
+                    return;
+                }
+                showToast(result.message || 'Saved to library!', 'success');
+                await loadLocationQuizLibraryOptions();
+                const select = document.getElementById('lq-library-select');
+                if (select && result.template) select.value = String(result.template.id);
+            } catch (e) {
+                console.error('Error saving location quiz:', e);
+                showToast('Could not save quiz.', 'error');
+            }
+        }
+
+        async function loadLocationSetOptions() {
+            const select = document.getElementById('location-set-select');
+            if (!select) return;
+            try {
+                const resp = await fetch('/api/location-sets?' + authQuery());
+                const data = await resp.json();
+                const sets = (data && data.sets) || [];
+                const current = select.value;
+                select.innerHTML = '<option value="">—</option>' + sets.map(s =>
+                    `<option value="${s.id}">${escapeHtml(s.name)} (${s.location_count}📍)</option>`
+                ).join('');
+                if (sets.some(s => String(s.id) === current)) select.value = current;
+            } catch (e) {
+                console.error('Error loading location sets:', e);
+            }
+        }
+
+        async function saveCurrentAsSet() {
+            const entered = prompt('Save the current locations as a set named:', '');
+            if (entered === null) return;
+            const name = entered.trim();
+            if (!name) { showToast('A name is required.', 'error'); return; }
+            try {
+                const resp = await fetch('/api/quick/save-location-set?' + authQuery(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name }),
+                });
+                const result = await resp.json();
+                if (!result || !result.success) {
+                    showToast((result && result.message) || 'Could not save set.', 'error');
+                    return;
+                }
+                showToast(result.message || 'Saved set!', 'success');
+                await loadLocationSetOptions();
+                const select = document.getElementById('location-set-select');
+                if (select && result.set) select.value = String(result.set.id);
+            } catch (e) {
+                console.error('Error saving location set:', e);
+                showToast('Could not save set.', 'error');
+            }
+        }
+
+        async function applyLocationSet() {
+            const select = document.getElementById('location-set-select');
+            const id = select && select.value;
+            if (!id) { showToast('Pick a set first.', 'error'); return; }
+            const label = select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : 'this set';
+            if (!confirm('Apply ' + label + '?\n\nThis REPLACES all current locations in this game (including their quizzes and codes).')) return;
+            try {
+                const resp = await fetch('/api/quick/apply-location-set?' + authQuery(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ set_id: parseInt(id, 10) }),
+                });
+                const result = await resp.json();
+                if (!result || !result.success) {
+                    showToast((result && result.message) || 'Could not apply set.', 'error');
+                    return;
+                }
+                showToast(result.message || 'Set applied!', 'success');
+                loadLocations();
+            } catch (e) {
+                console.error('Error applying location set:', e);
+                showToast('Could not apply set.', 'error');
+            }
+        }
+
+        async function deleteSelectedSet() {
+            const select = document.getElementById('location-set-select');
+            const id = select && select.value;
+            if (!id) { showToast('Pick a set first.', 'error'); return; }
+            if (!confirm('Delete this saved set from the library?')) return;
+            try {
+                const resp = await fetch('/api/location-sets/' + id + '?' + authQuery(), { method: 'DELETE' });
+                const result = await resp.json();
+                if (!result || !result.success) {
+                    showToast((result && result.message) || 'Could not delete set.', 'error');
+                    return;
+                }
+                showToast(result.message || 'Set deleted.', 'success');
+                await loadLocationSetOptions();
+            } catch (e) {
+                console.error('Error deleting location set:', e);
+                showToast('Could not delete set.', 'error');
+            }
+        }
+
         loadLocations();
+        loadLocationSetOptions();
     </script>
 </body>
 </html>

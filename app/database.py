@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import Integer, String, Float, DateTime, Enum, JSON, UUID, ForeignKey, UniqueConstraint
+from sqlalchemy import Integer, String, Float, DateTime, Enum, JSON, Text, UUID, ForeignKey, UniqueConstraint
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 import enum
@@ -197,6 +197,72 @@ class QuizTemplateAnswer(Base):
     answer_text: Mapped[str] = mapped_column(String(500), nullable=False)
     bomb_value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_correct: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+
+class LocationQuizTemplate(Base):
+    """A reusable, named location quiz (not tied to any game or location)."""
+
+    __tablename__ = "location_quiz_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class LocationQuizTemplateQuestion(Base):
+    __tablename__ = "location_quiz_template_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    template_id: Mapped[int] = mapped_column(Integer, ForeignKey("location_quiz_templates.id"), nullable=False)
+    question_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class LocationQuizTemplateAnswer(Base):
+    __tablename__ = "location_quiz_template_answers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    question_id: Mapped[int] = mapped_column(Integer, ForeignKey("location_quiz_template_questions.id"), nullable=False)
+    answer_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    bomb_value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_correct: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+
+class LocationSet(Base):
+    """A reusable, named snapshot of a game's locations (not tied to any game)."""
+
+    __tablename__ = "location_sets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class LocationSetLocation(Base):
+    """One location inside a saved set, including its quiz as an editor JSON blob."""
+
+    __tablename__ = "location_set_locations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    set_id: Mapped[int] = mapped_column(Integer, ForeignKey("location_sets.id"), nullable=False)
+    number: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    code: Mapped[str] = mapped_column(String(20), nullable=False)
+    bomb_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    quiz_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="code")
+    quiz_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Admin(Base):

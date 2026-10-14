@@ -25,7 +25,9 @@ class AdminDashboardPage:
         return self.page.locator("#selected-count")
 
     def game_rows(self):
-        return self.page.locator(".game-row")
+        # Scope to the games list: the shared ".game-row" class is also used by
+        # the quiz/location libraries, whose cards must not count as games.
+        return self.page.locator("#games-list .game-row")
 
     def games_list(self):
         return self.page.locator("#games-list")
