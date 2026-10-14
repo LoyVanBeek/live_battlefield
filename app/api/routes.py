@@ -1972,7 +1972,7 @@ async def execute_command(
             )
             await save_event(db, event, game_uuid)
             # Ship placed — check for auto-start
-            asyncio.ensure_future(_auto_start_if_ready(db, game_uuid))
+            asyncio.ensure_future(_auto_start_if_ready_detached(game_uuid))
         elif cmd.command == "code":
             event = CodeRedeemedEvent(
                 color=cmd.team_color,
@@ -2070,7 +2070,7 @@ async def quick_place_all_ships(
 
     success, message = await place_all_ships_game_scoped(db, auth_info["game_id"], action.team_color)
     if success:
-        asyncio.ensure_future(_auto_start_if_ready(db, uuid.UUID(auth_info["game_id"])))
+        asyncio.ensure_future(_auto_start_if_ready_detached(uuid.UUID(auth_info["game_id"])))
     return {
         "success": success,
         "message": message,
@@ -3201,6 +3201,18 @@ async def _auto_start_if_ready(db: AsyncSession, game_uuid: uuid.UUID) -> bool:
 
     await _start_game(db, game_uuid)
     return True
+
+
+async def _auto_start_if_ready_detached(game_uuid: uuid.UUID) -> None:
+    """Fire-and-forget auto-start that owns its own DB session.
+
+    The request-scoped session is closed by ``get_api_db`` as soon as the
+    response is sent; sharing it with a background task races the close against
+    the task's queries ("another operation is in progress"). Give the task a
+    session that outlives the request.
+    """
+    async with api_session_maker() as db:
+        await _auto_start_if_ready(db, game_uuid)
 
 
 @app.post("/api/quick/start-game")
