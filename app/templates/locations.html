@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/static/location-pin.css" />
     <script src="/static/leaflet/leaflet.js"></script>
     <script src="/static/location-pin.js"></script>
+    <script src="/static/js/quiz_editor.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -320,16 +321,46 @@
                         <th>Coordinates</th>
                         <th>Bombs</th>
                         <th>Visited By</th>
+                        <th>Quiz</th>
                         <th>Map</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="locations-body">
                     <tr>
-                        <td colspan="7" style="text-align: center;">Loading...</td>
+                        <td colspan="8" style="text-align: center;">Loading...</td>
                     </tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Location quiz editor modal -->
+    <div id="lq-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;align-items:center;justify-content:center;padding:20px;">
+        <div style="background:#16213e;border-radius:8px;padding:20px;max-width:760px;width:100%;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;">
+                <h2 id="lq-modal-title" style="color:#00d9ff;font-size:18px;">Location quiz</h2>
+                <button class="btn-remove" onclick="closeQuizModal()">Close</button>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+                <label style="font-size:13px;color:#aaa;">Mode
+                    <select id="lq-mode" style="padding:5px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
+                        <option value="code">🔑 Code</option>
+                        <option value="quiz">📝 Quiz</option>
+                        <option value="both">📝+🔑 Both</option>
+                    </select>
+                </label>
+                <span style="color:#888;font-size:12px;">Quiz = no code; Both = either code or quiz.</span>
+            </div>
+            <div id="lq-warning-banner" style="display:none;background:rgba(255,82,82,.12);border:1px solid #ff5252;border-radius:6px;padding:8px 10px;font-size:12px;color:#ff8a80;margin-bottom:10px;"></div>
+            <div id="lq-questions-list"></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="lqEditor.addQuestion()" style="font-size:12px;padding:5px 10px;">+ Add Question</button>
+                <span style="color:#888;font-size:12px;">Each question is worth its own bomb value; only the correct answer should yield bombs.</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="saveLocationQuiz()" style="padding:8px 16px;">Save Quiz</button>
+            </div>
         </div>
     </div>
 
@@ -455,7 +486,7 @@
                 const tbody = document.getElementById('locations-body');
                 
                 if (data.locations.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No locations found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No locations found</td></tr>';
                     return;
                 }
                 
@@ -475,6 +506,9 @@
                         visitedHtml = '<span class="not-visited">(none yet)</span>';
                     }
                     
+                    const quizCount = loc.question_count || 0;
+                    const quizLabel = quizModeLabel(loc.quiz_mode) + (quizCount ? ` (${quizCount})` : '');
+
                     return `
                         <tr>
                             <td>${loc.number}</td>
@@ -482,6 +516,7 @@
                             <td class="coords"><span class="editable-cell" id="cell-coords-${loc.number}" data-lat="${loc.latitude}" data-lon="${loc.longitude}" onclick="startEdit(${loc.number}, 'coords')">${lat}, ${lon}</span></td>
                             <td><span class="editable-cell" id="cell-bombs-${loc.number}" onclick="startEdit(${loc.number}, 'bombs')">💣 ${loc.bomb_value || 1}</span></td>
                             <td class="visited">${visitedHtml}</td>
+                            <td><span class="editable-cell" id="cell-quiz-${loc.number}" onclick="openQuizModal(${loc.number})" title="Edit this location's check-in quiz">${quizLabel}</span></td>
                             <td><a href="${mapUrl}" target="_blank" class="map-link">Map</a></td>
                             <td><button class="btn-remove" onclick="removeLocation(${loc.number}, '${loc.code}')">Remove</button></td>
                         </tr>
@@ -490,7 +525,7 @@
             } catch (e) {
                 console.error('Error loading locations:', e);
                 document.getElementById('locations-body').innerHTML = 
-                    '<tr><td colspan="7" style="text-align: center; color: #f44336;">Error loading locations</td></tr>';
+                    '<tr><td colspan="8" style="text-align: center; color: #f44336;">Error loading locations</td></tr>';
             }
         }
 
@@ -853,6 +888,94 @@
             } catch (e) {
                 console.error('Error clearing locations:', e);
                 alert('Error clearing locations');
+            }
+        }
+
+        // ---- Location quiz (check-in without a printed code) ----
+        const lqEditor = createQuizEditor({
+            listId: 'lq-questions-list',
+            warningId: 'lq-warning-banner',
+            addAnswerLabel: 'Add Answer',
+            toast: showToast,
+        });
+        let lqCurrentLocation = null;
+
+        function quizModeLabel(mode) {
+            if (mode === 'quiz') return '📝 Quiz';
+            if (mode === 'both') return '📝+🔑 Both';
+            return '🔑 Code';
+        }
+
+        async function openQuizModal(number) {
+            lqCurrentLocation = number;
+            document.getElementById('lq-modal-title').textContent = 'Location ' + number + ' — Quiz';
+            document.getElementById('lq-mode').value = 'code';
+            lqEditor.setQuestions([]);
+            document.getElementById('lq-modal').style.display = 'flex';
+
+            try {
+                const resp = await fetch('/api/location-quiz/questions?gm_token=' + encodeURIComponent(getGmToken()) + '&location_number=' + number);
+                const data = await resp.json();
+                if (data && data.success) {
+                    document.getElementById('lq-mode').value = data.mode || 'code';
+                    lqEditor.setQuestions(data.questions || []);
+                } else if (data && data.message) {
+                    showToast(data.message, 'error');
+                }
+            } catch (e) {
+                console.error('Error loading location quiz:', e);
+                showToast('Error loading quiz', 'error');
+            }
+        }
+
+        function closeQuizModal() {
+            document.getElementById('lq-modal').style.display = 'none';
+            lqCurrentLocation = null;
+        }
+
+        async function saveLocationQuiz() {
+            if (lqCurrentLocation === null) return;
+            const mode = document.getElementById('lq-mode').value;
+            const questions = lqEditor.getQuestions();
+
+            // Every question must be able to yield at least 1 bomb (the server
+            // enforces the same rule; this just gives an inline warning first).
+            const badIdx = questions.findIndex(q => !q.answers || q.answers.length === 0 || lqEditor.questionMaxYield(q) < 1);
+            if (badIdx !== -1) {
+                lqEditor.updateWarnings();
+                showToast('Question ' + (badIdx + 1) + ' has no answer worth at least 1 bomb.', 'error');
+                return;
+            }
+
+            try {
+                let resp = await fetch('/api/location-quiz/questions?gm_token=' + encodeURIComponent(getGmToken()), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ location_number: lqCurrentLocation, questions: questions }),
+                });
+                let data = await resp.json();
+                if (!data || !data.success) {
+                    showToast((data && data.message) || 'Error saving quiz', 'error');
+                    return;
+                }
+
+                resp = await fetch('/api/quick/set_location_quiz_mode?gm_token=' + encodeURIComponent(getGmToken()), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ location_number: lqCurrentLocation, mode: mode }),
+                });
+                data = await resp.json();
+                if (!data || !data.success) {
+                    showToast((data && data.message) || 'Error saving mode', 'error');
+                    return;
+                }
+
+                showToast('Quiz saved!', 'success');
+                closeQuizModal();
+                loadLocations();
+            } catch (e) {
+                console.error('Error saving location quiz:', e);
+                showToast('Error saving quiz', 'error');
             }
         }
 

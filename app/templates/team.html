@@ -1112,6 +1112,13 @@
                         '</div>' +
                     '</div>';
                 }
+                // Location quizzes are independent of the global quiz setting:
+                // whether any location has questions is only known after a fetch,
+                // so the section is always rendered (and hidden by the updater).
+                html += '<div class="action-group" id="location-quiz-section" style="display:none;">' +
+                    '<h3>' + _('location_quiz.heading') + '</h3>' +
+                    '<div id="location-quiz-content"></div>' +
+                '</div>';
             }
 
             actionsEl.innerHTML = html;
@@ -1124,6 +1131,7 @@
             }
             if (gameStatus === 'started') {
                 updateQuizSection();
+                updateLocationQuizSection();
             }
         }
 
@@ -1580,6 +1588,152 @@ async function clearAllShips() {
                 sourceUrl: (result && result.source_url) || null
             };
             updateQuizSection();
+        }
+
+        // --- Location quiz ---
+        // A location can ask its own questions as proof of visit. Unlike the
+        // global quiz there is no bomb budget: each question is worth its own
+        // bomb value and can only be answered once.
+        let locationQuizCache = null;
+        let locationQuizSelected = null;
+        let locationQuizContentSignature = null;
+        let locationQuizPendingResult = null;
+
+        async function loadLocationQuiz() {
+            const data = await apiCall('/api/location-quiz/state', 'GET');
+            if (data && data.locations) {
+                locationQuizCache = data.locations;
+            }
+            return locationQuizCache || [];
+        }
+
+        function renderLocationQuizResult(q, success, sourceUrl) {
+            const correct = (q.answers || []).find(a => a.is_correct);
+            const src = (sourceUrl || q.source_url || '').trim();
+            let html = '<p id="location-quiz-verdict" style="font-weight:bold;font-size:15px;color:' +
+                (success ? '#4caf50' : '#ff5252') + ';">' +
+                (success ? _('action_quiz.verdict_correct') : _('action_quiz.verdict_wrong')) + '</p>';
+            if (correct) {
+                html += '<p id="location-quiz-correct-answer" style="margin:6px 0;">' +
+                    _('action_quiz.correct_answer', { answer: esc(correct.answer_text) }) + '</p>';
+            }
+            if (src && /^https?:\/\//i.test(src)) {
+                html += '<p style="margin:6px 0;word-break:break-all;">' +
+                    esc(_('action_quiz.source_label')) + ': <a id="location-quiz-source-link" href="' + esc(src) +
+                    '" target="_blank" rel="noopener noreferrer">' + esc(src) + '</a></p>';
+            }
+            html += '<button class="btn btn-primary" id="location-quiz-next" style="padding:8px 12px;" onclick="locationQuizNext()">' +
+                _('action_quiz.next') + '</button>';
+            return html;
+        }
+
+        function locationQuizNext() {
+            locationQuizPendingResult = null;
+            updateLocationQuizSection();
+        }
+
+        function selectLocationQuiz(value) {
+            locationQuizSelected = parseInt(value, 10);
+            locationQuizPendingResult = null;
+            locationQuizContentSignature = null;
+            updateLocationQuizSection();
+        }
+
+        async function updateLocationQuizSection() {
+            const section = document.getElementById('location-quiz-section');
+            const content = document.getElementById('location-quiz-content');
+            if (!section || !content) return;
+
+            if (gameStatus !== 'started') {
+                section.style.display = 'none';
+                locationQuizContentSignature = null;
+                locationQuizPendingResult = null;
+                return;
+            }
+
+            const locations = await loadLocationQuiz();
+            if (!locations.length) {
+                if (section.style.display !== 'none') section.style.display = 'none';
+                locationQuizContentSignature = null;
+                return;
+            }
+            section.style.display = 'block';
+
+            // Keep the selection valid; default to the first location with work left.
+            if (locationQuizSelected === null || !locations.some(l => l.number === locationQuizSelected)) {
+                const firstUnanswered = locations.find(l => l.answered_count < l.question_count);
+                locationQuizSelected = (firstUnanswered || locations[0]).number;
+            }
+            const loc = locations.find(l => l.number === locationQuizSelected);
+
+            // A just-answered question gets a result view until the team moves on.
+            if (locationQuizPendingResult && locationQuizPendingResult.locationNumber === loc.number) {
+                const rq = loc.questions.find(q => q.id === locationQuizPendingResult.questionId);
+                if (rq) {
+                    const src = locationQuizPendingResult.sourceUrl || rq.source_url || '';
+                    const resultSignature = 'result|' + loc.number + '|' + rq.id + '|' +
+                        (locationQuizPendingResult.success ? 'ok' : 'no') + '|' + src;
+                    if (resultSignature === locationQuizContentSignature) return;
+                    locationQuizContentSignature = resultSignature;
+                    content.innerHTML = renderLocationQuizResult(rq, locationQuizPendingResult.success, src);
+                    return;
+                }
+                locationQuizPendingResult = null;
+            }
+
+            const selectHtml = '<div style="margin-bottom:10px;">' +
+                '<select id="location-quiz-select" onchange="selectLocationQuiz(this.value)" ' +
+                'style="padding:6px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">' +
+                locations.map(l =>
+                    '<option value="' + String(l.number) + '"' + (l.number === loc.number ? ' selected' : '') + '>' +
+                    esc(_('location_quiz.option', { number: l.number, left: l.question_count - l.answered_count, total: l.question_count })) +
+                    '</option>'
+                ).join('') +
+                '</select></div>';
+
+            let body;
+            if (loc.question_count === 0) {
+                body = '<p style="color:#888;">' + _('location_quiz.no_questions') + '</p>';
+            } else {
+                const unanswered = loc.questions.filter(q => !q.answered);
+                if (unanswered.length === 0) {
+                    body = '<p style="color:#4caf50;">✓ ' + _('location_quiz.done') + '</p>';
+                } else {
+                    const q = unanswered[0];
+                    body =
+                        '<p style="margin-bottom:8px;font-weight:bold;">' + esc(q.question_text) + '</p>' +
+                        '<div style="display:flex;flex-direction:column;gap:6px;">' +
+                        q.answers.map(a =>
+                            '<button class="btn btn-primary" style="text-align:left;padding:8px 12px;" onclick="answerLocationQuiz(' +
+                                String(loc.number) + ',' + String(q.id) + ',' + String(a.id) + ')">' +
+                                esc(a.answer_text) +
+                            '</button>'
+                        ).join('') +
+                        '</div>';
+                }
+            }
+
+            const html = selectHtml + body;
+            if (html === locationQuizContentSignature) return;
+            locationQuizContentSignature = html;
+            content.innerHTML = html;
+        }
+
+        async function answerLocationQuiz(locationNumber, questionId, answerId) {
+            const result = await apiCall('/api/execute', 'POST', {
+                team_color: TEAM_COLOR,
+                command: 'location_quiz',
+                args: { location_number: locationNumber, question_id: questionId, answer_id: answerId }
+            });
+            showToast((result && result.message) || '...', result && result.success ? 'success' : 'error');
+            locationQuizPendingResult = {
+                locationNumber: locationNumber,
+                questionId: questionId,
+                answerId: answerId,
+                success: !!(result && result.success),
+                sourceUrl: (result && result.source_url) || null
+            };
+            updateLocationQuizSection();
         }
 
         function switchLanguage(lang) {

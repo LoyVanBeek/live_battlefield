@@ -264,7 +264,7 @@ def test_map_click_still_creates_location_when_not_editing(page, app_url, seeded
 
     lp.map_element().click(position={"x": 80, "y": 260})
     lp.page.wait_for_function(
-        "() => !document.querySelector('#locations-body td[colspan=\"7\"]')"
+        "() => !document.querySelector('#locations-body td[colspan=\"8\"]')"
     )
 
     assert lp.get_location_count() == 1
@@ -289,7 +289,7 @@ def test_insert_location_via_gps(page, app_url, seeded_game):
     assert "±12m" in lp.toast().text_content()
 
     page.wait_for_function(
-        "() => !document.querySelector('#locations-body td[colspan=\"7\"]')"
+        "() => !document.querySelector('#locations-body td[colspan=\"8\"]')"
     )
     assert lp.get_location_count() == 1
     # exact position — the default 2km radius would have offset it

@@ -79,6 +79,7 @@ class EventType(str, enum.Enum):
     GAME_PAUSED = "game_paused"
     GAME_RESUMED = "game_resumed"
     QUIZ_ANSWERED = "quiz_answered"
+    LOCATION_QUIZ_ANSWERED = "location_quiz_answered"
 
 
 class GameEvent(Base):
@@ -103,6 +104,9 @@ class Location(Base):
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
     code: Mapped[str] = mapped_column(String(20), nullable=False)
     bomb_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # How a visit is proved: "code" (printed code, default), "quiz" (answer a
+    # location-scoped question) or "both" (either, rewarded independently).
+    quiz_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="code")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
@@ -132,6 +136,29 @@ class QuizAnswer(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     question_id: Mapped[int] = mapped_column(Integer, ForeignKey("quiz_questions.id"), nullable=False)
+    answer_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    bomb_value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_correct: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+
+class LocationQuizQuestion(Base):
+    """A quiz question tied to one location (a visit check-in)."""
+
+    __tablename__ = "location_quiz_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    game_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("games.id"), nullable=False)
+    location_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    question_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class LocationQuizAnswer(Base):
+    __tablename__ = "location_quiz_answers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    question_id: Mapped[int] = mapped_column(Integer, ForeignKey("location_quiz_questions.id"), nullable=False)
     answer_text: Mapped[str] = mapped_column(String(500), nullable=False)
     bomb_value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_correct: Mapped[bool] = mapped_column(nullable=False, default=False)

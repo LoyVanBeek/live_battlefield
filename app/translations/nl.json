@@ -142,6 +142,12 @@
         "source_label": "Bron",
         "next": "Volgende vraag"
     },
+    "location_quiz": {
+        "heading": "\ud83d\udccd Locatiequiz",
+        "option": "Locatie {number} ({left}/{total} over)",
+        "done": "Hier alles beantwoord!",
+        "no_questions": "Nog geen quizvragen op deze locatie."
+    },
     "bomb_confirm": {
         "title": "\ud83d\udca5 {target} bombarderen?",
         "button": "\ud83d\udca5 Gooi Bom!",

@@ -409,6 +409,122 @@ async def save_quiz_questions(db: AsyncSession, game_id: uuid.UUID, questions_da
     return result
 
 
+async def get_location_quiz_questions(
+    db: AsyncSession, game_id: uuid.UUID, location_number: Optional[int] = None
+) -> list:
+    """Location-scoped quiz questions (with answers), optionally for one location.
+
+    The shape mirrors get_quiz_questions so the shared editor and the team page
+    can render both kinds of quiz the same way.
+    """
+    from app.database import LocationQuizQuestion, LocationQuizAnswer
+
+    query = select(LocationQuizQuestion).where(LocationQuizQuestion.game_id == game_id)
+    if location_number is not None:
+        query = query.where(LocationQuizQuestion.location_number == location_number)
+    query = query.order_by(LocationQuizQuestion.location_number, LocationQuizQuestion.order)
+
+    questions = (await db.execute(query)).scalars().all()
+    result = []
+    for q in questions:
+        answers = (
+            await db.execute(
+                select(LocationQuizAnswer)
+                .where(LocationQuizAnswer.question_id == q.id)
+                .order_by(LocationQuizAnswer.id)
+            )
+        ).scalars().all()
+        answers_list = list(answers)
+        result.append({
+            "id": q.id,
+            "location_number": q.location_number,
+            "question_text": q.question_text,
+            "order": q.order,
+            "bomb_value": max((a.bomb_value for a in answers_list), default=0),
+            "source_url": q.source_url,
+            "answers": [
+                {"id": a.id, "answer_text": a.answer_text, "bomb_value": a.bomb_value, "is_correct": a.is_correct}
+                for a in answers_list
+            ],
+        })
+    return result
+
+
+async def get_location_quiz_question_counts(db: AsyncSession, game_id: uuid.UUID) -> dict[int, int]:
+    """Map location_number -> number of quiz questions, for the GM overview."""
+    from app.database import LocationQuizQuestion
+
+    rows = (
+        await db.execute(
+            select(LocationQuizQuestion.location_number, func.count(LocationQuizQuestion.id))
+            .where(LocationQuizQuestion.game_id == game_id)
+            .group_by(LocationQuizQuestion.location_number)
+        )
+    ).all()
+    return {number: count for number, count in rows}
+
+
+async def save_location_quiz_questions(
+    db: AsyncSession, game_id: uuid.UUID, location_number: int, questions_data: list[dict]
+) -> list:
+    """Replace the quiz questions for one location with the supplied set."""
+    from app.database import LocationQuizQuestion, LocationQuizAnswer
+    from sqlalchemy import delete
+
+    # Ordered bulk deletes: these tables have no ORM relationships, so the unit
+    # of work can't order parent/child deletes and would hit an FK violation.
+    old_ids = (
+        await db.execute(
+            select(LocationQuizQuestion.id).where(
+                LocationQuizQuestion.game_id == game_id,
+                LocationQuizQuestion.location_number == location_number,
+            )
+        )
+    ).scalars().all()
+    if old_ids:
+        await db.execute(delete(LocationQuizAnswer).where(LocationQuizAnswer.question_id.in_(list(old_ids))))
+        await db.execute(delete(LocationQuizQuestion).where(LocationQuizQuestion.id.in_(list(old_ids))))
+        await db.commit()
+
+    result = []
+    for i, qd in enumerate(questions_data):
+        q = LocationQuizQuestion(
+            game_id=game_id,
+            location_number=location_number,
+            question_text=qd.get("question_text", ""),
+            order=i,
+            source_url=qd.get("source_url") or None,
+        )
+        db.add(q)
+        await db.flush()
+        for ad in qd.get("answers", []):
+            a = LocationQuizAnswer(
+                question_id=q.id,
+                answer_text=ad.get("answer_text", ""),
+                bomb_value=ad.get("bomb_value", 0),
+                is_correct=ad.get("is_correct", False),
+            )
+            db.add(a)
+            await db.flush()
+            ad["id"] = a.id
+        qd["id"] = q.id
+        result.append(qd)
+    await db.commit()
+    return result
+
+
+async def set_location_quiz_mode(
+    db: AsyncSession, game_id: uuid.UUID, location_number: int, mode: str
+) -> Optional[Location]:
+    location = await get_location_by_number(db, game_id, location_number)
+    if not location:
+        return None
+    location.quiz_mode = mode
+    await db.commit()
+    await db.refresh(location)
+    return location
+
+
 async def list_quiz_templates(db: AsyncSession) -> list:
     """Named reusable quizzes as summaries (id, name, counts, derived total)."""
     from app.database import QuizTemplate, QuizTemplateQuestion, QuizTemplateAnswer
