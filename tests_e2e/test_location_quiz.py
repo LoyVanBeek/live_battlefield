@@ -110,6 +110,43 @@ def test_location_quiz_wrong_answer_still_counts_as_visited(page, app_url, seede
     assert loc1["question_count"] == 1
 
 
+def test_deleting_a_game_with_a_location_quiz_succeeds(app_url, admin_token, seeded_game_with_teams):
+    """Regression: location-quiz rows must be cleared so the game_id FK doesn't
+    block game deletion."""
+    seed = seeded_game_with_teams
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        resp = client.post(
+            "/api/location-quiz/questions",
+            params={"gm_token": seed["gm_token"]},
+            json={
+                "location_number": 1,
+                "questions": [
+                    {
+                        "question_text": "Delete me?",
+                        "answers": [
+                            {"answer_text": "Yes", "bomb_value": 1, "is_correct": True},
+                            {"answer_text": "No", "bomb_value": 0, "is_correct": False},
+                        ],
+                    }
+                ],
+            },
+        )
+        assert resp.json().get("success") is True, resp.text
+
+        games = client.get(
+            "/api/admin/games", params={"token": admin_token}
+        ).json()["games"]
+        gid = next(g["id"] for g in games if g["gm_token"] == seed["gm_token"])
+
+        resp = client.request(
+            "DELETE",
+            "/api/admin/games",
+            params={"token": admin_token},
+            json={"game_ids": [gid]},
+        )
+        assert resp.json()["results"][gid] is True, resp.text
+
+
 def test_gm_authors_a_location_quiz_via_modal(page, app_url, seeded_game_with_teams):
     seed = seeded_game_with_teams
     lp = LocationsPage(page, seed["gm_token"], app_url=app_url)

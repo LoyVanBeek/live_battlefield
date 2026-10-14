@@ -390,6 +390,70 @@ class TestLocationQuizGmEndpoints:
 
 
 # ---------------------------------------------------------------------------
+# Cleanup when locations (or the whole game) are removed
+# ---------------------------------------------------------------------------
+
+
+class TestLocationQuizCleanup:
+    def test_delete_location_quiz_questions_removes_answers_then_questions(self):
+        import asyncio
+        import uuid
+
+        from app import models as models_module
+
+        db = AsyncMock()
+        id_result = MagicMock()
+        id_result.scalars.return_value.all.return_value = [10, 11]
+        db.execute.side_effect = [id_result, MagicMock(), MagicMock()]
+
+        count = asyncio.run(
+            models_module.delete_location_quiz_questions(db, uuid.UUID(GAME_ID), 3)
+        )
+
+        assert count == 2
+        assert db.execute.await_count == 3
+        db.commit.assert_awaited()
+
+    def test_delete_location_quiz_questions_is_a_noop_without_questions(self):
+        import asyncio
+        import uuid
+
+        from app import models as models_module
+
+        db = AsyncMock()
+        id_result = MagicMock()
+        id_result.scalars.return_value.all.return_value = []
+        db.execute.side_effect = [id_result]
+
+        count = asyncio.run(
+            models_module.delete_location_quiz_questions(db, uuid.UUID(GAME_ID))
+        )
+
+        assert count == 0
+        assert db.execute.await_count == 1
+        db.commit.assert_not_awaited()
+
+    def test_delete_all_locations_clears_the_quiz_first(self):
+        import asyncio
+        import uuid
+
+        from app import models as models_module
+
+        db = AsyncMock()
+        loc_result = MagicMock()
+        loc_result.scalars.return_value.all.return_value = []
+        db.execute.return_value = loc_result
+
+        with patch.object(
+            models_module, "delete_location_quiz_questions", new=AsyncMock(return_value=0)
+        ) as mock_cleanup:
+            count = asyncio.run(models_module.delete_all_locations(db, uuid.UUID(GAME_ID)))
+
+        mock_cleanup.assert_awaited_once()
+        assert count == 0
+
+
+# ---------------------------------------------------------------------------
 # /api/admin/locations overview
 # ---------------------------------------------------------------------------
 

@@ -107,7 +107,41 @@ async def delete_all_events(db: AsyncSession, game_id: uuid.UUID) -> int:
     return count
 
 
+async def delete_location_quiz_questions(
+    db: AsyncSession, game_id: uuid.UUID, location_number: Optional[int] = None
+) -> int:
+    """Delete a game's location-quiz questions and their answers.
+
+    Scoped to a single location when location_number is given. Called whenever
+    locations are removed: the questions are keyed by (game_id, location_number)
+    rather than by a location id, so leaving them behind would let them resurface
+    if the number is reused, and the game_id FK would block deleting the game.
+    """
+    from app.database import LocationQuizQuestion, LocationQuizAnswer
+    from sqlalchemy import delete as sa_delete
+
+    filters = [LocationQuizQuestion.game_id == game_id]
+    if location_number is not None:
+        filters.append(LocationQuizQuestion.location_number == location_number)
+
+    q_ids = (
+        await db.execute(select(LocationQuizQuestion.id).where(*filters))
+    ).scalars().all()
+    if not q_ids:
+        return 0
+
+    await db.execute(
+        sa_delete(LocationQuizAnswer).where(LocationQuizAnswer.question_id.in_(list(q_ids)))
+    )
+    await db.execute(
+        sa_delete(LocationQuizQuestion).where(LocationQuizQuestion.id.in_(list(q_ids)))
+    )
+    await db.commit()
+    return len(q_ids)
+
+
 async def delete_all_locations(db: AsyncSession, game_id: uuid.UUID) -> int:
+    await delete_location_quiz_questions(db, game_id)
     result = await db.execute(
         select(Location).where(Location.game_id == game_id)
     )

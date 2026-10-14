@@ -2528,6 +2528,13 @@ async def remove_location(
                 was_visited = True
                 break
 
+    # Drop this location's quiz questions too: they are keyed by
+    # (game_id, location_number), so leaving them would let a later recreated
+    # location inherit them.
+    from app.models import delete_location_quiz_questions
+
+    await delete_location_quiz_questions(db, game_uuid, action.location_number)
+
     await db.delete(location)
 
     event = LocationRemovedEvent(
