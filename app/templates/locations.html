@@ -439,7 +439,7 @@
                             icon: locationPinIcon(loc.number)
                         })
                             .addTo(map)
-                            .bindPopup(`<b>Location ${loc.number}</b><br>Code: ${loc.code}<br>Bombs: ${loc.bomb_value || 1}`)
+                            .bindPopup(locationPopup(loc))
                             .openPopup();
                         marker.locationNumber = loc.number;
                         markers.push(marker);
@@ -463,7 +463,7 @@
                     icon: locationPinIcon(loc.number)
                 })
                     .addTo(map)
-                    .bindPopup(`<b>Location ${loc.number}</b><br>Code: ${loc.code}<br>Bombs: ${loc.bomb_value || 1}`);
+                    .bindPopup(locationPopup(loc));
                 marker.locationNumber = loc.number;
                 markers.push(marker);
             });
@@ -509,16 +509,27 @@
                     const quizCount = loc.question_count || 0;
                     const quizLabel = quizModeLabel(loc.quiz_mode) + (quizCount ? ` (${quizCount})` : '');
 
+                    // Quiz-only locations have no code and no code-mode bomb
+                    // reward, so those cells show a muted placeholder instead.
+                    const codeMode = hasCodeMode(loc);
+                    const codeCell = codeMode
+                        ? `<span class="editable-cell" id="cell-code-${loc.number}" onclick="startEdit(${loc.number}, 'code')">${loc.code}</span>`
+                        : `<span class="not-visited" title="Set this location to Code or Both to see its code">—</span>`;
+                    const bombsCell = codeMode
+                        ? `<span class="editable-cell" id="cell-bombs-${loc.number}" onclick="startEdit(${loc.number}, 'bombs')">💣 ${loc.bomb_value || 1}</span>`
+                        : `<span class="not-visited" title="Set this location to Code or Both to see its bombs">—</span>`;
+                    const codeArg = codeMode ? `'${loc.code}'` : 'null';
+
                     return `
                         <tr>
                             <td>${loc.number}</td>
-                            <td class="code"><span class="editable-cell" id="cell-code-${loc.number}" onclick="startEdit(${loc.number}, 'code')">${loc.code}</span></td>
+                            <td class="code">${codeCell}</td>
                             <td class="coords"><span class="editable-cell" id="cell-coords-${loc.number}" data-lat="${loc.latitude}" data-lon="${loc.longitude}" onclick="startEdit(${loc.number}, 'coords')">${lat}, ${lon}</span></td>
-                            <td><span class="editable-cell" id="cell-bombs-${loc.number}" onclick="startEdit(${loc.number}, 'bombs')">💣 ${loc.bomb_value || 1}</span></td>
+                            <td>${bombsCell}</td>
                             <td class="visited">${visitedHtml}</td>
                             <td><span class="editable-cell" id="cell-quiz-${loc.number}" onclick="openQuizModal(${loc.number})" title="Edit this location's check-in quiz">${quizLabel}</span></td>
                             <td><a href="${mapUrl}" target="_blank" class="map-link">Map</a></td>
-                            <td><button class="btn-remove" onclick="removeLocation(${loc.number}, '${loc.code}')">Remove</button></td>
+                            <td><button class="btn-remove" onclick="removeLocation(${loc.number}, ${codeArg})">Remove</button></td>
                         </tr>
                     `;
                 }).join('');
@@ -747,7 +758,8 @@
         }
 
         async function removeLocation(locationNumber, code) {
-            if (!confirm(`Remove location ${locationNumber} (code: ${code})?`)) {
+            const codeNote = code ? ` (code: ${code})` : '';
+            if (!confirm(`Remove location ${locationNumber}${codeNote}?`)) {
                 return;
             }
             
@@ -904,6 +916,19 @@
             if (mode === 'quiz') return '📝 Quiz';
             if (mode === 'both') return '📝+🔑 Both';
             return '🔑 Code';
+        }
+
+        // A location in "quiz" mode has no printed code, so its code and
+        // code-mode bomb reward are hidden on this page. "code" and "both"
+        // locations still show them.
+        function hasCodeMode(loc) {
+            return (loc.quiz_mode || 'code') !== 'quiz';
+        }
+
+        function locationPopup(loc) {
+            const head = `<b>Location ${loc.number}</b>`;
+            if (!hasCodeMode(loc)) return head + '<br>Quiz only';
+            return head + `<br>Code: ${loc.code}<br>Bombs: ${loc.bomb_value || 1}`;
         }
 
         async function openQuizModal(number) {

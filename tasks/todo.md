@@ -7,6 +7,13 @@ Semantics locked with the user:
 - A wrong answer still marks the location visited for that team.
 - `both` rewards independently (code and quiz can both pay out).
 
+## Follow-up: hide code-mode info for quiz-only locations
+- [x] On `/locations-secret`, a `quiz`-mode location shows `—` instead of its code and
+      bombs (and the map popup says "Quiz only", and the Remove confirm omits the code).
+      `code`/`both` locations are unchanged.
+- [x] E2E `test_quiz_only_location_hides_code_and_bombs` covers quiz → hidden and
+      both → shown.
+
 ## Backend
 - [x] Migration `014_add_location_quiz.py`: `locations.quiz_mode`, `location_quiz_questions`,
       `location_quiz_answers`, enum value `LOCATION_QUIZ_ANSWERED`
