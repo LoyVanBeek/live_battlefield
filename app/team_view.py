@@ -50,6 +50,11 @@ def _serialize_team(team, private: bool, status: str = "preparing") -> dict:
     result["g"] = _serialize_grid(team, include_ships=private)
     if status == "preparing":
         result["pt"] = dict(team.placed_ship_types)
+    # Eliminated: all placed ships are sunk. Only meaningful once the game is
+    # underway, and never for a team that has no ships (is_destroyed() is
+    # vacuously True for an empty fleet).
+    if status in ("started", "ended") and team.ships and team.is_destroyed():
+        result["x"] = 1
     return result
 
 

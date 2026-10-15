@@ -275,6 +275,16 @@ class QuizSettings(BaseModel):
     total_bombs: int = 100
 
 
+class AutoStartOnReadySettings(BaseModel):
+    enabled: bool
+
+
+class AIAutoSettings(BaseModel):
+    team_color: str
+    enabled: bool
+    interval: int = 60
+
+
 class QuizQuestionData(BaseModel):
     id: Optional[int] = None
     question_text: str = ""
@@ -411,6 +421,7 @@ async def get_public_state(
         "teams": teams,
         "paused_until": paused_until,
         "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at else "",
+        "auto_start_on_ready": game.auto_start_on_ready if game else False,
     }
 
 
@@ -1097,15 +1108,25 @@ async def get_game_state(
     all_players = await get_all_players_in_game(db, game_uuid)
     db_ai_colors = {p.color for p in all_players if p.role == Role.AI}
 
+    # Re-hydrate AI players that exist in DB but not yet in the in-memory dict
+    # (survives server restarts)
+    from app.services.ai_player import add_ai_player, get_ai_player
+
+    for p in all_players:
+        if p.role == Role.AI and get_ai_player(str(game_uuid), p.color) is None:
+            add_ai_player(str(game_uuid), p.color, p.name)
+
     teams = []
     for color, team in state.teams.items():
         is_ai = False
+        ai_obj = None
         if color in ai_players:
-            ai = ai_players.get(color)
-            if ai and hasattr(ai, "color") and ai.color == color:
+            ai_obj = ai_players.get(color)
+            if ai_obj and hasattr(ai_obj, "color") and ai_obj.color == color:
                 is_ai = True
         if not is_ai and color in db_ai_colors:
             is_ai = True
+            ai_obj = get_ai_player(str(game_uuid), color)
 
         token = next((t for t, c in state.team_tokens.items() if c == color), "")
         teams.append(
@@ -1122,6 +1143,8 @@ async def get_game_state(
                 "placed_ship_types": team.placed_ship_types,
                 "is_ai": is_ai,
                 "token": token,
+                "auto_move_enabled": ai_obj.auto_move_enabled if ai_obj else False,
+                "auto_move_interval": ai_obj.auto_move_interval if ai_obj else 60,
             }
         )
 
@@ -1152,6 +1175,7 @@ async def get_game_state(
         "quiz_enabled": game.quiz_enabled if game else False,
         "quiz_total_bombs": game.quiz_total_bombs if game else 100,
         "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at else "",
+        "auto_start_on_ready": game.auto_start_on_ready if game else False,
     }
 
 
@@ -1854,6 +1878,8 @@ async def execute_command(
                 direction=cmd.args.get("direction", "horizontal"),
             )
             await save_event(db, event, game_uuid)
+            # Ship placed — check for auto-start
+            asyncio.ensure_future(_auto_start_if_ready(db, game_uuid))
         elif cmd.command == "code":
             event = CodeRedeemedEvent(
                 color=cmd.team_color,
@@ -1936,6 +1962,8 @@ async def quick_place_all_ships(
         action.team_color = auth_info["color"]
 
     success, message = await place_all_ships_game_scoped(db, auth_info["game_id"], action.team_color)
+    if success:
+        asyncio.ensure_future(_auto_start_if_ready(db, uuid.UUID(auth_info["game_id"])))
     return {
         "success": success,
         "message": message,
@@ -1980,10 +2008,58 @@ async def trigger_ai_move(
 
     success = await ai.execute_bomb(db, state, game_id)
     if success:
+        # Reconstruct state after the bomb to check for a winner
+        events = await get_game_events(db, game_uuid)
+        state = GameState.from_events(events)
+        winner = state.get_winner()
+        if winner is not None and state.status == GameStatusField.STARTED:
+            from app.models import update_game_status
+            from app.database import GameStatus
+            end_event = GameEndedEvent(winner=winner.name)
+            new_state, updated_event = end_event.apply(state)
+            await save_event(db, updated_event, game_uuid)
+            await update_game_status(db, game_uuid, GameStatus.ENDED)
+            return {
+                "success": True,
+                "message": f"AI {action.team_color} threw a bomb! 🏆 {winner.name} ({winner.color}) wins!",
+            }
         return {"success": True, "message": f"AI {action.team_color} threw a bomb!"}
     return {
         "success": False,
         "message": f"AI {action.team_color} couldn't throw a bomb (no targets or no bombs)",
+    }
+
+
+@app.post("/api/quick/ai-auto-settings")
+async def set_ai_auto_settings(
+    data: AIAutoSettings,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.services.ai_player import get_ai_player, add_ai_player
+    from app.database import Role
+    from app.models import get_all_players_in_game
+
+    game_uuid = uuid.UUID(game_id)
+    ai = get_ai_player(game_id, data.team_color)
+    if not ai:
+        all_players = await get_all_players_in_game(db, game_uuid)
+        for p in all_players:
+            if p.color == data.team_color and p.role == Role.AI:
+                ai = add_ai_player(game_id, p.color, p.name)
+                break
+
+    if not ai:
+        return {
+            "success": False,
+            "message": f"No AI player with color {data.team_color}",
+        }
+
+    ai.auto_move_enabled = data.enabled
+    ai.auto_move_interval = max(5, data.interval)
+    return {
+        "success": True,
+        "message": f"AI {data.team_color} auto-move {'enabled' if data.enabled else 'disabled'} ({ai.auto_move_interval}s).",
     }
 
 
@@ -2512,6 +2588,33 @@ async def set_quiz_settings(
     }
 
 
+@app.post("/api/quick/set-auto-start-on-ready")
+async def set_auto_start_on_ready(
+    data: AutoStartOnReadySettings,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_game
+
+    game_uuid = uuid.UUID(game_id)
+    game = await get_game(db, game_uuid)
+    if not game:
+        return {"success": False, "message": "Game not found!"}
+
+    game.auto_start_on_ready = data.enabled
+    await db.commit()
+
+    # If toggling on and conditions are already met, start immediately
+    started = False
+    if data.enabled:
+        started = await _auto_start_if_ready(db, game_uuid)
+    
+    return {
+        "success": True,
+        "message": f"Auto-start {'enabled' if data.enabled else 'disabled'}." + (" Game started!" if started else ""),
+    }
+
+
 @app.get("/api/quiz/questions")
 async def get_quiz_questions(
     db: AsyncSession = Depends(get_api_db),
@@ -2782,43 +2885,34 @@ async def clear_database(
     }
 
 
-@app.post("/api/quick/start-game")
-async def start_game(
-    db: AsyncSession = Depends(get_api_db),
-    game_id: str = Depends(verify_gm_token),
-):
+async def _start_game(db: AsyncSession, game_uuid: uuid.UUID) -> dict:
+    """Start the game — precondition checks + event save.
+    Returns a success/error dict.
+    """
     from app.models import get_game_locations, update_game_status, get_game
     from app.database import GameStatus
     from datetime import datetime, timezone
-
-    game_uuid = uuid.UUID(game_id)
-
     from app.models import get_game_events
 
     events = await get_game_events(db, game_uuid)
     state = GameState.from_events(events)
-
     locations = await get_game_locations(db, game_uuid)
 
     if state.status == GameStatusField.STARTED:
         return {"success": False, "message": "Game has already started!"}
-
     if state.status == GameStatusField.ENDED:
         return {"success": False, "message": "Game has ended! Reset first."}
-
     if len(state.teams) < 2:
         return {
             "success": False,
             "message": f"Cannot start game - need at least 2 teams, currently have {len(state.teams)}",
         }
-
     teams_without_ships = [t.name for t in state.teams.values() if not t.has_all_ships()]
     if teams_without_ships:
         return {
             "success": False,
             "message": f"Cannot start game - not all teams have placed all ships: {', '.join(teams_without_ships)}",
         }
-
     game = await get_game(db, game_uuid)
     has_bomb_source = len(locations) > 0 or (game and game.quiz_enabled) or (game and game.trickle_enabled)
     if not has_bomb_source:
@@ -2830,13 +2924,44 @@ async def start_game(
     event = GameStartedEvent()
     new_state, updated_event = event.apply(state)
     await save_event(db, updated_event, game_uuid)
-
     await update_game_status(db, game_uuid, GameStatus.STARTED, started_at=datetime.now(timezone.utc))
+    return {"success": True, "message": "Game started! Teams can now bomb and redeem codes."}
 
-    return {
-        "success": True,
-        "message": "Game started! Teams can now bomb and redeem codes.",
-    }
+
+async def _auto_start_if_ready(db: AsyncSession, game_uuid: uuid.UUID) -> bool:
+    """If auto_start_on_ready is enabled and all preconditions are met,
+    start the game automatically. Returns True if the game was started."""
+    from app.models import get_game, get_game_events, get_game_locations
+
+    game = await get_game(db, game_uuid)
+    if not game or not game.auto_start_on_ready:
+        return False
+
+    events = await get_game_events(db, game_uuid)
+    state = GameState.from_events(events)
+    if state.status != GameStatusField.PREPARING:
+        return False
+    if len(state.teams) < 2:
+        return False
+    if not all(t.has_all_ships() for t in state.teams.values()):
+        return False
+
+    locations = await get_game_locations(db, game_uuid)
+    has_bomb_source = len(locations) > 0 or game.quiz_enabled or game.trickle_enabled
+    if not has_bomb_source:
+        return False
+
+    await _start_game(db, game_uuid)
+    return True
+
+
+@app.post("/api/quick/start-game")
+async def start_game(
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    game_uuid = uuid.UUID(game_id)
+    return await _start_game(db, game_uuid)
 
 
 @app.post("/api/quick/end-game")
@@ -2925,6 +3050,7 @@ async def get_game_status(
         "quiz_enabled": game.quiz_enabled if game else False,
         "quiz_total_bombs": game.quiz_total_bombs if game else 100,
         "scheduled_start_at": game.scheduled_start_at.isoformat() if game and game.scheduled_start_at else "",
+        "auto_start_on_ready": game.auto_start_on_ready if game else False,
     }
 
 

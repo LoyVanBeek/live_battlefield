@@ -174,6 +174,40 @@
             padding: 10px;
             border-radius: 8px;
         }
+        .team-card.destroyed {
+            opacity: 0.5;
+            filter: grayscale(0.8);
+        }
+        .team-card.destroyed .team-name-text {
+            text-decoration: line-through;
+        }
+        .destroyed-badge {
+            margin-left: 8px;
+            background: #f44336;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: normal;
+        }
+        .ready-badge {
+            margin-left: 8px;
+            background: #4caf50;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: normal;
+        }
+        .pending-badge {
+            margin-left: 8px;
+            background: #ff9800;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: normal;
+        }
         .team-card-header {
             display: flex;
             align-items: center;
@@ -349,6 +383,10 @@
                 <span class="locations" id="location-progress">0 {{ tr.gm.locations }}</span>
             </div>
             <div class="buttons">
+                <label style="color:#aaa;font-size:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer;">
+                    <input type="checkbox" id="auto-start-on-ready" onchange="setAutoStartOnReady(this.checked)">
+                    🚀 Auto-start
+                </label>
                 <button class="btn btn-success" id="btn-start" onclick="startGame()">{{ tr.gm.start_game }}</button>
                 <button class="btn btn-danger" id="btn-end" onclick="endGame()">{{ tr.gm.end_game }}</button>
                 <select id="pause-duration" style="padding:8px;font-size:13px;border-radius:5px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
@@ -796,6 +834,18 @@
             if (autoBtn) {
                 autoBtn.style.display = gameStatus === 'waiting' ? '' : 'none';
             }
+            // Auto-start toggle
+            const autoStartCheck = document.getElementById('auto-start-on-ready');
+            if (autoStartCheck) {
+                autoStartCheck.checked = !!status.auto_start_on_ready;
+                autoStartCheck.disabled = gameStatus !== 'waiting';
+            }
+            // Stop AI auto-timers when the game is no longer running
+            if (gameStatus !== 'started') {
+                for (const color of Object.keys(_aiAutoTimers)) {
+                    stopAIAuto(color);
+                }
+            }
         }
 
         async function loadPublicBoards() {
@@ -917,11 +967,15 @@
                     let card = document.getElementById(cardId);
                     
                     const aiIndicator = team.is_ai ? '<span class="ai-badge">🤖 AI</span>' : '';
+                    const destroyedIndicator = (team.is_destroyed && gameStatus !== 'waiting') ? '<span class="destroyed-badge">💀 Eliminated</span>' : '';
+                    const readyIndicator = (gameStatus === 'waiting' && team.has_all_ships && !team.is_destroyed) ? '<span class="ready-badge">✓ Ready</span>' : '';
+                    const pendingIndicator = (gameStatus === 'waiting' && team.ships_placed === 0) ? '<span class="pending-badge">⏳ Waiting</span>' : '';
                     
                     if (!card) {
                         // Create new card
+                        const isDestroyed = team.is_destroyed && gameStatus !== 'waiting';
                         card = document.createElement('div');
-                        card.className = 'team-card';
+                        card.className = 'team-card' + (isDestroyed ? ' destroyed' : '');
                         card.id = cardId;
                         const canRename = gameStatus === 'waiting' && !team.is_ai;
                         card.innerHTML = `
@@ -930,7 +984,10 @@
                                     <span class="team-color-dot" style="background: ${team.color}"></span>
                                     <span class="team-name-text" id="team-name-label-${team.color}" style="${canRename ? 'cursor:pointer;border-bottom:1px dashed #888;' : ''}">${esc(team.name)}</span>
                                     <span class="trophy-icon" id="trophy-${team.color}" style="display:none">🏆</span>
+                                    ${pendingIndicator}
+                                    ${readyIndicator}
                                     ${aiIndicator}
+                                    ${destroyedIndicator}
                                 </span>
                                 ${gameStatus === 'waiting' ? `<span style="margin-left:auto;cursor:pointer;width:20px;height:20px;border-radius:50%;background:#f44336;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;" onclick="event.stopPropagation();removeTeam('${team.color}')" title="Remove team">✕</span>` : ''}
                                 <div class="rename-input-area" id="rename-input-${team.color}" style="display:none; margin-top:6px;">
@@ -964,6 +1021,20 @@
                             });
                         }
                         teamsGrid.appendChild(card);
+                        // Render AI buttons immediately instead of waiting for the next poll
+                        if (team.is_ai) {
+                            const aiContainer = card.querySelector(`#ai-buttons-${team.color}`);
+                            if (aiContainer) {
+                                const intervalVal = _aiAutoIntervalValues[team.color] || team.auto_move_interval || 60;
+                                const isAuto = team.auto_move_enabled || _aiAutoTimers[team.color] !== undefined;
+                                _renderAIAutoButtons(aiContainer, team.color, intervalVal, isAuto);
+                                // Start the timer on creation (survives page refresh)
+                                if (team.auto_move_enabled && _aiAutoTimers[team.color] === undefined) {
+                                    _aiAutoIntervalValues[team.color] = team.auto_move_interval || 60;
+                                    _scheduleAIMove(team.color);
+                                }
+                            }
+                        }
                     } else {
                         // Update existing card content
                         const nameElement = card.querySelector('.team-name-text');
@@ -1005,13 +1076,74 @@
                         const aiButtonsContainer = card.querySelector(`#ai-buttons-${team.color}`);
                         if (aiButtonsContainer) {
                             if (team.is_ai) {
-                                aiButtonsContainer.innerHTML = `
-                                    <button class="btn btn-primary" style="margin-top: 4px; margin-right: 4px;font-size:11px;" onclick="triggerAIMove('${team.color}')">⚡ Move</button>
-                                    <button class="btn btn-danger" style="margin-top: 4px;font-size:11px;" onclick="removeAI('${team.color}')">✕ AI</button>
-                                `;
+                                const intervalVal = _aiAutoIntervalValues[team.color] || team.auto_move_interval || 60;
+                                const isAuto = team.auto_move_enabled || _aiAutoTimers[team.color] !== undefined;
+                                _renderAIAutoButtons(aiButtonsContainer, team.color, intervalVal, isAuto);
                             } else {
                                 aiButtonsContainer.innerHTML = '';
                             }
+                        }
+
+                        // Restore AI auto-move state from server (survives page refresh / server restart)
+                        if (team.is_ai && team.auto_move_enabled && _aiAutoTimers[team.color] === undefined) {
+                            _aiAutoIntervalValues[team.color] = team.auto_move_interval || 60;
+                            _scheduleAIMove(team.color);
+                        } else if (team.is_ai && !team.auto_move_enabled && _aiAutoTimers[team.color] !== undefined) {
+                            // Server says auto is off but a timer is pending — stop it
+                            clearTimeout(_aiAutoTimers[team.color]);
+                            delete _aiAutoTimers[team.color];
+                        }
+
+                        // Update destroyed state
+                        const isDestroyed = team.is_destroyed && gameStatus !== 'waiting';
+                        if (isDestroyed) {
+                            card.classList.add('destroyed');
+                        } else {
+                            card.classList.remove('destroyed');
+                        }
+                        const teamNameSpan = card.querySelector('.team-name');
+                        let destroyedBadge = card.querySelector('.destroyed-badge');
+                        if (isDestroyed && !destroyedBadge) {
+                            const badge = document.createElement('span');
+                            badge.className = 'destroyed-badge';
+                            badge.textContent = '💀 Eliminated';
+                            teamNameSpan.appendChild(badge);
+                        } else if (!isDestroyed && destroyedBadge) {
+                            destroyedBadge.remove();
+                        }
+
+                        // Update ready badge
+                        let readyBadge = card.querySelector('.ready-badge');
+                        const shouldShowReady = gameStatus === 'waiting' && team.has_all_ships && !team.is_destroyed;
+                        if (shouldShowReady && !readyBadge) {
+                            const badge = document.createElement('span');
+                            badge.className = 'ready-badge';
+                            badge.textContent = '✓ Ready';
+                            const trophyEl = card.querySelector('.trophy-icon');
+                            if (trophyEl) {
+                                trophyEl.insertAdjacentElement('afterend', badge);
+                            } else {
+                                teamNameSpan.appendChild(badge);
+                            }
+                        } else if (!shouldShowReady && readyBadge) {
+                            readyBadge.remove();
+                        }
+
+                        // Update pending badge
+                        let pendingBadge = card.querySelector('.pending-badge');
+                        const shouldShowPending = gameStatus === 'waiting' && team.ships_placed === 0;
+                        if (shouldShowPending && !pendingBadge) {
+                            const badge = document.createElement('span');
+                            badge.className = 'pending-badge';
+                            badge.textContent = '⏳ Waiting';
+                            const trophyEl = card.querySelector('.trophy-icon');
+                            if (trophyEl) {
+                                trophyEl.insertAdjacentElement('afterend', badge);
+                            } else {
+                                teamNameSpan.appendChild(badge);
+                            }
+                        } else if (!shouldShowPending && pendingBadge) {
+                            pendingBadge.remove();
                         }
 
                         // Trophy icon on winning team
@@ -1219,6 +1351,7 @@
         }
 
         async function removeAI(color) {
+            stopAIAuto(color);
             if (!confirm(`Remove AI player ${color}?`)) return;
             
             const result = await apiCall('/api/execute', 'POST', {
@@ -1232,8 +1365,108 @@
 
         async function triggerAIMove(color) {
             const result = await apiCall('/api/quick/trigger-ai-move', 'POST', { team_color: color });
-            showToast(result.message, result.success ? 'success' : 'error');
-            loadTeams();
+            if (result) {
+                showToast(result.message, result.success ? 'success' : 'error');
+            }
+            await loadTeams();
+            return result ? result.success : false;
+        }
+
+        // --- AI auto-move timer ---
+        const _aiAutoTimers = {};
+        const _aiAutoIntervalValues = {};
+
+        function _renderAIAutoButtons(container, color, intervalVal, isAuto) {
+            container.innerHTML = `
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <button class="btn btn-primary" style="font-size:11px;padding:4px 8px;" onclick="triggerAIMove('${color}')">⚡ Move</button>
+                    <label style="display:inline-flex;align-items:center;gap:2px;cursor:pointer;font-size:11px;color:#aaa;padding:4px 0;">
+                        <input type="checkbox" class="ai-auto-toggle" data-color="${color}" onchange="toggleAIAuto('${color}', this.checked)" ${isAuto ? 'checked' : ''}> 🤖 Auto
+                    </label>
+                    <input type="number" class="ai-auto-interval" data-color="${color}" value="${intervalVal}" min="5" step="5" onchange="aiAutoIntervalChanged('${color}', this)" oninput="_aiAutoIntervalValues['${color}']=parseInt(this.value)||60" style="width:52px;padding:4px 6px;font-size:11px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;text-align:center;">
+                    <span style="font-size:11px;color:#888;">s</span>
+                    <button class="btn btn-danger" style="font-size:11px;padding:4px 8px;" onclick="removeAI('${color}')">✕ AI</button>
+                </div>
+            `;
+        }
+
+        function stopAIAuto(color) {
+            if (_aiAutoTimers[color] === undefined) return;
+            clearTimeout(_aiAutoTimers[color]);
+            delete _aiAutoTimers[color];
+            delete _aiAutoIntervalValues[color];
+            const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
+            if (toggle) toggle.checked = false;
+        }
+
+        // Start (or restart) the single pending timer for this AI.
+        // Timers only run while the game is actually in progress.
+        function _scheduleAIMove(color) {
+            if (gameStatus !== 'started') return;
+            const intervalMs = Math.max(5, _aiAutoIntervalValues[color] || 60) * 1000;
+            clearTimeout(_aiAutoTimers[color]);
+            _aiAutoTimers[color] = setTimeout(() => _onAITimerFire(color), intervalMs);
+        }
+
+        // Called only when the timer fires. This is the single place that
+        // schedules the next timer, and only when auto-mode is still on and
+        // the AI actually had enough bombs/targets.
+        async function _onAITimerFire(color) {
+            if (_aiAutoTimers[color] === undefined) return;  // cancelled
+            _aiAutoTimers[color] = 'running';  // keep the slot truthy so the poll won't restart it
+
+            let result = null;
+            try {
+                result = await apiCall('/api/quick/trigger-ai-move', 'POST', { team_color: color });
+                if (result) {
+                    showToast(result.message, result.success ? 'success' : 'error');
+                }
+            } catch (e) {
+                console.error('AI auto-move error', e);
+            }
+            await loadTeams();
+
+            const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
+            if (toggle && toggle.checked && result && result.success) {
+                _scheduleAIMove(color);
+            } else {
+                await apiCall('/api/quick/ai-auto-settings', 'POST', {
+                    team_color: color, enabled: false,
+                    interval: _aiAutoIntervalValues[color] || 60
+                });
+                if (toggle) toggle.checked = false;
+                delete _aiAutoTimers[color];
+            }
+        }
+
+        async function toggleAIAuto(color, enabled) {
+            const intervalInput = document.querySelector(`.ai-auto-interval[data-color="${color}"]`);
+            const interval = Math.max(5, parseInt(intervalInput?.value || '60', 10) || 60);
+            await apiCall('/api/quick/ai-auto-settings', 'POST', {
+                team_color: color, enabled: !!enabled, interval: interval
+            });
+            _aiAutoIntervalValues[color] = interval;
+            if (enabled) {
+                _scheduleAIMove(color);
+            } else {
+                clearTimeout(_aiAutoTimers[color]);
+                delete _aiAutoTimers[color];
+                const toggle = document.querySelector(`.ai-auto-toggle[data-color="${color}"]`);
+                if (toggle) toggle.checked = false;
+            }
+        }
+
+        async function aiAutoIntervalChanged(color, input) {
+            const interval = Math.max(5, parseInt(input.value) || 60);
+            const enabled = _aiAutoTimers[color] !== undefined;
+            await apiCall('/api/quick/ai-auto-settings', 'POST', {
+                team_color: color, enabled: enabled, interval: interval
+            });
+            _aiAutoIntervalValues[color] = interval;
+            // Restart timer with new interval if auto is running
+            if (enabled) {
+                _scheduleAIMove(color);
+            }
         }
 
         async function pauseAllAI() {
@@ -1255,6 +1488,15 @@
             loadGameStatus();
             loadPublicBoards();
             loadTeams();
+        }
+
+        async function setAutoStartOnReady(enabled) {
+            const result = await apiCall('/api/quick/set-auto-start-on-ready', 'POST', {enabled: !!enabled});
+            if (result) {
+                showToast(result.message, result.success ? 'success' : 'error');
+                loadGameStatus();
+                loadTeams();
+            }
         }
 
         async function endGame() {

@@ -201,6 +201,7 @@ class Game(Base):
     quiz_total_bombs: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     default_location_bombs: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
     scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    auto_start_on_ready: Mapped[bool] = mapped_column(nullable=False, default=False)
 
 
 class TeamToken(Base):

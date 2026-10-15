@@ -78,6 +78,7 @@
         .team-status-badge.waiting { background: #ff9800; color: white; }
         .team-status-badge.ended { background: #f44336; color: white; }
         .team-status-badge.paused { background: #e65100; color: white; }
+        .team-status-badge.eliminated { background: #555; color: #eee; }
         .team-stats {
             display: flex;
             gap: 20px;
@@ -211,6 +212,24 @@
             text-align: center;
             min-height: 380px; /* Prevent layout shift during refresh */
             padding: 10px;
+        }
+        .public-board-item.eliminated {
+            opacity: 0.5;
+            filter: grayscale(1);
+        }
+        .eliminated-badge {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #555;
+            color: #eee;
+            margin-bottom: 8px;
+        }
+        #private-board.eliminated {
+            opacity: 0.6;
+            filter: grayscale(0.6);
         }
         .public-board-item p {
             margin-bottom: 8px;
@@ -366,6 +385,7 @@
                     </div>
                 </div>
                 <span class="team-status-badge waiting" id="game-status-badge">{{ tr.status.loading }}</span>
+                <span class="team-status-badge eliminated" id="eliminated-badge" style="display:none;">{{ tr.status.eliminated }}</span>
                 <span id="schedule-countdown" style="color:#ff9800;font-size:14px;font-weight:bold;display:none;"></span>
                 <span id="schedule-start-time" style="color:#aaa;font-size:12px;display:none;"></span>
             </div>
@@ -840,6 +860,12 @@
                 badgeEl.className = 'team-status-badge waiting';
             }
 
+            // Eliminated indicator for this team (all ships sunk)
+            var elimEl = document.getElementById('eliminated-badge');
+            if (elimEl) elimEl.style.display = myTeam.x ? '' : 'none';
+            var privateBoardEl = document.getElementById('private-board');
+            if (privateBoardEl) privateBoardEl.classList.toggle('eliminated', !!myTeam.x);
+
             // Team header
             document.getElementById('team-color-dot').style.background = myTeam.c;
             document.getElementById('team-name').textContent = myTeam.n;
@@ -891,6 +917,7 @@
                     boardItem.style.borderRadius = '8px';
                     boardItem.innerHTML =
                         '<p>' + _('board.public.team_label', {name: esc(team.n), color: team.c}) + '</p>' +
+                        '<span class="eliminated-badge" style="display:none;">' + _('status.eliminated') + '</span>' +
                         '<div id="' + boardId + '"></div>';
                     grid.appendChild(boardItem);
                 } else {
@@ -899,6 +926,11 @@
                     if (nameEl && nameEl.textContent !== expected) nameEl.textContent = expected;
                     boardItem.style.backgroundColor = getRgba(team.c, 0.3);
                 }
+
+                // Eliminated opponents are badged and dimmed
+                var elimBadge = boardItem.querySelector('.eliminated-badge');
+                if (elimBadge) elimBadge.style.display = team.x ? 'inline-block' : 'none';
+                boardItem.classList.toggle('eliminated', !!team.x);
 
                 if (gameStatus === 'ended') {
                     var boardDiv = document.getElementById(boardId);
@@ -1104,7 +1136,7 @@
             if (!select) return;
 
             var opponents = (allTeams || []).filter(function (team) { return team.c !== TEAM_COLOR; });
-            var signature = opponents.map(function (team) { return team.c + ':' + team.n; }).join('|');
+            var signature = opponents.map(function (team) { return team.c + ':' + team.n + ':' + (team.x ? '1' : '0'); }).join('|');
             if (signature === targetTeamsSignature) return;
             targetTeamsSignature = signature;
 
@@ -1113,7 +1145,7 @@
             opponents.forEach(function (team) {
                 var opt = document.createElement('option');
                 opt.value = team.c;
-                opt.textContent = _('action.bomb.team_option', {name: team.n, color: team.c});
+                opt.textContent = _('action.bomb.team_option', {name: team.n, color: team.c}) + (team.x ? ' 💀' : '');
                 select.appendChild(opt);
             });
             if (previous) select.value = previous;

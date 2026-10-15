@@ -17,6 +17,7 @@
         "ended": "\ud83c\udfc1 Spel afgelopen",
         "waiting": "\u23f3 Wachten op start",
         "paused": "\u23f8\ufe0f Gepauzeerd",
+        "eliminated": "\ud83d\udc80 Uitgeschakeld",
         "loading": "Laden..."
     },
     "nav": {
