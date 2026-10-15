@@ -446,6 +446,22 @@ async def admin_dashboard(
     )
 
 
+@app.get("/admin/{admin_token}/location-sets", response_class=HTMLResponse)
+async def location_set_editor_page(
+    request: Request, admin_token: str, db: AsyncSession = Depends(get_api_db)
+):
+    """Full-page Location Set editor (map + per-location quiz)."""
+    from app.models import get_admin
+    from app.safety import compare_digest_optional
+
+    sa = await get_admin(db)
+    if not sa or not compare_digest_optional(sa.token, admin_token):
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "location_set_editor.html", {"request": request, "token": admin_token}
+    )
+
+
 @app.get("/game-master/{gm_token}", response_class=HTMLResponse)
 async def game_master_page(
     request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db),

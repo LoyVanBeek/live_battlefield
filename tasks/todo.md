@@ -89,3 +89,54 @@ ran a one-off SQL script that rebuilt `location_set_questions` /
 `location_set_answers` from `quiz_json`, then dropped `quiz_json` and the
 three template tables. The existing dev set (3 locations, 3 quizzes) survived
 and is served correctly by `/api/location-sets`.
+
+# Full-page Location Set editor (shared map editor)
+
+Follow-up (chosen by the user): authoring a set should be a full page like the
+game's locations screen — Leaflet map, numbered pins, table with inline
+editing, and a per-location quiz modal — by extracting one editor used by both
+pages, rather than duplicating the game page.
+
+## Extract the shared editor (behaviour-neutral)
+- [x] `app/static/location-editor.css`: the game page's `<style>` block
+- [x] `app/static/js/location_editor.js`: `createLocationEditor(config)` —
+      map/pins, table + inline edit (code/coords/bombs), quiz modal, toasts,
+      GPS single-pin; persistence via a host-supplied adapter
+- [x] `locations.html`: link the shared CSS/JS, keep game-only pieces
+      (count/radius scatter, default-bombs, "Location sets" row, quiz-modal
+      load/save-as-from-set) as host code
+- [x] Preserve every id/selector the 19 locations + quiz E2E tests rely on
+      (`#locations-body`, `#cell-{code,bombs,coords,quiz}-N`,
+      `#cell-edit-input`, `.btn-save-cell`, `#map-hint`, …)
+
+## New page + route
+- [x] `app/templates/location_set_editor.html` (draft-in-memory, explicit Save)
+- [x] `GET /admin/{token}/location-sets` (admin-token checked, 404 otherwise);
+      `?id=N` loads a set, absent = new; Save → POST/PUT, Delete → DELETE,
+      `history.replaceState('?id=')` after save, unsaved-changes guard
+
+## Dashboard rewire
+- [x] `admin_dashboard.html`: `➕ New Set` / `✏️ Edit` now navigate to the page;
+      delete the inline row editor, `#set-quiz-modal` and all its JS
+
+## Tests
+- [x] `tests_e2e/pages/location_set_editor.py` (new POM)
+- [x] `test_admin_set_editor` rewritten for the page (author + reload + delete)
+- [x] New: dashboard→editor navigation, map-click adds to the draft,
+      name/location validation
+- [x] Trim the now-unused set helpers from `pages/admin_dashboard.py`
+
+## Verification (CI order, all green)
+1. `uv run ty check` — pass
+2. `uv run pytest tests/` — 305 pass (API contract unchanged)
+3. `uvx pip-audit` against `uv export ...` — no known vulnerabilities
+4. Fresh-DB E2E stack (`down -v` → `up -d --build`) —
+   `test-e2e` full suite: 87 pass (locations 19, library 10)
+
+Note: the E2E `test-e2e` image bakes in `tests_e2e/` at build time, so it must
+be rebuilt (`docker compose -f docker-compose.e2e.yml build test-e2e`) after
+test changes; `run --rm` alone reuses the stale image.
+
+Empty code cells on the set editor needed `min-width`/`min-height` on
+`.editable-cell` (an empty inline span has no box, so Playwright — and a user —
+can't click it).

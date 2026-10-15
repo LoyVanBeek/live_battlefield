@@ -6,268 +6,18 @@
     <title>Locations Overview - Live Battlefield</title>
     <link rel="stylesheet" href="/static/leaflet/leaflet.css" />
     <link rel="stylesheet" href="/static/location-pin.css" />
+    <link rel="stylesheet" href="/static/location-editor.css" />
     <script src="/static/leaflet/leaflet.js"></script>
     <script src="/static/location-pin.js"></script>
     <script src="/static/js/quiz_editor.js"></script>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #1a1a2e;
-            color: #eee;
-            padding: 20px;
-            min-height: 100vh;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
-            color: #00d9ff;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .table-container {
-            background: #16213e;
-            padding: 20px;
-            border-radius: 8px;
-            overflow-x: auto;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #0f3460;
-        }
-        th {
-            background: #0f3460;
-            color: #00d9ff;
-            font-weight: bold;
-        }
-        tr:hover {
-            background: #1f2f50;
-        }
-        .code {
-            font-family: monospace;
-            font-size: 16px;
-            font-weight: bold;
-            color: #ff9800;
-        }
-        .coords {
-            font-family: monospace;
-            color: #888;
-        }
-        .visited {
-            color: #4caf50;
-        }
-        .not-visited {
-            color: #666;
-            font-style: italic;
-        }
-        .map-link {
-            display: inline-block;
-            padding: 6px 12px;
-            background: #00d9ff;
-            color: #1a1a2e;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .map-link:hover {
-            background: #00b8d4;
-        }
-        .nav-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            padding: 10px 20px;
-            background: #0f3460;
-            color: #00d9ff;
-            text-decoration: none;
-            border-radius: 5px;
-        }
-        .nav-link:hover {
-            background: #1a4a7a;
-        }
-        .color-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 12px;
-            margin: 2px;
-        }
-        .color-red { background: #dc3c3c; }
-        .color-blue { background: #3c64dc; }
-        .color-green { background: #3cdc3c; }
-        .color-purple { background: #a03cdc; }
-        .color-orange { background: #ff9800; }
-        .color-yellow { background: #dcdc3c; color: #000; }
-        .btn-remove {
-            background: #dc3c3c;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .btn-remove:hover {
-            background: #c42c2c;
-        }
-        .btn-add {
-            background: #4caf50;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-right: 10px;
-        }
-        .btn-add:hover {
-            background: #45a049;
-        }
-        .btn-myloc {
-            background: #0f3460;
-            color: #00d9ff;
-            border: 1px solid #00d9ff;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-        }
-        .btn-myloc:hover:not(:disabled) {
-            background: #00d9ff;
-            color: #1a1a2e;
-        }
-        .btn-myloc:disabled {
-            opacity: 0.6;
-            cursor: wait;
-        }
-        .location-form {
-            background: #16213e;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .location-form input {
-            padding: 8px;
-            font-size: 14px;
-            border: 2px solid #0f3460;
-            border-radius: 5px;
-            background: #1a1a2e;
-            color: #eee;
-            margin-right: 10px;
-            margin-bottom: 10px;
-        }
-        .location-form input:focus {
-            outline: none;
-            border-color: #00d9ff;
-        }
-        .form-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            align-items: center;
-        }
-        #map {
-            height: 400px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border: 2px solid #0f3460;
-        }
-        .leaflet-popup-content-wrapper {
-            background: #16213e;
-            color: #eee;
-        }
-        .leaflet-popup-tip {
-            background: #16213e;
-        }
-        .editable-cell {
-            cursor: pointer;
-            border-bottom: 1px dashed #888;
-        }
-        .editable-cell:hover {
-            border-bottom-color: #00d9ff;
-            color: #00d9ff;
-        }
-        .cell-edit-input {
-            width: 90px;
-            padding: 4px 6px;
-            font-size: 14px;
-            border-radius: 4px;
-            border: 2px solid #0f3460;
-            background: #1a1a2e;
-            color: #eee;
-        }
-        .cell-edit-input:focus {
-            outline: none;
-            border-color: #00d9ff;
-        }
-        .btn-save-cell {
-            background: #4caf50;
-            color: white;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        .btn-save-cell:hover {
-            background: #45a049;
-        }
-        .btn-cancel-cell {
-            background: #555;
-            color: #eee;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        .btn-cancel-cell:hover {
-            background: #666;
-        }
-        #toast {
-            visibility: hidden;
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            min-width: 250px;
-            max-width: 80%;
-            padding: 12px 20px;
-            border-radius: 6px;
-            color: #fff;
-            font-size: 14px;
-            z-index: 2000;
-            text-align: center;
-        }
-        #toast.success { background: #2e7d32; }
-        #toast.error { background: #c62828; }
-        #toast.show {
-            visibility: visible;
-            animation: toast-fade 0.3s ease;
-        }
-        @keyframes toast-fade {
-            from { opacity: 0; bottom: 30px; }
-            to { opacity: 1; bottom: 20px; }
-        }
-    </style>
+    <script src="/static/js/location_editor.js"></script>
 </head>
 <body>
     <div class="container">
         <a id="back-link" class="nav-link">← Back</a>
-        
+
         <h1>📍 Locations Overview (Secret)</h1>
-        
+
         <!-- Add Location Form -->
         <div class="location-form">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
@@ -288,7 +38,7 @@
                     <label style="font-size: 12px; color: #888;">Longitude</label>
                     <input type="number" id="loc-lon" placeholder="13.405" step="0.0001" style="width: 120px;">
                 </div>
-                <button id="btn-my-location" type="button" class="btn-myloc" onclick="addLocationAtMyLocation()"
+                <button id="btn-my-location" type="button" class="btn-myloc" onclick="locationEditor.addAtMyLocation()"
                         style="margin-top: 18px;" title="Insert a single location at my current GPS position">📍 My location</button>
                 <div style="display: flex; flex-direction: column; gap: 5px;">
                     <label style="font-size: 12px; color: #888;">Count</label>
@@ -299,7 +49,7 @@
                     <input type="number" id="loc-radius" placeholder="Radius" value="2" step="0.1" style="width: 100px;">
                 </div>
                 <button class="btn-add" onclick="addLocations()" style="margin-top: 18px;">Add</button>
-                <button class="btn-remove" onclick="clearAllLocations()" style="margin-top: 18px; height: fit-content;">🗑️ Clear All</button>
+                <button class="btn-remove" onclick="locationEditor.clearAll()" style="margin-top: 18px; height: fit-content;">🗑️ Clear All</button>
             </div>
             <p style="color: #888; font-size: 12px; margin-top: 5px;">Leave count=1 for single location, or set higher for random batch. Or click on the map below to pick a location, or use 📍 My location to drop one at your current GPS position.</p>
             <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap;border-top:1px solid #0f3460;padding-top:12px;">
@@ -311,7 +61,7 @@
                 <span style="font-size:12px;color:#888;">Applying a set replaces all current locations (codes included).</span>
             </div>
         </div>
-        
+
         <!-- Map -->
         <div style="position: relative;">
             <div id="map"></div>
@@ -319,7 +69,7 @@
                 🖱️ Click map to add location
             </div>
         </div>
-        
+
         <div class="table-container">
             <table>
                 <thead>
@@ -348,7 +98,7 @@
         <div style="background:#16213e;border-radius:8px;padding:20px;max-width:760px;width:100%;max-height:90vh;overflow-y:auto;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;">
                 <h2 id="lq-modal-title" style="color:#00d9ff;font-size:18px;">Location quiz</h2>
-                <button class="btn-remove" onclick="closeQuizModal()">Close</button>
+                <button class="btn-remove" onclick="locationEditor.closeQuizModal()">Close</button>
             </div>
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
                 <label style="font-size:13px;color:#aaa;">Mode
@@ -366,18 +116,18 @@
                 </label>
                 <button class="btn btn-secondary" onclick="loadSetLocationQuiz()" style="font-size:12px;padding:5px 10px;">Load</button>
                 <button class="btn btn-secondary" onclick="saveAsSetLocationQuiz()" style="font-size:12px;padding:5px 10px;">Save as…</button>
-                <button class="btn btn-secondary" onclick="lqEditor.exportJSON('location_quiz.json')" style="font-size:12px;padding:5px 10px;">⬇ Export</button>
+                <button class="btn btn-secondary" onclick="locationEditor.quizEditor.exportJSON('location_quiz.json')" style="font-size:12px;padding:5px 10px;">⬇ Export</button>
                 <button class="btn btn-secondary" onclick="document.getElementById('lq-import-input').click()" style="font-size:12px;padding:5px 10px;">⬆ Import</button>
-                <input type="file" id="lq-import-input" accept=".json" style="display:none" onchange="lqEditor.importFile(event)">
+                <input type="file" id="lq-import-input" accept=".json" style="display:none" onchange="locationEditor.quizEditor.importFile(event)">
             </div>
             <div id="lq-warning-banner" style="display:none;background:rgba(255,82,82,.12);border:1px solid #ff5252;border-radius:6px;padding:8px 10px;font-size:12px;color:#ff8a80;margin-bottom:10px;"></div>
             <div id="lq-questions-list"></div>
             <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
-                <button class="btn btn-primary" onclick="lqEditor.addQuestion()" style="font-size:12px;padding:5px 10px;">+ Add Question</button>
+                <button class="btn btn-primary" onclick="locationEditor.quizEditor.addQuestion()" style="font-size:12px;padding:5px 10px;">+ Add Question</button>
                 <span style="color:#888;font-size:12px;">Each question is worth its own bomb value; only the correct answer should yield bombs.</span>
             </div>
             <div style="display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap;">
-                <button class="btn btn-primary" onclick="saveLocationQuiz()" style="padding:8px 16px;">Save Quiz</button>
+                <button class="btn btn-primary" onclick="locationEditor.saveQuiz()" style="padding:8px 16px;">Save Quiz</button>
             </div>
         </div>
     </div>
@@ -402,10 +152,6 @@
             }
         })();
 
-        let map;
-        let markers = [];
-        const BOXTEL_CENTER = [51.59, 5.33];
-        
         const colorClasses = {
             'red': 'color-red',
             'blue': 'color-blue',
@@ -419,293 +165,125 @@
             return colorClasses[color] || 'color-red';
         }
 
-        function initMap() {
-            map = L.map('map').setView(BOXTEL_CENTER, 13);
-            
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(map);
-            
-            map.on('click', async function(e) {
-                // While the coords editor is open, a map click picks the new
-                // position instead of creating a location.
-                if (editing && editing.field === 'coords') {
-                    const input = document.getElementById('cell-edit-input');
-                    if (input) {
-                        input.value = `${e.latlng.lat}, ${e.latlng.lng}`;
-                        input.focus();
-                    }
-                    return;
+        // ---- Shared editor, backed by the game's quick endpoints ----
+        const locationEditor = createLocationEditor({
+            els: {
+                map: 'map', tbody: 'locations-body', mapHint: 'map-hint', toast: 'toast',
+                quizModal: 'lq-modal', quizTitle: 'lq-modal-title', quizMode: 'lq-mode',
+                quizQuestionsList: 'lq-questions-list', quizWarningBanner: 'lq-warning-banner',
+            },
+            showVisitedBy: true,
+            renderVisited: (loc) => {
+                if (loc.visited_by && loc.visited_by.length > 0) {
+                    return loc.visited_by.map((team) =>
+                        `<span class="color-badge ${getColorClass(team)}">${team}</span>`
+                    ).join(' ');
                 }
-
-                try {
+                return '<span class="not-visited">(none yet)</span>';
+            },
+            onLoaded: (locations, data) => {
+                if (data && data.default_bombs !== undefined) {
+                    const el = document.getElementById('default-bombs-value');
+                    if (el) el.textContent = data.default_bombs;
+                }
+            },
+            onQuizOpen: () => loadSetQuizOptions(),
+            adapter: {
+                load: async () => {
+                    const resp = await fetch('/api/admin/locations?gm_token=' + encodeURIComponent(getGmToken()));
+                    const data = await resp.json();
+                    return { locations: data.locations || [], default_bombs: data.default_bombs };
+                },
+                add: async ({ latitude, longitude, count, radiusKm }) => {
                     const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getGmToken()), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            latitude: e.latlng.lat,
-                            longitude: e.latlng.lng,
-                            count: 1,
-                            radius_km: 0
-                        })
+                        body: JSON.stringify({ latitude, longitude, count, radius_km: radiusKm }),
                     });
-                    const data = await resp.json();
-                    
-                    if (data.success && data.locations && data.locations.length > 0) {
-                        const loc = data.locations[0];
-                        const marker = L.marker([e.latlng.lat, e.latlng.lng], {
-                            icon: locationPinIcon(loc.number)
-                        })
-                            .addTo(map)
-                            .bindPopup(locationPopup(loc))
-                            .openPopup();
-                        marker.locationNumber = loc.number;
-                        markers.push(marker);
-                        loadLocations();
+                    return resp.json();
+                },
+                remove: async (number) => {
+                    const resp = await fetch('/api/quick/remove_location?gm_token=' + encodeURIComponent(getGmToken()), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ location_number: number }),
+                    });
+                    return resp.json();
+                },
+                clearAll: async () => {
+                    const resp = await fetch('/api/quick/clear-locations?gm_token=' + encodeURIComponent(getGmToken()), {
+                        method: 'POST',
+                    });
+                    return resp.json();
+                },
+                saveField: async (number, field, value) => {
+                    let url;
+                    let body;
+                    if (field === 'code') {
+                        url = '/api/quick/set_location_code';
+                        body = { location_number: number, code: value };
+                    } else if (field === 'coords') {
+                        url = '/api/quick/set_location_coords';
+                        body = { location_number: number, latitude: value.latitude, longitude: value.longitude };
                     } else {
-                        alert(data.message || 'Error adding location');
+                        url = '/api/quick/set_location_bombs';
+                        body = { location_number: number, bomb_value: value };
                     }
-                } catch (err) {
-                    console.error('Error adding location:', err);
-                    alert('Error adding location');
-                }
-            });
-        }
+                    const resp = await fetch(url + '?gm_token=' + encodeURIComponent(getGmToken()), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                    return resp.json();
+                },
+                loadQuiz: async (number) => {
+                    const resp = await fetch('/api/location-quiz/questions?gm_token=' + encodeURIComponent(getGmToken()) + '&location_number=' + number);
+                    return resp.json();
+                },
+                saveQuiz: async (number, mode, questions) => {
+                    let resp = await fetch('/api/location-quiz/questions?gm_token=' + encodeURIComponent(getGmToken()), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ location_number: number, questions: questions }),
+                    });
+                    let data = await resp.json();
+                    if (!data || !data.success) return data || { success: false, message: 'Error saving quiz' };
 
-        function updateMarkers(locations) {
-            markers.forEach(m => map.removeLayer(m));
-            markers = [];
-            
-            locations.forEach(loc => {
-                const marker = L.marker([loc.latitude, loc.longitude], {
-                    icon: locationPinIcon(loc.number)
-                })
-                    .addTo(map)
-                    .bindPopup(locationPopup(loc));
-                marker.locationNumber = loc.number;
-                markers.push(marker);
-            });
-        }
+                    resp = await fetch('/api/quick/set_location_quiz_mode?gm_token=' + encodeURIComponent(getGmToken()), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ location_number: number, mode: mode }),
+                    });
+                    data = await resp.json();
+                    if (!data || !data.success) return data || { success: false, message: 'Error saving mode' };
+                    return { success: true, message: 'Quiz saved!' };
+                },
+            },
+        });
 
-        async function loadLocations() {
-            if (!map) {
-                initMap();
-            }
-            
-            try {
-                const resp = await fetch('/api/admin/locations?gm_token=' + encodeURIComponent(getGmToken()));
-                const data = await resp.json();
+        // ---- Add-locations form (count/radius scatter is game-only) ----
+        async function addLocations() {
+            const lat = parseFloat(document.getElementById('loc-lat').value);
+            const lon = parseFloat(document.getElementById('loc-lon').value);
+            const count = parseInt(document.getElementById('loc-count').value) || 1;
+            const radius = parseFloat(document.getElementById('loc-radius').value) || 2;
 
-                if (data.default_bombs !== undefined) {
-                    const defaultEl = document.getElementById('default-bombs-value');
-                    if (defaultEl) defaultEl.textContent = data.default_bombs;
-                }
-
-                const tbody = document.getElementById('locations-body');
-                
-                if (data.locations.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No locations found</td></tr>';
-                    return;
-                }
-                
-                updateMarkers(data.locations);
-                
-                tbody.innerHTML = data.locations.map(loc => {
-                    const lat = loc.latitude.toFixed(4);
-                    const lon = loc.longitude.toFixed(4);
-                    const mapUrl = `https://maps.google.com/?q=${loc.latitude},${loc.longitude}`;
-                    
-                    let visitedHtml;
-                    if (loc.visited_by && loc.visited_by.length > 0) {
-                        visitedHtml = loc.visited_by.map(team => 
-                            `<span class="color-badge ${getColorClass(team)}">${team}</span>`
-                        ).join(' ');
-                    } else {
-                        visitedHtml = '<span class="not-visited">(none yet)</span>';
-                    }
-                    
-                    const quizCount = loc.question_count || 0;
-                    const quizLabel = quizModeLabel(loc.quiz_mode) + (quizCount ? ` (${quizCount})` : '');
-
-                    // Quiz-only locations have no code and no code-mode bomb
-                    // reward, so those cells show a muted placeholder instead.
-                    const codeMode = hasCodeMode(loc);
-                    const codeCell = codeMode
-                        ? `<span class="editable-cell" id="cell-code-${loc.number}" onclick="startEdit(${loc.number}, 'code')">${loc.code}</span>`
-                        : `<span class="not-visited" title="Set this location to Code or Both to see its code">—</span>`;
-                    const bombsCell = codeMode
-                        ? `<span class="editable-cell" id="cell-bombs-${loc.number}" onclick="startEdit(${loc.number}, 'bombs')">💣 ${loc.bomb_value || 1}</span>`
-                        : `<span class="not-visited" title="Set this location to Code or Both to see its bombs">—</span>`;
-                    const codeArg = codeMode ? `'${loc.code}'` : 'null';
-
-                    return `
-                        <tr>
-                            <td>${loc.number}</td>
-                            <td class="code">${codeCell}</td>
-                            <td class="coords"><span class="editable-cell" id="cell-coords-${loc.number}" data-lat="${loc.latitude}" data-lon="${loc.longitude}" onclick="startEdit(${loc.number}, 'coords')">${lat}, ${lon}</span></td>
-                            <td>${bombsCell}</td>
-                            <td class="visited">${visitedHtml}</td>
-                            <td><span class="editable-cell" id="cell-quiz-${loc.number}" onclick="openQuizModal(${loc.number})" title="Edit this location's check-in quiz">${quizLabel}</span></td>
-                            <td><a href="${mapUrl}" target="_blank" class="map-link">Map</a></td>
-                            <td><button class="btn-remove" onclick="removeLocation(${loc.number}, ${codeArg})">Remove</button></td>
-                        </tr>
-                    `;
-                }).join('');
-            } catch (e) {
-                console.error('Error loading locations:', e);
-                document.getElementById('locations-body').innerHTML = 
-                    '<tr><td colspan="8" style="text-align: center; color: #f44336;">Error loading locations</td></tr>';
-            }
-        }
-
-        // ---- Inline editing of Code / Bombs cells ----
-        let editing = null; // {number, field, originalHtml}
-
-        function showToast(msg, type = 'success') {
-            const toast = document.getElementById('toast');
-            toast.textContent = msg;
-            toast.className = '';
-            void toast.offsetWidth; // restart animation
-            toast.className = (type === 'success' ? 'success' : 'error') + ' show';
-            clearTimeout(showToast._t);
-            showToast._t = setTimeout(() => { toast.className = ''; }, 3000);
-        }
-
-        function updateMapHint() {
-            const hint = document.getElementById('map-hint');
-            if (!hint) return;
-            hint.textContent = (editing && editing.field === 'coords')
-                ? '🖱️ Click map or drag marker to set position'
-                : '🖱️ Click map to add location';
-        }
-
-        function cancelEdit() {
-            if (!editing) return;
-            const { number, field, originalHtml } = editing;
-            const cell = document.getElementById(`cell-${field}-${number}`);
-            if (cell) {
-                cell.innerHTML = originalHtml;
-                cell.onclick = () => startEdit(number, field);
-            }
-            if (field === 'coords') setMarkerDraggable(number, false);
-            editing = null;
-            updateMapHint();
-        }
-
-        function startEdit(number, field) {
-            if (editing && editing.number === number && editing.field === field) return;
-            cancelEdit();
-
-            const cell = document.getElementById(`cell-${field}-${number}`);
-            if (!cell) return;
-
-            editing = { number, field, originalHtml: cell.innerHTML };
-            cell.onclick = null;
-
-            const current = field === 'coords'
-                ? `${cell.dataset.lat}, ${cell.dataset.lon}`
-                : editing.originalHtml.replace('💣 ', '').trim();
-            const inputType = field === 'bombs' ? 'number' : 'text';
-            const extra = field === 'bombs'
-                ? ' min="1" step="1"'
-                : field === 'coords'
-                    ? ' style="width: 170px;"'
-                    : ' maxlength="20" style="width: 110px; text-transform: uppercase;"';
-
-            cell.innerHTML = `
-                <span style="display: inline-flex; gap: 4px; align-items: center;">
-                    <input class="cell-edit-input" type="${inputType}"${extra} id="cell-edit-input"
-                           value="${current.replace(/"/g, '&quot;')}"
-                           onkeydown="if(event.key==='Enter'){event.preventDefault();saveEdit();}
-                                       else if(event.key==='Escape'){event.preventDefault();cancelEdit();}">
-                    <button class="btn-save-cell" onclick="event.stopPropagation();saveEdit()">💾</button>
-                    <button class="btn-cancel-cell" onclick="event.stopPropagation();cancelEdit()">✕</button>
-                </span>`;
-
-            const input = document.getElementById('cell-edit-input');
-            input.focus();
-            input.select();
-
-            if (field === 'coords') setMarkerDraggable(number, true);
-            updateMapHint();
-        }
-
-        // While the coords editor is open, that location's marker can be dragged
-        // (dragend fills the input; saving is still explicit via 💾).
-        function setMarkerDraggable(number, enabled) {
-            const marker = markers.find(m => m.locationNumber === number);
-            if (!marker) return;
-            if (enabled) {
-                marker.dragging.enable();
-                marker.off('dragend');
-                marker.on('dragend', function () {
-                    const input = document.getElementById('cell-edit-input');
-                    if (!input || !editing || editing.field !== 'coords') return;
-                    const ll = marker.getLatLng();
-                    input.value = `${ll.lat}, ${ll.lng}`;
-                });
-            } else {
-                marker.dragging.disable();
-                marker.off('dragend');
-            }
-        }
-
-        async function saveEdit() {
-            if (!editing) return;
-            const { number, field } = editing;
-            const input = document.getElementById('cell-edit-input');
-            if (!input) return;
-
-            let body;
-            let url;
-            if (field === 'code') {
-                const code = input.value.trim().toUpperCase();
-                if (!code) { showToast('Code cannot be empty!', 'error'); return; }
-                if (code.length > 20) { showToast('Code must be 20 characters or fewer!', 'error'); return; }
-                if (!/^[A-Z0-9]+$/.test(code)) { showToast('Code may only contain letters and digits!', 'error'); return; }
-                url = '/api/quick/set_location_code';
-                body = { location_number: number, code };
-            } else if (field === 'coords') {
-                const parts = input.value.split(',');
-                const lat = parts.length === 2 ? parseFloat(parts[0]) : NaN;
-                const lon = parts.length === 2 ? parseFloat(parts[1]) : NaN;
-                if (!isFinite(lat) || !isFinite(lon)) { showToast('Enter coordinates as "latitude, longitude"!', 'error'); return; }
-                if (lat < -90 || lat > 90) { showToast('Latitude must be between -90 and 90!', 'error'); return; }
-                if (lon < -180 || lon > 180) { showToast('Longitude must be between -180 and 180!', 'error'); return; }
-                url = '/api/quick/set_location_coords';
-                body = { location_number: number, latitude: lat, longitude: lon };
-            } else {
-                const value = parseInt(input.value, 10);
-                if (isNaN(value) || value < 1) { showToast('Bomb count must be at least 1!', 'error'); return; }
-                url = '/api/quick/set_location_bombs';
-                body = { location_number: number, bomb_value: value };
+            if (isNaN(lat) || isNaN(lon)) {
+                alert('Please enter latitude and longitude!');
+                return;
             }
 
-            try {
-                const resp = await fetch(url + '?gm_token=' + encodeURIComponent(getGmToken()), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await resp.json();
-
-                if (data.success) {
-                    if (field === 'coords') setMarkerDraggable(number, false);
-                    editing = null;
-                    updateMapHint();
-                    showToast(data.message, 'success');
-                    loadLocations();
-                } else {
-                    showToast(data.message || 'Error saving change', 'error');
-                }
-            } catch (e) {
-                console.error('Error saving edit:', e);
-                showToast('Error saving change', 'error');
+            if (!confirm(`Create ${count} location(s) at (${lat}, ${lon})?`)) {
+                return;
             }
+
+            const data = await locationEditor.addLocations({ latitude: lat, longitude: lon, count: count, radiusKm: radius });
+            if (data.success) alert(data.message);
+            else alert('Error: ' + (data.message || 'unknown'));
         }
 
-        // ---- Inline editing of the per-game default bomb count ----
-        let defaultEditing = false;   // {originalValue} while the editor is open
+        // ---- Default bombs per new location (game-only) ----
+        let defaultEditing = false;
         let defaultOriginalValue = null;
 
         function renderDefaultDisplay(value) {
@@ -716,21 +294,20 @@
         function startDefaultEdit() {
             if (defaultEditing) return;
             const cell = document.getElementById('default-bombs-cell');
-            const valueEl = document.getElementById('default-bombs-value');
-            if (!cell || !valueEl) return;
+            if (!cell) return;
 
             defaultEditing = true;
-            defaultOriginalValue = valueEl.textContent.trim();
+            defaultOriginalValue = document.getElementById('default-bombs-value').textContent;
 
             cell.innerHTML = `
                 <input class="cell-edit-input" type="number" min="1" step="1" id="default-bombs-input"
-                       value="${defaultOriginalValue}"
                        onkeydown="if(event.key==='Enter'){event.preventDefault();saveDefaultEdit();}
                                    else if(event.key==='Escape'){event.preventDefault();cancelDefaultEdit();}">
                 <button class="btn-save-cell" onclick="event.stopPropagation();saveDefaultEdit()">💾</button>
                 <button class="btn-cancel-cell" onclick="event.stopPropagation();cancelDefaultEdit()">✕</button>`;
 
             const input = document.getElementById('default-bombs-input');
+            input.value = defaultOriginalValue;
             input.focus();
             input.select();
         }
@@ -749,7 +326,7 @@
 
             const value = parseInt(input.value, 10);
             if (isNaN(value) || value < 1) {
-                showToast('Default bomb count must be at least 1!', 'error');
+                locationEditor.showToast('Default bomb count must be at least 1!', 'error');
                 return;
             }
 
@@ -765,273 +342,17 @@
                     defaultEditing = false;
                     defaultOriginalValue = null;
                     renderDefaultDisplay(value);
-                    showToast(data.message, 'success');
+                    locationEditor.showToast(data.message, 'success');
                 } else {
-                    showToast(data.message || 'Error saving default', 'error');
+                    locationEditor.showToast(data.message || 'Error saving default', 'error');
                 }
             } catch (e) {
                 console.error('Error saving default bombs:', e);
-                showToast('Error saving default', 'error');
+                locationEditor.showToast('Error saving default', 'error');
             }
         }
 
-        async function removeLocation(locationNumber, code) {
-            const codeNote = code ? ` (code: ${code})` : '';
-            if (!confirm(`Remove location ${locationNumber}${codeNote}?`)) {
-                return;
-            }
-            
-            try {
-                const resp = await fetch('/api/quick/remove_location?gm_token=' + encodeURIComponent(getGmToken()), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ location_number: locationNumber })
-                });
-                const data = await resp.json();
-                
-                if (data.success) {
-                    alert(data.message);
-                    loadLocations();
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            } catch (e) {
-                console.error('Error removing location:', e);
-                alert('Error removing location');
-            }
-        }
-
-        // Drop a single location at the device's current GPS position (one tap).
-        // count=1 + radius_km=0 so the pin lands exactly where we are — with the
-        // default radius the backend would scatter it randomly around the point.
-        async function addLocationAtMyLocation() {
-            const btn = document.getElementById('btn-my-location');
-            if (!btn || btn.disabled) return;
-
-            // Browsers only expose the Geolocation API in secure contexts
-            // (https:// or localhost) — a phone on http://LAN-IP gets neither.
-            if (!window.isSecureContext || !navigator.geolocation) {
-                showToast('GPS needs HTTPS — open this page via https:// or localhost to use your location.', 'error');
-                return;
-            }
-
-            const originalLabel = btn.textContent;
-            btn.disabled = true;
-            btn.textContent = '📍 Locating…';
-
-            const restore = () => {
-                btn.disabled = false;
-                btn.textContent = originalLabel;
-            };
-
-            navigator.geolocation.getCurrentPosition(
-                async (pos) => {
-                    try {
-                        const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getGmToken()), {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                latitude: pos.coords.latitude,
-                                longitude: pos.coords.longitude,
-                                count: 1,
-                                radius_km: 0
-                            })
-                        });
-                        const data = await resp.json();
-                        if (data.success) {
-                            const accuracy = Math.round(pos.coords.accuracy || 0);
-                            showToast(`📍 ${data.message} GPS ±${accuracy}m`, 'success');
-                            loadLocations();
-                        } else {
-                            showToast(data.message || 'Error adding location', 'error');
-                        }
-                    } catch (e) {
-                        console.error('Error adding location at GPS position:', e);
-                        showToast('Error adding location', 'error');
-                    } finally {
-                        restore();
-                    }
-                },
-                (err) => {
-                    restore();
-                    const msg = err.code === 1
-                        ? 'Location permission denied — allow it in your browser settings and try again.'
-                        : err.code === 2
-                            ? "Couldn't determine your location (position unavailable)."
-                            : 'Timed out waiting for your location — try again.';
-                    showToast(msg, 'error');
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        }
-
-        async function addLocations() {
-            const lat = parseFloat(document.getElementById('loc-lat').value);
-            const lon = parseFloat(document.getElementById('loc-lon').value);
-            const count = parseInt(document.getElementById('loc-count').value) || 1;
-            const radius = parseFloat(document.getElementById('loc-radius').value) || 2;
-            
-            if (isNaN(lat) || isNaN(lon)) {
-                alert('Please enter latitude and longitude!');
-                return;
-            }
-            
-            if (!confirm(`Create ${count} location(s) at (${lat}, ${lon})?`)) {
-                return;
-            }
-            
-            try {
-                const resp = await fetch('/api/quick/create_locations?gm_token=' + encodeURIComponent(getGmToken()), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        latitude: lat,
-                        longitude: lon,
-                        count: count,
-                        radius_km: radius
-                    })
-                });
-                const data = await resp.json();
-                
-                if (data.success) {
-                    alert(data.message);
-                    loadLocations();
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            } catch (e) {
-                console.error('Error adding locations:', e);
-                alert('Error adding locations');
-            }
-        }
-
-        async function clearAllLocations() {
-            if (!confirm('Clear ALL locations? This cannot be undone!')) return;
-            if (!confirm('Are you REALLY sure?')) return;
-            try {
-                const resp = await fetch('/api/quick/clear-locations?gm_token=' + encodeURIComponent(getGmToken()), {
-                    method: 'POST',
-                });
-                const data = await resp.json();
-                alert(data.message);
-                if (data.success) loadLocations();
-            } catch (e) {
-                console.error('Error clearing locations:', e);
-                alert('Error clearing locations');
-            }
-        }
-
-        // ---- Location quiz (check-in without a printed code) ----
-        const lqEditor = createQuizEditor({
-            listId: 'lq-questions-list',
-            warningId: 'lq-warning-banner',
-            addAnswerLabel: 'Add Answer',
-            toast: showToast,
-        });
-        let lqCurrentLocation = null;
-
-        function quizModeLabel(mode) {
-            if (mode === 'quiz') return '📝 Quiz';
-            if (mode === 'both') return '📝+🔑 Both';
-            return '🔑 Code';
-        }
-
-        // A location in "quiz" mode has no printed code, so its code and
-        // code-mode bomb reward are hidden on this page. "code" and "both"
-        // locations still show them.
-        function hasCodeMode(loc) {
-            return (loc.quiz_mode || 'code') !== 'quiz';
-        }
-
-        function locationPopup(loc) {
-            const head = `<b>Location ${loc.number}</b>`;
-            if (!hasCodeMode(loc)) return head + '<br>Quiz only';
-            return head + `<br>Code: ${loc.code}<br>Bombs: ${loc.bomb_value || 1}`;
-        }
-
-        async function openQuizModal(number) {
-            lqCurrentLocation = number;
-            document.getElementById('lq-modal-title').textContent = 'Location ' + number + ' — Quiz';
-            document.getElementById('lq-mode').value = 'code';
-            lqEditor.setQuestions([]);
-            document.getElementById('lq-modal').style.display = 'flex';
-            loadSetQuizOptions();
-
-            try {
-                const resp = await fetch('/api/location-quiz/questions?gm_token=' + encodeURIComponent(getGmToken()) + '&location_number=' + number);
-                const data = await resp.json();
-                if (data && data.success) {
-                    document.getElementById('lq-mode').value = data.mode || 'code';
-                    lqEditor.setQuestions(data.questions || []);
-                } else if (data && data.message) {
-                    showToast(data.message, 'error');
-                }
-            } catch (e) {
-                console.error('Error loading location quiz:', e);
-                showToast('Error loading quiz', 'error');
-            }
-        }
-
-        function closeQuizModal() {
-            document.getElementById('lq-modal').style.display = 'none';
-            lqCurrentLocation = null;
-        }
-
-        async function saveLocationQuiz(options = {}) {
-            if (lqCurrentLocation === null) return false;
-            const mode = document.getElementById('lq-mode').value;
-            const questions = lqEditor.getQuestions();
-
-            // Every question must be able to yield at least 1 bomb (the server
-            // enforces the same rule; this just gives an inline warning first).
-            const badIdx = questions.findIndex(q => !q.answers || q.answers.length === 0 || lqEditor.questionMaxYield(q) < 1);
-            if (badIdx !== -1) {
-                lqEditor.updateWarnings();
-                showToast('Question ' + (badIdx + 1) + ' has no answer worth at least 1 bomb.', 'error');
-                return false;
-            }
-
-            try {
-                let resp = await fetch('/api/location-quiz/questions?gm_token=' + encodeURIComponent(getGmToken()), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ location_number: lqCurrentLocation, questions: questions }),
-                });
-                let data = await resp.json();
-                if (!data || !data.success) {
-                    showToast((data && data.message) || 'Error saving quiz', 'error');
-                    return false;
-                }
-
-                resp = await fetch('/api/quick/set_location_quiz_mode?gm_token=' + encodeURIComponent(getGmToken()), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ location_number: lqCurrentLocation, mode: mode }),
-                });
-                data = await resp.json();
-                if (!data || !data.success) {
-                    showToast((data && data.message) || 'Error saving mode', 'error');
-                    return false;
-                }
-
-                showToast('Quiz saved!', 'success');
-                if (options.close !== false) {
-                    closeQuizModal();
-                    loadLocations();
-                }
-                return true;
-            } catch (e) {
-                console.error('Error saving location quiz:', e);
-                showToast('Error saving quiz', 'error');
-                return false;
-            }
-        }
-
-        // ---- Location libraries (reusable location quizzes + location sets) ----
-        function escapeHtml(s) {
-            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        }
-
+        // ---- Location sets library (game-only) ----
         function authQuery() {
             return 'gm_token=' + encodeURIComponent(getGmToken());
         }
@@ -1045,7 +366,7 @@
                 const sets = (data && data.sets) || [];
                 const current = select.value;
                 select.innerHTML = '<option value="">—</option>' + sets.map(s =>
-                    `<option value="${s.id}">${escapeHtml(s.name)} (${s.location_count}📍, ${s.quiz_count} Q)</option>`
+                    `<option value="${s.id}">${locationEditor.escapeHtml(s.name)} (${s.location_count}📍, ${s.quiz_count} Q)</option>`
                 ).join('');
                 if (sets.some(s => String(s.id) === current)) select.value = current;
             } catch (e) {
@@ -1056,41 +377,42 @@
         async function loadSetLocationQuiz() {
             const select = document.getElementById('lq-set-select');
             const id = select && select.value;
-            if (!id) { showToast('Pick a saved set first.', 'error'); return; }
+            if (!id) { locationEditor.showToast('Pick a saved set first.', 'error'); return; }
+            const number = locationEditor.currentNumber;
             try {
                 const resp = await fetch('/api/location-sets/' + id + '?' + authQuery());
                 const data = await resp.json();
                 if (!data || !data.success || !data.set) {
-                    showToast((data && data.message) || 'Could not load set.', 'error');
+                    locationEditor.showToast((data && data.message) || 'Could not load set.', 'error');
                     return;
                 }
                 // Match by location number so a re-applied set lines up; fall
                 // back to the set's first quiz when this number has none.
                 const locations = data.set.locations || [];
-                let match = locations.find(l => l.number === lqCurrentLocation && (l.questions || []).length);
+                let match = locations.find(l => l.number === number && (l.questions || []).length);
                 let note = '';
                 if (!match) {
                     match = locations.find(l => (l.questions || []).length);
-                    if (match) note = ' (no quiz for location ' + lqCurrentLocation + ' - used location ' + match.number + ')';
+                    if (match) note = ' (no quiz for location ' + number + ' - used location ' + match.number + ')';
                 }
-                if (!match) { showToast('This set has no quizzes.', 'error'); return; }
-                lqEditor.setQuestions(match.questions || []);
-                showToast('Loaded quiz from "' + data.set.name + '"' + note + '.', 'success');
+                if (!match) { locationEditor.showToast('This set has no quizzes.', 'error'); return; }
+                locationEditor.quizEditor.setQuestions(match.questions || []);
+                locationEditor.showToast('Loaded quiz from "' + data.set.name + '"' + note + '.', 'success');
             } catch (e) {
                 console.error('Error loading quiz from set:', e);
-                showToast('Could not load quiz from set.', 'error');
+                locationEditor.showToast('Could not load quiz from set.', 'error');
             }
         }
 
         async function saveAsSetLocationQuiz() {
-            if (lqCurrentLocation === null) { showToast('Open a location quiz first.', 'error'); return; }
+            if (locationEditor.currentNumber === null) { locationEditor.showToast('Open a location quiz first.', 'error'); return; }
             // Persist this location's quiz first so the snapshot includes it.
-            const saved = await saveLocationQuiz({ close: false });
+            const saved = await locationEditor.saveQuiz({ close: false });
             if (!saved) return;
             const entered = prompt('Save the current locations as a set named:', '');
             if (entered === null) return;
             const name = entered.trim();
-            if (!name) { showToast('A name is required.', 'error'); return; }
+            if (!name) { locationEditor.showToast('A name is required.', 'error'); return; }
             try {
                 const resp = await fetch('/api/quick/save-location-set?' + authQuery(), {
                     method: 'POST',
@@ -1099,16 +421,16 @@
                 });
                 const result = await resp.json();
                 if (!result || !result.success) {
-                    showToast((result && result.message) || 'Could not save set.', 'error');
+                    locationEditor.showToast((result && result.message) || 'Could not save set.', 'error');
                     return;
                 }
-                showToast(result.message || 'Saved set!', 'success');
+                locationEditor.showToast(result.message || 'Saved set!', 'success');
                 await loadSetQuizOptions();
                 const select = document.getElementById('lq-set-select');
                 if (select && result.set) select.value = String(result.set.id);
             } catch (e) {
                 console.error('Error saving location set:', e);
-                showToast('Could not save set.', 'error');
+                locationEditor.showToast('Could not save set.', 'error');
             }
         }
 
@@ -1121,7 +443,7 @@
                 const sets = (data && data.sets) || [];
                 const current = select.value;
                 select.innerHTML = '<option value="">—</option>' + sets.map(s =>
-                    `<option value="${s.id}">${escapeHtml(s.name)} (${s.location_count}📍)</option>`
+                    `<option value="${s.id}">${locationEditor.escapeHtml(s.name)} (${s.location_count}📍)</option>`
                 ).join('');
                 if (sets.some(s => String(s.id) === current)) select.value = current;
             } catch (e) {
@@ -1133,7 +455,7 @@
             const entered = prompt('Save the current locations as a set named:', '');
             if (entered === null) return;
             const name = entered.trim();
-            if (!name) { showToast('A name is required.', 'error'); return; }
+            if (!name) { locationEditor.showToast('A name is required.', 'error'); return; }
             try {
                 const resp = await fetch('/api/quick/save-location-set?' + authQuery(), {
                     method: 'POST',
@@ -1142,65 +464,64 @@
                 });
                 const result = await resp.json();
                 if (!result || !result.success) {
-                    showToast((result && result.message) || 'Could not save set.', 'error');
+                    locationEditor.showToast((result && result.message) || 'Could not save set.', 'error');
                     return;
                 }
-                showToast(result.message || 'Saved set!', 'success');
+                locationEditor.showToast(result.message || 'Saved set!', 'success');
                 await loadLocationSetOptions();
                 const select = document.getElementById('location-set-select');
                 if (select && result.set) select.value = String(result.set.id);
             } catch (e) {
                 console.error('Error saving location set:', e);
-                showToast('Could not save set.', 'error');
+                locationEditor.showToast('Could not save set.', 'error');
             }
         }
 
         async function applyLocationSet() {
             const select = document.getElementById('location-set-select');
             const id = select && select.value;
-            if (!id) { showToast('Pick a set first.', 'error'); return; }
-            const label = select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : 'this set';
-            if (!confirm('Apply ' + label + '?\n\nThis REPLACES all current locations in this game (including their quizzes and codes).')) return;
+            if (!id) { locationEditor.showToast('Pick a set first.', 'error'); return; }
+            if (!confirm('Apply this set? It replaces all current locations (codes included).')) return;
             try {
                 const resp = await fetch('/api/quick/apply-location-set?' + authQuery(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ set_id: parseInt(id, 10) }),
+                    body: JSON.stringify({ set_id: Number(id) }),
                 });
                 const result = await resp.json();
                 if (!result || !result.success) {
-                    showToast((result && result.message) || 'Could not apply set.', 'error');
+                    locationEditor.showToast((result && result.message) || 'Could not apply set.', 'error');
                     return;
                 }
-                showToast(result.message || 'Set applied!', 'success');
-                loadLocations();
+                locationEditor.showToast(result.message || 'Applied set!', 'success');
+                await locationEditor.load();
             } catch (e) {
                 console.error('Error applying location set:', e);
-                showToast('Could not apply set.', 'error');
+                locationEditor.showToast('Could not apply set.', 'error');
             }
         }
 
         async function deleteSelectedSet() {
             const select = document.getElementById('location-set-select');
             const id = select && select.value;
-            if (!id) { showToast('Pick a set first.', 'error'); return; }
-            if (!confirm('Delete this saved set from the library?')) return;
+            if (!id) { locationEditor.showToast('Pick a set first.', 'error'); return; }
+            if (!confirm('Delete this set from the library?')) return;
             try {
                 const resp = await fetch('/api/location-sets/' + id + '?' + authQuery(), { method: 'DELETE' });
                 const result = await resp.json();
                 if (!result || !result.success) {
-                    showToast((result && result.message) || 'Could not delete set.', 'error');
+                    locationEditor.showToast((result && result.message) || 'Could not delete set.', 'error');
                     return;
                 }
-                showToast(result.message || 'Set deleted.', 'success');
+                locationEditor.showToast(result.message || 'Deleted set.', 'success');
                 await loadLocationSetOptions();
             } catch (e) {
                 console.error('Error deleting location set:', e);
-                showToast('Could not delete set.', 'error');
+                locationEditor.showToast('Could not delete set.', 'error');
             }
         }
 
-        loadLocations();
+        locationEditor.load();
         loadLocationSetOptions();
     </script>
 </body>

@@ -9,6 +9,7 @@ import httpx
 
 from tests_e2e.config import HTTPX_TIMEOUT
 from tests_e2e.pages.admin_dashboard import AdminDashboardPage
+from tests_e2e.pages.location_set_editor import LocationSetEditorPage
 from tests_e2e.pages.locations_page import LocationsPage
 
 QUIZ = [
@@ -305,25 +306,30 @@ def test_save_current_as_set_from_ui(page, app_url, seeded_game_with_locations):
 
 
 def test_admin_set_editor(page, app_url, admin_token):
-    """Author a set, with a per-location quiz, in the admin dashboard."""
-    ap = AdminDashboardPage(page, admin_token, app_url=app_url)
-    ap.goto()
-    ap.new_set_button().click()
-    ap.set_name_input().fill("E2E Admin Set")
-    ap.set_row_field(0, "code").fill("ADMINSET1")
-    ap.set_row_field(0, "latitude").fill("52.1")
-    ap.set_row_field(0, "longitude").fill("4.3")
-    ap.set_row_field(0, "quiz_mode").select_option("both")
+    """Author a set, with a per-location quiz, on the full-page editor."""
+    se = LocationSetEditorPage(page, admin_token, app_url=app_url)
+    se.goto()
 
-    ap.open_set_quiz(0)
-    ap.set_quiz_add_question()
-    ap.set_quiz_question_text_input(0).fill("Admin authored?")
-    ap.set_quiz_answer_text(0, 0, "Yes")
-    ap.set_quiz_answer_bombs(0, 0, 3)
-    ap.set_quiz_apply()
+    se.set_name_input().fill("E2E Admin Set")
+    se.add_location("52.1", "4.3")
 
-    ap.save_set()
-    ap.set_card("E2E Admin Set").wait_for(state="visible")
+    se.edit_cell("code", 1, "ADMINSET1")
+    se.edit_cell("bombs", 1, "7")
+
+    se.open_quiz_modal(1)
+    se.set_quiz_mode("both")
+    se.add_quiz_question()
+    se.set_quiz_question_text(0, "Admin authored?")
+    se.set_quiz_answer_text(0, 0, "Yes")
+    se.set_quiz_answer_bombs(0, 0, 3)
+    # Saving the quiz only closes the modal; the set itself is saved next.
+    page.locator("#lq-modal button", has_text="Save Quiz").click()
+    page.wait_for_function(
+        "() => document.getElementById('lq-modal').style.display === 'none'"
+    )
+
+    se.save()
+    page.wait_for_function("() => window.location.search.startsWith('?id=')")
 
     with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
         sets = client.get(
@@ -337,7 +343,81 @@ def test_admin_set_editor(page, app_url, admin_token):
         ).json()["set"]
         loc = full["locations"][0]
         assert loc["code"] == "ADMINSET1"
+        assert loc["bomb_value"] == 7
         assert loc["quiz_mode"] == "both"
         assert loc["questions"][0]["question_text"] == "Admin authored?"
+        assert loc["questions"][0]["answers"][0]["is_correct"] is True
 
-    ap.delete_set("E2E Admin Set")
+    # Reloading the saved set restores the draft (name, code, quiz).
+    se.goto(set_id=mine["id"])
+    assert se.set_name_input().input_value() == "E2E Admin Set"
+    assert se.code_cell(1).inner_text().strip() == "ADMINSET1"
+    assert se.get_location_count() == 1
+
+    # Delete from the editor and land back on the dashboard.
+    se.delete()
+    page.wait_for_url(f"{app_url}/admin/{admin_token}")
+
+
+def test_dashboard_edit_set_opens_editor(page, app_url, admin_token):
+    """The dashboard's Edit button navigates to the full-page set editor."""
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        resp = client.post(
+            "/api/location-sets",
+            params={"token": admin_token},
+            json={
+                "name": "E2E Nav Set",
+                "locations": [{
+                    "number": 1,
+                    "latitude": 52.0,
+                    "longitude": 4.0,
+                    "code": "NAV1",
+                    "bomb_value": 2,
+                    "quiz_mode": "code",
+                    "questions": [],
+                }],
+            },
+        )
+        assert resp.json()["success"] is True, resp.text
+        set_id = resp.json()["set"]["id"]
+
+    ap = AdminDashboardPage(page, admin_token, app_url=app_url)
+    ap.goto()
+    ap.edit_set("E2E Nav Set")
+    page.wait_for_url(f"{app_url}/admin/{admin_token}/location-sets?id={set_id}")
+    assert page.locator("#set-name").input_value() == "E2E Nav Set"
+    assert page.locator("#cell-code-1").inner_text().strip() == "NAV1"
+
+
+def test_set_editor_map_click_adds_location(page, app_url, admin_token):
+    """Clicking the map adds a pin to the draft (nothing saved yet)."""
+    se = LocationSetEditorPage(page, admin_token, app_url=app_url)
+    se.goto()
+    assert se.get_location_count() == 0
+
+    se.map_element().click(position={"x": 300, "y": 200})
+    page.wait_for_function(
+        "() => document.querySelectorAll('#locations-body tr').length === 1"
+    )
+    assert se.get_location_count() == 1
+    assert se.pins().count() == 1
+    assert "Unsaved" in se.status_text().inner_text()
+
+
+def test_set_editor_requires_name_and_a_location(page, app_url, admin_token):
+    """The editor blocks a nameless or empty set client-side."""
+    se = LocationSetEditorPage(page, admin_token, app_url=app_url)
+    se.goto()
+
+    se.save()
+    page.wait_for_function(
+        "() => document.getElementById('toast').classList.contains('error')"
+    )
+    assert "name" in se.toast().text_content().lower()
+
+    se.set_name_input().fill("E2E Empty Set")
+    se.save()
+    page.wait_for_function(
+        "() => document.getElementById('toast').classList.contains('error')"
+    )
+    assert "location" in se.toast().text_content().lower()

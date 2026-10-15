@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location Set Editor - Live Battlefield</title>
+    <link rel="stylesheet" href="/static/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="/static/location-pin.css" />
+    <link rel="stylesheet" href="/static/location-editor.css" />
+    <script src="/static/leaflet/leaflet.js"></script>
+    <script src="/static/location-pin.js"></script>
+    <script src="/static/js/quiz_editor.js"></script>
+    <script src="/static/js/location_editor.js"></script>
+</head>
+<body>
+    <div class="container">
+        <a id="back-link" class="nav-link">← Back to Admin Panel</a>
+
+        <h1>📍 Location Set Editor</h1>
+
+        <!-- Set name + save/delete -->
+        <div class="location-form">
+            <div class="form-row" style="align-items: flex-end;">
+                <div style="display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 240px;">
+                    <label style="font-size: 12px; color: #888;">Set name</label>
+                    <input type="text" id="set-name" placeholder="e.g. City centre 2026" style="width: 100%;">
+                </div>
+                <button class="btn-add" id="set-save-btn" onclick="saveSet()" style="margin-top: 0;">💾 Save set</button>
+                <button class="btn-remove" id="set-delete-btn" onclick="deleteSet()" style="margin-top: 0;">🗑 Delete set</button>
+                <span id="set-status" style="font-size: 13px; color: #ffb74d;"></span>
+            </div>
+            <p style="color: #888; font-size: 12px; margin-top: 8px;">A set is a named layout of locations, each with its own check-in quiz. Click the map or use the form to add locations, then <b>Save set</b>.</p>
+        </div>
+
+        <!-- Add Location Form -->
+        <div class="location-form">
+            <h3 style="color: #00d9ff; margin-bottom: 10px;">➕ Add Location</h3>
+            <div class="form-row">
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <label style="font-size: 12px; color: #888;">Latitude</label>
+                    <input type="number" id="loc-lat" placeholder="52.52" step="0.0001" style="width: 120px;">
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <label style="font-size: 12px; color: #888;">Longitude</label>
+                    <input type="number" id="loc-lon" placeholder="13.405" step="0.0001" style="width: 120px;">
+                </div>
+                <button id="btn-my-location" type="button" class="btn-myloc" onclick="locationEditor.addAtMyLocation()"
+                        style="margin-top: 18px;" title="Insert a single location at my current GPS position">📍 My location</button>
+                <button class="btn-add" onclick="addFromForm()" style="margin-top: 18px;">Add</button>
+                <button class="btn-remove" onclick="locationEditor.clearAll()" style="margin-top: 18px; height: fit-content;">🗑️ Clear All</button>
+            </div>
+            <p style="color: #888; font-size: 12px; margin-top: 5px;">Click on the map below to pick a location, enter coordinates, or use 📍 My location to drop one at your current GPS position.</p>
+        </div>
+
+        <!-- Map -->
+        <div style="position: relative;">
+            <div id="map"></div>
+            <div id="map-hint" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(22, 33, 62, 0.9); padding: 8px 12px; border-radius: 4px; font-size: 12px; color: #00d9ff;">
+                🖱️ Click map to add location
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Location #</th>
+                        <th>Code</th>
+                        <th>Coordinates</th>
+                        <th>Bombs</th>
+                        <th>Quiz</th>
+                        <th>Map</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="locations-body">
+                    <tr>
+                        <td colspan="7" style="text-align: center;">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Location quiz editor modal -->
+    <div id="lq-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;align-items:center;justify-content:center;padding:20px;">
+        <div style="background:#16213e;border-radius:8px;padding:20px;max-width:760px;width:100%;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;">
+                <h2 id="lq-modal-title" style="color:#00d9ff;font-size:18px;">Location quiz</h2>
+                <button class="btn-remove" onclick="locationEditor.closeQuizModal()">Close</button>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+                <label style="font-size:13px;color:#aaa;">Mode
+                    <select id="lq-mode" style="padding:5px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;">
+                        <option value="code">🔑 Code</option>
+                        <option value="quiz">📝 Quiz</option>
+                        <option value="both">📝+🔑 Both</option>
+                    </select>
+                </label>
+                <span style="color:#888;font-size:12px;">Quiz = no code; Both = either code or quiz.</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+                <button class="btn btn-secondary" onclick="locationEditor.quizEditor.exportJSON('location_quiz.json')" style="font-size:12px;padding:5px 10px;">⬇ Export</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('lq-import-input').click()" style="font-size:12px;padding:5px 10px;">⬆ Import</button>
+                <input type="file" id="lq-import-input" accept=".json" style="display:none" onchange="locationEditor.quizEditor.importFile(event)">
+            </div>
+            <div id="lq-warning-banner" style="display:none;background:rgba(255,82,82,.12);border:1px solid #ff5252;border-radius:6px;padding:8px 10px;font-size:12px;color:#ff8a80;margin-bottom:10px;"></div>
+            <div id="lq-questions-list"></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="locationEditor.quizEditor.addQuestion()" style="font-size:12px;padding:5px 10px;">+ Add Question</button>
+                <span style="color:#888;font-size:12px;">Each question is worth its own bomb value; only the correct answer should yield bombs.</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="locationEditor.saveQuiz()" style="padding:8px 16px;">Save Quiz</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+        const DEFAULT_BOMB_VALUE = 10;
+
+        const adminToken = (window.location.pathname.match(/^\/admin\/([^/]+)/) || [])[1] || '';
+        document.getElementById('back-link').href = '/admin/' + adminToken;
+
+        function authQuery() {
+            return 'token=' + encodeURIComponent(adminToken);
+        }
+
+        // The set is a client-side draft: edits stay local until "Save set".
+        let draft = { id: null, name: '', locations: [] };
+        let dirty = false;
+
+        function normalizeLocation(loc) {
+            return {
+                number: loc.number,
+                latitude: loc.latitude,
+                longitude: loc.longitude,
+                code: loc.code || '',
+                bomb_value: loc.bomb_value != null ? loc.bomb_value : 10,
+                quiz_mode: loc.quiz_mode || 'code',
+                questions: loc.questions || [],
+            };
+        }
+
+        function nextNumber() {
+            return draft.locations.reduce((m, l) => Math.max(m, l.number), 0) + 1;
+        }
+
+        function makeLocation(number, latitude, longitude) {
+            return {
+                number: number,
+                latitude: latitude,
+                longitude: longitude,
+                code: '',
+                bomb_value: 10,
+                quiz_mode: 'code',
+                questions: [],
+            };
+        }
+
+        function markDirty() {
+            dirty = true;
+            updateStatus();
+        }
+
+        function updateStatus() {
+            const el = document.getElementById('set-status');
+            if (!el) return;
+            if (dirty) {
+                el.textContent = 'Unsaved changes';
+                el.style.color = '#ffb74d';
+            } else if (!draft.id) {
+                el.textContent = 'New set';
+                el.style.color = '#888';
+            } else {
+                el.textContent = '';
+            }
+        }
+
+        // ---- Shared editor, backed by the client-side draft ----
+        const locationEditor = createLocationEditor({
+            els: {
+                map: 'map', tbody: 'locations-body', mapHint: 'map-hint', toast: 'toast',
+                quizModal: 'lq-modal', quizTitle: 'lq-modal-title', quizMode: 'lq-mode',
+                quizQuestionsList: 'lq-questions-list', quizWarningBanner: 'lq-warning-banner',
+            },
+            showVisitedBy: false,
+            codeRequired: false,
+            adapter: {
+                load: async () => ({ locations: draft.locations }),
+                add: async ({ latitude, longitude }) => {
+                    const number = nextNumber();
+                    draft.locations.push(makeLocation(number, latitude, longitude));
+                    markDirty();
+                    return { success: true, message: `Added location ${number}.` };
+                },
+                remove: async (number) => {
+                    const idx = draft.locations.findIndex((l) => l.number === number);
+                    if (idx === -1) return { success: false, message: 'Location not found.' };
+                    draft.locations.splice(idx, 1);
+                    markDirty();
+                    return { success: true, message: `Removed location ${number}.` };
+                },
+                clearAll: async () => {
+                    draft.locations = [];
+                    markDirty();
+                    return { success: true, message: 'Cleared all locations.' };
+                },
+                saveField: async (number, field, value) => {
+                    const loc = draft.locations.find((l) => l.number === number);
+                    if (!loc) return { success: false, message: 'Location not found.' };
+                    if (field === 'code') {
+                        loc.code = value;
+                        markDirty();
+                        return { success: true, message: value ? `Code set to ${value}.` : 'Code cleared.' };
+                    }
+                    if (field === 'coords') {
+                        loc.latitude = value.latitude;
+                        loc.longitude = value.longitude;
+                        markDirty();
+                        return { success: true, message: `Location ${number} moved to ${value.latitude}, ${value.longitude}.` };
+                    }
+                    loc.bomb_value = value;
+                    markDirty();
+                    return { success: true, message: `Location ${number} bombs set to ${value}.` };
+                },
+                loadQuiz: async (number) => {
+                    const loc = draft.locations.find((l) => l.number === number);
+                    if (!loc) return { success: false, message: 'Location not found.' };
+                    return { success: true, mode: loc.quiz_mode || 'code', questions: loc.questions || [] };
+                },
+                saveQuiz: async (number, mode, questions) => {
+                    const loc = draft.locations.find((l) => l.number === number);
+                    if (!loc) return { success: false, message: 'Location not found.' };
+                    loc.quiz_mode = mode;
+                    loc.questions = questions;
+                    markDirty();
+                    return { success: true, message: 'Quiz saved!' };
+                },
+            },
+        });
+
+        async function addFromForm() {
+            const lat = parseFloat(document.getElementById('loc-lat').value);
+            const lon = parseFloat(document.getElementById('loc-lon').value);
+            if (isNaN(lat) || isNaN(lon)) {
+                locationEditor.showToast('Please enter latitude and longitude!', 'error');
+                return;
+            }
+            const data = await locationEditor.addLocations({ latitude: lat, longitude: lon, count: 1, radiusKm: 0 });
+            if (!data.success) locationEditor.showToast(data.message || 'Error adding location', 'error');
+        }
+
+        async function saveSet() {
+            const name = document.getElementById('set-name').value.trim();
+            if (!name) { locationEditor.showToast('A name is required.', 'error'); return; }
+
+            const payload = {
+                name: name,
+                locations: draft.locations.map((l) => ({
+                    number: l.number,
+                    latitude: l.latitude,
+                    longitude: l.longitude,
+                    code: l.code,
+                    bomb_value: l.bomb_value,
+                    quiz_mode: l.quiz_mode,
+                    questions: l.questions,
+                })),
+            };
+            const url = draft.id
+                ? '/api/location-sets/' + draft.id + '?' + authQuery()
+                : '/api/location-sets?' + authQuery();
+            const method = draft.id ? 'PUT' : 'POST';
+
+            try {
+                const resp = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json();
+                if (!data || !data.success) {
+                    locationEditor.showToast((data && data.message) || 'Could not save set.', 'error');
+                    return;
+                }
+                draft.id = data.set.id;
+                draft.name = data.set.name;
+                draft.locations = (data.set.locations || []).map(normalizeLocation);
+                window.history.replaceState(null, '', window.location.pathname + '?id=' + draft.id);
+                dirty = false;
+                updateStatus();
+                await locationEditor.load();
+                locationEditor.fitBoundsToMarkers();
+                locationEditor.showToast(data.message || 'Saved!', 'success');
+            } catch (e) {
+                console.error('Error saving location set:', e);
+                locationEditor.showToast('Could not save set.', 'error');
+            }
+        }
+
+        async function deleteSet() {
+            if (!draft.id) { locationEditor.showToast('Nothing to delete yet.', 'error'); return; }
+            if (!confirm('Delete this set from the library?')) return;
+            try {
+                const resp = await fetch('/api/location-sets/' + draft.id + '?' + authQuery(), { method: 'DELETE' });
+                const result = await resp.json();
+                if (!result || !result.success) {
+                    locationEditor.showToast((result && result.message) || 'Could not delete set.', 'error');
+                    return;
+                }
+                dirty = false;
+                window.location.href = '/admin/' + adminToken;
+            } catch (e) {
+                console.error('Error deleting location set:', e);
+                locationEditor.showToast('Could not delete set.', 'error');
+            }
+        }
+
+        async function init() {
+            const id = new URLSearchParams(window.location.search).get('id');
+            if (id) {
+                try {
+                    const resp = await fetch('/api/location-sets/' + encodeURIComponent(id) + '?' + authQuery());
+                    const data = await resp.json();
+                    if (data && data.success && data.set) {
+                        draft = {
+                            id: data.set.id,
+                            name: data.set.name,
+                            locations: (data.set.locations || []).map(normalizeLocation),
+                        };
+                    } else {
+                        locationEditor.showToast((data && data.message) || 'Could not load set.', 'error');
+                    }
+                } catch (e) {
+                    console.error('Error loading location set:', e);
+                    locationEditor.showToast('Could not load set.', 'error');
+                }
+            }
+
+            document.getElementById('set-name').value = draft.name;
+            document.getElementById('set-name').addEventListener('input', markDirty);
+
+            dirty = false;
+            updateStatus();
+            await locationEditor.load();
+            if (draft.locations.length) locationEditor.fitBoundsToMarkers();
+        }
+
+        window.addEventListener('beforeunload', (e) => {
+            if (dirty) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        init();
+    </script>
+</body>
+</html>
