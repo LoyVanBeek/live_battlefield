@@ -361,11 +361,11 @@
                 <span style="color:#888;font-size:12px;">Quiz = no code; Both = either code or quiz.</span>
             </div>
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-                <label style="font-size:13px;color:#aaa;display:flex;align-items:center;gap:4px;">Quiz library
-                    <select id="lq-library-select" style="padding:4px;font-size:12px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;max-width:240px;"></select>
+                <label style="font-size:13px;color:#aaa;display:flex;align-items:center;gap:4px;">Location set
+                    <select id="lq-set-select" style="padding:4px;font-size:12px;border-radius:4px;border:2px solid #0f3460;background:#1a1a2e;color:#eee;max-width:240px;"></select>
                 </label>
-                <button class="btn btn-secondary" onclick="loadLibraryLocationQuiz()" style="font-size:12px;padding:5px 10px;">Load</button>
-                <button class="btn btn-secondary" onclick="saveAsLibraryLocationQuiz()" style="font-size:12px;padding:5px 10px;">Save as…</button>
+                <button class="btn btn-secondary" onclick="loadSetLocationQuiz()" style="font-size:12px;padding:5px 10px;">Load</button>
+                <button class="btn btn-secondary" onclick="saveAsSetLocationQuiz()" style="font-size:12px;padding:5px 10px;">Save as…</button>
                 <button class="btn btn-secondary" onclick="lqEditor.exportJSON('location_quiz.json')" style="font-size:12px;padding:5px 10px;">⬇ Export</button>
                 <button class="btn btn-secondary" onclick="document.getElementById('lq-import-input').click()" style="font-size:12px;padding:5px 10px;">⬆ Import</button>
                 <input type="file" id="lq-import-input" accept=".json" style="display:none" onchange="lqEditor.importFile(event)">
@@ -955,7 +955,7 @@
             document.getElementById('lq-mode').value = 'code';
             lqEditor.setQuestions([]);
             document.getElementById('lq-modal').style.display = 'flex';
-            loadLocationQuizLibraryOptions();
+            loadSetQuizOptions();
 
             try {
                 const resp = await fetch('/api/location-quiz/questions?gm_token=' + encodeURIComponent(getGmToken()) + '&location_number=' + number);
@@ -977,8 +977,8 @@
             lqCurrentLocation = null;
         }
 
-        async function saveLocationQuiz() {
-            if (lqCurrentLocation === null) return;
+        async function saveLocationQuiz(options = {}) {
+            if (lqCurrentLocation === null) return false;
             const mode = document.getElementById('lq-mode').value;
             const questions = lqEditor.getQuestions();
 
@@ -988,7 +988,7 @@
             if (badIdx !== -1) {
                 lqEditor.updateWarnings();
                 showToast('Question ' + (badIdx + 1) + ' has no answer worth at least 1 bomb.', 'error');
-                return;
+                return false;
             }
 
             try {
@@ -1000,7 +1000,7 @@
                 let data = await resp.json();
                 if (!data || !data.success) {
                     showToast((data && data.message) || 'Error saving quiz', 'error');
-                    return;
+                    return false;
                 }
 
                 resp = await fetch('/api/quick/set_location_quiz_mode?gm_token=' + encodeURIComponent(getGmToken()), {
@@ -1011,15 +1011,19 @@
                 data = await resp.json();
                 if (!data || !data.success) {
                     showToast((data && data.message) || 'Error saving mode', 'error');
-                    return;
+                    return false;
                 }
 
                 showToast('Quiz saved!', 'success');
-                closeQuizModal();
-                loadLocations();
+                if (options.close !== false) {
+                    closeQuizModal();
+                    loadLocations();
+                }
+                return true;
             } catch (e) {
                 console.error('Error saving location quiz:', e);
                 showToast('Error saving quiz', 'error');
+                return false;
             }
         }
 
@@ -1032,67 +1036,79 @@
             return 'gm_token=' + encodeURIComponent(getGmToken());
         }
 
-        async function loadLocationQuizLibraryOptions() {
-            const select = document.getElementById('lq-library-select');
+        async function loadSetQuizOptions() {
+            const select = document.getElementById('lq-set-select');
             if (!select) return;
             try {
-                const resp = await fetch('/api/location-quiz-templates?' + authQuery());
+                const resp = await fetch('/api/location-sets?' + authQuery());
                 const data = await resp.json();
-                const templates = (data && data.templates) || [];
+                const sets = (data && data.sets) || [];
                 const current = select.value;
-                select.innerHTML = '<option value="">—</option>' + templates.map(t =>
-                    `<option value="${t.id}">${escapeHtml(t.name)} (${t.question_count} Q, ${t.total_bombs} 💣)</option>`
+                select.innerHTML = '<option value="">—</option>' + sets.map(s =>
+                    `<option value="${s.id}">${escapeHtml(s.name)} (${s.location_count}📍, ${s.quiz_count} Q)</option>`
                 ).join('');
-                if (templates.some(t => String(t.id) === current)) select.value = current;
+                if (sets.some(s => String(s.id) === current)) select.value = current;
             } catch (e) {
-                console.error('Error loading location quiz library:', e);
+                console.error('Error loading location sets:', e);
             }
         }
 
-        async function loadLibraryLocationQuiz() {
-            const select = document.getElementById('lq-library-select');
+        async function loadSetLocationQuiz() {
+            const select = document.getElementById('lq-set-select');
             const id = select && select.value;
-            if (!id) { showToast('Pick a saved quiz first.', 'error'); return; }
+            if (!id) { showToast('Pick a saved set first.', 'error'); return; }
             try {
-                const resp = await fetch('/api/location-quiz-templates/' + id + '?' + authQuery());
+                const resp = await fetch('/api/location-sets/' + id + '?' + authQuery());
                 const data = await resp.json();
-                if (!data || !data.success || !data.template) {
-                    showToast((data && data.message) || 'Could not load quiz.', 'error');
+                if (!data || !data.success || !data.set) {
+                    showToast((data && data.message) || 'Could not load set.', 'error');
                     return;
                 }
-                lqEditor.setQuestions(data.template.questions || []);
-                showToast('Loaded "' + data.template.name + '".', 'success');
+                // Match by location number so a re-applied set lines up; fall
+                // back to the set's first quiz when this number has none.
+                const locations = data.set.locations || [];
+                let match = locations.find(l => l.number === lqCurrentLocation && (l.questions || []).length);
+                let note = '';
+                if (!match) {
+                    match = locations.find(l => (l.questions || []).length);
+                    if (match) note = ' (no quiz for location ' + lqCurrentLocation + ' - used location ' + match.number + ')';
+                }
+                if (!match) { showToast('This set has no quizzes.', 'error'); return; }
+                lqEditor.setQuestions(match.questions || []);
+                showToast('Loaded quiz from "' + data.set.name + '"' + note + '.', 'success');
             } catch (e) {
-                console.error('Error loading location quiz:', e);
-                showToast('Could not load quiz.', 'error');
+                console.error('Error loading quiz from set:', e);
+                showToast('Could not load quiz from set.', 'error');
             }
         }
 
-        async function saveAsLibraryLocationQuiz() {
-            const questions = lqEditor.getQuestions();
-            if (questions.length === 0) { showToast('Add at least one question first.', 'error'); return; }
-            const entered = prompt('Save this location quiz to the library as:', '');
+        async function saveAsSetLocationQuiz() {
+            if (lqCurrentLocation === null) { showToast('Open a location quiz first.', 'error'); return; }
+            // Persist this location's quiz first so the snapshot includes it.
+            const saved = await saveLocationQuiz({ close: false });
+            if (!saved) return;
+            const entered = prompt('Save the current locations as a set named:', '');
             if (entered === null) return;
             const name = entered.trim();
             if (!name) { showToast('A name is required.', 'error'); return; }
             try {
-                const resp = await fetch('/api/location-quiz-templates?' + authQuery(), {
+                const resp = await fetch('/api/quick/save-location-set?' + authQuery(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name, questions: questions }),
+                    body: JSON.stringify({ name: name }),
                 });
                 const result = await resp.json();
                 if (!result || !result.success) {
-                    showToast((result && result.message) || 'Could not save quiz.', 'error');
+                    showToast((result && result.message) || 'Could not save set.', 'error');
                     return;
                 }
-                showToast(result.message || 'Saved to library!', 'success');
-                await loadLocationQuizLibraryOptions();
-                const select = document.getElementById('lq-library-select');
-                if (select && result.template) select.value = String(result.template.id);
+                showToast(result.message || 'Saved set!', 'success');
+                await loadSetQuizOptions();
+                const select = document.getElementById('lq-set-select');
+                if (select && result.set) select.value = String(result.set.id);
             } catch (e) {
-                console.error('Error saving location quiz:', e);
-                showToast('Could not save quiz.', 'error');
+                console.error('Error saving location set:', e);
+                showToast('Could not save set.', 'error');
             }
         }
 

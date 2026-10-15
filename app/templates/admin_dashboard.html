@@ -142,41 +142,27 @@
             </div>
         </div>
 
-        <div class="section" id="location-quiz-library-section">
-            <h2>📍 Location Quiz Library</h2>
-            <p style="color: #888; margin-bottom: 10px;">Save location check-in quizzes ahead of time and reuse them on any location. Saving under an existing name overwrites it. In a game's locations page, open a location's quiz and pick a saved quiz to load.</p>
-            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
-                <button class="btn btn-success" id="lql-new-btn" onclick="newLocationLibraryQuiz()">➕ New</button>
-            </div>
-            <div id="location-quiz-library-list" style="margin-bottom: 10px;">
-                <p style="color: #888;">Loading...</p>
-            </div>
-            <div id="location-quiz-library-editor" style="display: none; border-top: 1px solid #0f3460; padding-top: 15px;">
-                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
-                    <label style="color: #aaa; font-size: 14px; white-space: nowrap;">Quiz name:</label>
-                    <input type="text" id="location-quiz-library-name" placeholder="e.g. Museum check-in" style="flex: 1;">
-                </div>
-                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
-                    <button class="btn btn-secondary" onclick="locationLibraryEditor.rebalance()" style="background:#0f3460;color:#eee;">Rebalance</button>
-                    <button class="btn btn-success" onclick="saveLocationLibraryQuiz()">Save Quiz</button>
-                    <button class="btn btn-primary" onclick="locationLibraryEditor.exportJSON('location_quiz.json')">⬇ Export JSON</button>
-                    <button class="btn btn-primary" onclick="document.getElementById('location-quiz-library-import-input').click()">⬆ Import JSON</button>
-                    <input type="file" id="location-quiz-library-import-input" accept=".json" style="display: none" onchange="locationLibraryEditor.importFile(event)">
-                    <label style="color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 4px;">Total budget <input type="number" id="location-quiz-library-total" min="0" value="0" style="width: 70px;"></label>
-                </div>
-                <div id="location-quiz-library-warning-banner" style="display: none; background: rgba(255,82,82,.12); border: 1px solid #ff5252; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #ff8a80; margin-bottom: 10px;"></div>
-                <div id="location-quiz-library-questions-list"></div>
-                <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap;">
-                    <button class="btn btn-primary" onclick="locationLibraryEditor.addQuestion()">+ Add Question</button>
-                </div>
-            </div>
-        </div>
-
         <div class="section" id="location-sets-section">
             <h2>📍 Location Sets</h2>
-            <p style="color: #888; margin-bottom: 10px;">Saved layouts (positions, codes, bombs, modes and quizzes). Save the current locations from a game's locations page, then apply them to another game.</p>
-            <div id="location-sets-list">
+            <p style="color: #888; margin-bottom: 10px;">Reusable layouts (positions, codes, bombs, modes and each location's check-in quiz). Author them here, or save the current locations from a game's locations page, then apply a set to any game.</p>
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
+                <button class="btn btn-success" id="location-sets-new-btn" onclick="newLocationSet()">➕ New Set</button>
+            </div>
+            <div id="location-sets-list" style="margin-bottom: 10px;">
                 <p style="color: #888;">Loading...</p>
+            </div>
+            <div id="location-set-editor" style="display: none; border-top: 1px solid #0f3460; padding-top: 15px;">
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
+                    <label style="color: #aaa; font-size: 14px; white-space: nowrap;">Set name:</label>
+                    <input type="text" id="location-set-name" placeholder="e.g. City centre" style="flex: 1; min-width: 180px;">
+                    <button class="btn btn-success" onclick="saveLocationSet()">💾 Save Set</button>
+                    <button class="btn btn-secondary" onclick="cancelLocationSetEdit()">Cancel</button>
+                </div>
+                <div id="location-set-rows"></div>
+                <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="addSetLocationRow()">+ Add Location</button>
+                    <span style="color: #888; font-size: 12px;">Give each location a quiz with the 📝 button. Empty codes are generated automatically.</span>
+                </div>
             </div>
         </div>
 
@@ -193,6 +179,31 @@
             <h2>Danger Zone</h2>
             <p style="color: #888; margin-bottom: 10px;">Wipes players, events, locations and team tokens for ALL games. Games are kept but reset to WAITING.</p>
             <button class="btn btn-danger" onclick="resetDatabase()">💣 Reset Database</button>
+        </div>
+    </div>
+
+    <!-- Set-location quiz editor modal -->
+    <div id="set-quiz-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;align-items:center;justify-content:center;padding:20px;">
+        <div style="background:#16213e;border-radius:8px;padding:20px;max-width:760px;width:100%;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;">
+                <h2 id="set-quiz-modal-title" style="color:#00d9ff;font-size:18px;">Location quiz</h2>
+                <button class="btn btn-danger" onclick="closeSetQuizModal()">Close</button>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+                <button class="btn btn-secondary" onclick="setQuizEditor.rebalance()" style="background:#0f3460;color:#eee;font-size:12px;padding:5px 10px;">Rebalance</button>
+                <button class="btn btn-secondary" onclick="setQuizEditor.exportJSON('location_quiz.json')" style="font-size:12px;padding:5px 10px;">⬇ Export</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('set-quiz-import-input').click()" style="font-size:12px;padding:5px 10px;">⬆ Import</button>
+                <input type="file" id="set-quiz-import-input" accept=".json" style="display:none" onchange="setQuizEditor.importFile(event)">
+                <label style="color:#aaa;font-size:12px;display:flex;align-items:center;gap:4px;">Total budget <input type="number" id="set-quiz-total" min="0" value="0" style="width:70px;"></label>
+            </div>
+            <div id="set-quiz-warning-banner" style="display:none;background:rgba(255,82,82,.12);border:1px solid #ff5252;border-radius:6px;padding:8px 10px;font-size:12px;color:#ff8a80;margin-bottom:10px;"></div>
+            <div id="set-quiz-questions-list"></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="setQuizEditor.addQuestion()">+ Add Question</button>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap;">
+                <button class="btn btn-success" onclick="applySetQuizModal()">Apply Quiz</button>
+            </div>
         </div>
     </div>
 
@@ -431,115 +442,171 @@
             await loadQuizTemplates();
         }
 
-        // --- Location Quiz Library ---
-        let locationLibraryEditor = null;
-        let editingLocationTemplateId = null;
+        // --- Location Sets (positions, codes, bombs, modes and per-location quizzes) ---
+        let setQuizEditor = null;
+        let editingSetId = null;
+        let editingSetQuizIndex = null;
+        let locationSetDraft = [];
 
-        function initLocationLibraryEditor() {
-            if (locationLibraryEditor) return;
-            locationLibraryEditor = createQuizEditor({
-                listId: 'location-quiz-library-questions-list',
-                totalId: 'location-quiz-library-total',
-                warningId: 'location-quiz-library-warning-banner',
+        function initSetQuizEditor() {
+            if (setQuizEditor) return;
+            setQuizEditor = createQuizEditor({
+                listId: 'set-quiz-questions-list',
+                totalId: 'set-quiz-total',
+                warningId: 'set-quiz-warning-banner',
                 addAnswerLabel: 'Add Answer',
                 toast: showToast,
             });
         }
 
-        async function loadLocationQuizTemplates() {
-            const data = await apiCall('/api/location-quiz-templates');
-            if (!data) return;
-            const templates = data.templates || [];
-            const list = document.getElementById('location-quiz-library-list');
-            if (templates.length === 0) {
-                list.innerHTML = '<p style="color: #888;">No saved location quizzes yet. Click ➕ New.</p>';
-            } else {
-                list.innerHTML = templates.map(t =>
-                    '<div class="library-row" data-location-template-id="' + t.id + '" data-name="' + esc(t.name) + '">' +
-                    '<div class="game-info"><div class="name">' + esc(t.name) + '</div>' +
-                    '<div class="status">' + t.question_count + ' question(s) — ' + t.total_bombs + ' 💣 total</div></div>' +
-                    '<div style="display:flex;gap:8px;">' +
-                        '<button class="btn btn-primary" onclick="editLocationLibraryQuiz(' + t.id + ')">✏️ Edit</button>' +
-                        '<button class="btn btn-danger" onclick="deleteLocationLibraryQuiz(' + t.id + ')">🗑️ Delete</button>' +
-                    '</div></div>'
-                ).join('');
-            }
+        function bindSetRows() {
+            const rows = document.getElementById('location-set-rows');
+            if (!rows || rows.dataset.bound) return;
+            rows.dataset.bound = '1';
+            rows.addEventListener('change', onSetRowChange);
+            rows.addEventListener('input', onSetRowChange);
         }
 
-        function newLocationLibraryQuiz() {
-            initLocationLibraryEditor();
-            editingLocationTemplateId = null;
-            document.getElementById('location-quiz-library-name').value = '';
-            locationLibraryEditor.setQuestions([]);
-            document.getElementById('location-quiz-library-editor').style.display = 'block';
+        function onSetRowChange(e) {
+            const role = e.target.dataset ? e.target.dataset.role : null;
+            if (!role) return;
+            const i = parseInt(e.target.dataset.i, 10);
+            const loc = locationSetDraft[i];
+            if (!loc) return;
+            const v = e.target.value;
+            if (role === 'number') loc.number = parseInt(v, 10) || 0;
+            else if (role === 'latitude') loc.latitude = v === '' ? null : parseFloat(v);
+            else if (role === 'longitude') loc.longitude = v === '' ? null : parseFloat(v);
+            else if (role === 'code') loc.code = v;
+            else if (role === 'bomb_value') loc.bomb_value = parseInt(v, 10) || 0;
+            else if (role === 'quiz_mode') loc.quiz_mode = v;
         }
 
-        async function editLocationLibraryQuiz(id) {
-            if (!id) { showToast('Pick a quiz to edit.', 'error'); return; }
-            const data = await apiCall('/api/location-quiz-templates/' + id);
-            if (!data || !data.success || !data.template) {
-                showToast((data && data.message) || 'Could not load quiz.', 'error');
-                return;
-            }
-            initLocationLibraryEditor();
-            editingLocationTemplateId = data.template.id;
-            document.getElementById('location-quiz-library-name').value = data.template.name;
-            locationLibraryEditor.setQuestions(data.template.questions || []);
-            document.getElementById('location-quiz-library-editor').style.display = 'block';
+        function renderSetRows() {
+            const rows = document.getElementById('location-set-rows');
+            if (!rows) return;
+            rows.innerHTML = locationSetDraft.map(function (loc, i) {
+                const qCount = (loc.questions || []).length;
+                const mode = loc.quiz_mode || 'code';
+                return '<div class="set-location-row" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:#0f3460;border-radius:6px;padding:8px;margin-bottom:8px;">' +
+                    '<label style="color:#888;font-size:11px;">#' +
+                        '<input type="number" min="1" data-role="number" data-i="' + i + '" value="' + (loc.number || (i + 1)) + '" style="width:56px;margin-left:4px;"></label>' +
+                    '<label style="color:#888;font-size:11px;">Lat' +
+                        '<input type="number" step="any" data-role="latitude" data-i="' + i + '" value="' + (loc.latitude == null ? '' : loc.latitude) + '" style="width:104px;margin-left:4px;"></label>' +
+                    '<label style="color:#888;font-size:11px;">Lon' +
+                        '<input type="number" step="any" data-role="longitude" data-i="' + i + '" value="' + (loc.longitude == null ? '' : loc.longitude) + '" style="width:104px;margin-left:4px;"></label>' +
+                    '<label style="color:#888;font-size:11px;">Code' +
+                        '<input type="text" data-role="code" data-i="' + i + '" value="' + esc(loc.code || '') + '" placeholder="auto" style="width:110px;margin-left:4px;"></label>' +
+                    '<label style="color:#888;font-size:11px;">💣' +
+                        '<input type="number" min="0" data-role="bomb_value" data-i="' + i + '" value="' + (loc.bomb_value == null ? 1 : loc.bomb_value) + '" style="width:56px;margin-left:4px;"></label>' +
+                    '<label style="color:#888;font-size:11px;">Mode' +
+                        '<select data-role="quiz_mode" data-i="' + i + '" style="margin-left:4px;">' +
+                            '<option value="code"' + (mode === 'code' ? ' selected' : '') + '>🔑 Code</option>' +
+                            '<option value="quiz"' + (mode === 'quiz' ? ' selected' : '') + '>📝 Quiz</option>' +
+                            '<option value="both"' + (mode === 'both' ? ' selected' : '') + '>📝+🔑 Both</option>' +
+                        '</select></label>' +
+                    '<button class="btn btn-secondary" onclick="editSetLocationQuiz(' + i + ')" style="padding:4px 10px;font-size:11px;">📝 Quiz (' + qCount + ')</button>' +
+                    '<button class="btn btn-danger" onclick="removeSetLocationRow(' + i + ')" style="padding:4px 10px;font-size:11px;margin-left:auto;">✕</button>' +
+                '</div>';
+            }).join('');
         }
 
-        async function saveLocationLibraryQuiz() {
-            initLocationLibraryEditor();
-            const name = document.getElementById('location-quiz-library-name').value.trim();
-            if (!name) { showToast('Name is required.', 'error'); return; }
-            const body = { name: name, questions: locationLibraryEditor.getQuestions() };
-            if (editingLocationTemplateId !== null) body.id = editingLocationTemplateId;
-            const result = await apiCall('/api/location-quiz-templates', 'POST', body);
-            if (!result || !result.success) {
-                showToast((result && result.message) || 'Could not save quiz.', 'error');
-                return;
-            }
-            editingLocationTemplateId = result.template ? result.template.id : editingLocationTemplateId;
-            showToast(result.message || 'Saved!', 'success');
-            await loadLocationQuizTemplates();
+        function newLocationSet() {
+            initSetQuizEditor();
+            editingSetId = null;
+            locationSetDraft = [];
+            document.getElementById('location-set-name').value = '';
+            bindSetRows();
+            addSetLocationRow();
+            document.getElementById('location-set-editor').style.display = 'block';
         }
 
-        async function deleteLocationLibraryQuiz(id) {
-            if (!id) { showToast('Pick a quiz to delete.', 'error'); return; }
-            const card = document.querySelector('.library-row[data-location-template-id="' + id + '"]');
-            const label = card ? card.getAttribute('data-name') : id;
-            if (!confirm('Delete the saved location quiz "' + label + '"?')) return;
-            const result = await apiCall('/api/location-quiz-templates/' + id, 'DELETE');
-            if (!result || !result.success) {
-                showToast((result && result.message) || 'Could not delete quiz.', 'error');
-                return;
-            }
-            showToast(result.message || 'Deleted!', 'success');
-            if (String(editingLocationTemplateId) === String(id)) {
-                editingLocationTemplateId = null;
-                document.getElementById('location-quiz-library-editor').style.display = 'none';
-            }
-            await loadLocationQuizTemplates();
+        function addSetLocationRow() {
+            locationSetDraft.push({
+                number: locationSetDraft.length + 1,
+                latitude: null,
+                longitude: null,
+                code: '',
+                bomb_value: 1,
+                quiz_mode: 'code',
+                questions: [],
+            });
+            renderSetRows();
         }
 
-        // --- Location Sets ---
+        function removeSetLocationRow(i) {
+            locationSetDraft.splice(i, 1);
+            renderSetRows();
+        }
+
+        function cancelLocationSetEdit() {
+            editingSetId = null;
+            locationSetDraft = [];
+            document.getElementById('location-set-editor').style.display = 'none';
+        }
+
         async function loadLocationSets() {
             const data = await apiCall('/api/location-sets');
             if (!data) return;
             const sets = data.sets || [];
             const list = document.getElementById('location-sets-list');
             if (sets.length === 0) {
-                list.innerHTML = '<p style="color: #888;">No saved location sets yet. Save one from a game\'s locations page.</p>';
+                list.innerHTML = '<p style="color: #888;">No saved location sets yet. Click ➕ New Set.</p>';
             } else {
                 list.innerHTML = sets.map(s =>
                     '<div class="library-row" data-location-set-id="' + s.id + '" data-name="' + esc(s.name) + '">' +
                     '<div class="game-info"><div class="name">' + esc(s.name) + '</div>' +
                     '<div class="status">' + s.location_count + ' location(s) — ' + s.quiz_count + ' with a quiz</div></div>' +
                     '<div style="display:flex;gap:8px;">' +
+                        '<button class="btn btn-primary" onclick="editLocationSet(' + s.id + ')">✏️ Edit</button>' +
                         '<button class="btn btn-danger" onclick="deleteAdminLocationSet(' + s.id + ')">🗑️ Delete</button>' +
                     '</div></div>'
                 ).join('');
             }
+        }
+
+        async function editLocationSet(id) {
+            if (!id) { showToast('Pick a set to edit.', 'error'); return; }
+            const data = await apiCall('/api/location-sets/' + id);
+            if (!data || !data.success || !data.set) {
+                showToast((data && data.message) || 'Could not load set.', 'error');
+                return;
+            }
+            initSetQuizEditor();
+            editingSetId = data.set.id;
+            locationSetDraft = (data.set.locations || []).map(function (loc) {
+                return {
+                    number: loc.number,
+                    latitude: loc.latitude,
+                    longitude: loc.longitude,
+                    code: loc.code || '',
+                    bomb_value: loc.bomb_value,
+                    quiz_mode: loc.quiz_mode || 'code',
+                    questions: loc.questions || [],
+                };
+            });
+            document.getElementById('location-set-name').value = data.set.name;
+            bindSetRows();
+            renderSetRows();
+            document.getElementById('location-set-editor').style.display = 'block';
+        }
+
+        async function saveLocationSet() {
+            const name = document.getElementById('location-set-name').value.trim();
+            if (!name) { showToast('Name is required.', 'error'); return; }
+            if (locationSetDraft.length === 0) { showToast('Add at least one location.', 'error'); return; }
+            const body = { name: name, locations: locationSetDraft };
+            let method = 'POST';
+            let url = '/api/location-sets';
+            if (editingSetId !== null) { method = 'PUT'; url = '/api/location-sets/' + editingSetId; }
+            const result = await apiCall(url, method, body);
+            if (!result || !result.success) {
+                showToast((result && result.message) || 'Could not save set.', 'error');
+                return;
+            }
+            editingSetId = result.set ? result.set.id : editingSetId;
+            showToast(result.message || 'Saved!', 'success');
+            await loadLocationSets();
         }
 
         async function deleteAdminLocationSet(id) {
@@ -553,13 +620,37 @@
                 return;
             }
             showToast(result.message || 'Deleted!', 'success');
+            if (String(editingSetId) === String(id)) cancelLocationSetEdit();
             await loadLocationSets();
         }
+
+        function editSetLocationQuiz(i) {
+            const loc = locationSetDraft[i];
+            if (!loc) return;
+            initSetQuizEditor();
+            editingSetQuizIndex = i;
+            document.getElementById('set-quiz-modal-title').textContent = 'Location ' + (loc.number || (i + 1)) + ' — Quiz';
+            // Deep-copy so closing without Apply discards the edits.
+            setQuizEditor.setQuestions(JSON.parse(JSON.stringify(loc.questions || [])));
+            document.getElementById('set-quiz-modal').style.display = 'flex';
+        }
+
+        function applySetQuizModal() {
+            if (editingSetQuizIndex === null) return;
+            locationSetDraft[editingSetQuizIndex].questions = setQuizEditor.getQuestions();
+            closeSetQuizModal();
+            renderSetRows();
+        }
+
+        function closeSetQuizModal() {
+            document.getElementById('set-quiz-modal').style.display = 'none';
+            editingSetQuizIndex = null;
+        }
+
 
         loadSuperToken();
         loadGames();
         loadQuizTemplates();
-        loadLocationQuizTemplates();
         loadLocationSets();
     </script>
 </body>

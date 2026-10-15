@@ -151,3 +151,71 @@ class AdminDashboardPage:
         self.page.once("dialog", handle_dialog)
         self.library_card(name).locator("button", has_text="🗑️ Delete").click()
         self.page.wait_for_timeout(800)
+
+    # --- Location Set editor ---
+    def new_set_button(self):
+        return self.page.locator("#location-sets-new-btn")
+
+    def set_name_input(self):
+        return self.page.locator("#location-set-name")
+
+    def set_location_rows(self):
+        return self.page.locator("#location-set-rows .set-location-row")
+
+    def set_row_field(self, i: int, role: str):
+        return self.page.locator(f"#location-set-rows [data-role='{role}'][data-i='{i}']")
+
+    def add_set_location(self):
+        self.page.locator("#location-set-editor button", has_text="Add Location").click()
+        self.page.wait_for_timeout(150)
+
+    def save_set(self):
+        self.page.locator("#location-set-editor button", has_text="Save Set").click()
+        self.page.wait_for_timeout(800)
+
+    def open_set_quiz(self, i: int):
+        self.page.locator("#location-set-rows button", has_text="Quiz").nth(i).click()
+        self.page.locator("#set-quiz-modal").wait_for(state="visible")
+
+    def set_quiz_add_question(self):
+        self.page.locator("#set-quiz-modal button", has_text="Add Question").click()
+        self.page.wait_for_timeout(200)
+
+    def set_quiz_question_text_input(self, qi: int):
+        return self.page.locator(
+            f"#set-quiz-questions-list input[data-role='question-text'][data-qi='{qi}']"
+        )
+
+    def set_quiz_answer_text(self, qi: int, ai: int, text: str):
+        self.page.locator(
+            f"#set-quiz-questions-list input[data-role='answer-text'][data-qi='{qi}'][data-ai='{ai}']"
+        ).fill(text)
+
+    def set_quiz_answer_bombs(self, qi: int, ai: int, value: int):
+        self.page.locator(
+            f"#set-quiz-questions-list input[data-role='answer-bombs'][data-qi='{qi}'][data-ai='{ai}']"
+        ).fill(str(value))
+
+    def set_quiz_apply(self):
+        self.page.locator("#set-quiz-modal button", has_text="Apply Quiz").click()
+        self.page.wait_for_function(
+            "() => document.getElementById('set-quiz-modal').style.display === 'none'"
+        )
+
+    def set_card(self, name: str):
+        """The set card in the admin list whose name contains `name`."""
+        return self.page.locator("#location-sets-list .library-row", has_text=name)
+
+    def edit_set(self, name: str):
+        self.set_card(name).locator("button", has_text="✏️ Edit").click()
+        self.page.wait_for_timeout(500)
+
+    def delete_set(self, name: str, accept: bool = True):
+        def handle_dialog(dialog):
+            if accept:
+                dialog.accept()
+            else:
+                dialog.dismiss()
+        self.page.once("dialog", handle_dialog)
+        self.set_card(name).locator("button", has_text="🗑️ Delete").click()
+        self.page.wait_for_timeout(800)

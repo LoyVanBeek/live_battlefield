@@ -1,8 +1,9 @@
-"""Tests for the reusable location libraries.
+"""Tests for the reusable location library.
 
-Two game-agnostic libraries let location setup be reused across games:
-a location-quiz library (named check-in question sets) and location sets
-(a named snapshot of a game's locations, codes, modes and quizzes).
+One game-agnostic library lets a whole location layout be reused across games:
+a location set (a named snapshot of locations, codes, modes and each location's
+check-in quiz). Sets can be authored in the admin editor or snapshotted from a
+game's locations page.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,54 +14,34 @@ GAME_ID = "00000000-0000-0000-0000-000000000000"
 
 
 # ---------------------------------------------------------------------------
-# /api/location-quiz-templates — reusable location quizzes
+# /api/location-sets (POST/PUT) — authoring a set directly
 # ---------------------------------------------------------------------------
 
 
-class TestLocationQuizLibrary:
-    def test_list_templates(self):
-        from app.api.routes import app, verify_admin_or_gm
+class TestLocationSetEditor:
+    """POST/PUT /api/location-sets — authoring a set (with quizzes) directly."""
 
-        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
-        try:
-            with patch("app.models.list_location_quiz_templates", new_callable=AsyncMock) as mock_list:
-                mock_list.return_value = [
-                    {"id": 1, "name": "Museum", "question_count": 1, "total_bombs": 5, "updated_at": None},
-                ]
-                response = TestClient(app).get("/api/location-quiz-templates")
-        finally:
-            app.dependency_overrides.clear()
-
-        assert response.status_code == 200
-        templates = response.json()["templates"]
-        assert templates[0]["name"] == "Museum"
-        assert templates[0]["total_bombs"] == 5
-
-    def test_get_not_found(self):
-        from app.api.routes import app, verify_admin_or_gm
-
-        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "gm", "game_id": GAME_ID}
-        try:
-            with patch("app.models.get_location_quiz_template", new_callable=AsyncMock, return_value=None):
-                response = TestClient(app).get("/api/location-quiz-templates/999")
-        finally:
-            app.dependency_overrides.clear()
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is False
-        assert "not found" in data["message"].lower()
+    def _location(self, **overrides):
+        loc = {
+            "number": 1,
+            "latitude": 52.1,
+            "longitude": 4.3,
+            "code": "ABC123",
+            "bomb_value": 5,
+            "quiz_mode": "both",
+            "questions": [],
+        }
+        loc.update(overrides)
+        return loc
 
     def test_create_requires_name(self):
         from app.api.routes import app, verify_admin_or_gm
 
         app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
         try:
-            with patch("app.models.save_location_quiz_template", new_callable=AsyncMock) as mock_save:
-                response = TestClient(app).post("/api/location-quiz-templates", json={
-                    "name": "   ",
-                    "questions": [{"question_text": "Q", "answers": [
-                        {"answer_text": "A", "bomb_value": 5, "is_correct": True}]}],
+            with patch("app.models.save_location_set", new_callable=AsyncMock) as mock_save:
+                response = TestClient(app).post("/api/location-sets", json={
+                    "name": "   ", "locations": [self._location()],
                 })
             assert response.json()["success"] is False
             assert "name is required" in response.json()["message"].lower()
@@ -68,107 +49,137 @@ class TestLocationQuizLibrary:
         finally:
             app.dependency_overrides.clear()
 
-    def test_create_rejects_question_without_answers(self):
+    def test_create_requires_a_location(self):
         from app.api.routes import app, verify_admin_or_gm
 
         app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
         try:
-            with patch("app.models.save_location_quiz_template", new_callable=AsyncMock) as mock_save:
-                response = TestClient(app).post("/api/location-quiz-templates", json={
-                    "name": "Broken",
-                    "questions": [{"question_text": "Empty Q", "answers": []}],
-                })
+            with patch("app.models.save_location_set", new_callable=AsyncMock) as mock_save:
+                response = TestClient(app).post("/api/location-sets", json={"name": "Empty", "locations": []})
             assert response.json()["success"] is False
-            assert "has no answers" in response.json()["message"]
+            assert "at least one location" in response.json()["message"].lower()
             mock_save.assert_not_awaited()
         finally:
             app.dependency_overrides.clear()
 
-    def test_create_rejects_no_bomb_yielding_answer(self):
+    def test_create_rejects_missing_coordinates(self):
         from app.api.routes import app, verify_admin_or_gm
 
         app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
         try:
-            with patch("app.models.save_location_quiz_template", new_callable=AsyncMock) as mock_save:
-                response = TestClient(app).post("/api/location-quiz-templates", json={
-                    "name": "ZeroBombs",
-                    "questions": [{"question_text": "Capital?", "answers": [
-                        {"answer_text": "Paris", "bomb_value": 0, "is_correct": True},
-                    ]}],
+            with patch("app.models.save_location_set", new_callable=AsyncMock) as mock_save:
+                response = TestClient(app).post("/api/location-sets", json={
+                    "name": "Nowhere", "locations": [self._location(latitude=None)],
                 })
             assert response.json()["success"] is False
-            assert "no bomb-yielding answer" in response.json()["message"]
+            assert "valid latitude and longitude" in response.json()["message"]
             mock_save.assert_not_awaited()
         finally:
             app.dependency_overrides.clear()
 
-    def test_create_accepts_and_forwards_id(self):
+    def test_create_rejects_unknown_mode(self):
         from app.api.routes import app, verify_admin_or_gm
 
-        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "gm", "game_id": GAME_ID}
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
         try:
-            with patch("app.models.save_location_quiz_template", new_callable=AsyncMock) as mock_save:
-                mock_save.return_value = {"id": 7, "name": "Museum", "questions": []}
-                response = TestClient(app).post("/api/location-quiz-templates", json={
-                    "id": 7,
-                    "name": "Museum",
-                    "questions": [{"question_text": "Q", "answers": [
-                        {"answer_text": "A", "bomb_value": 5, "is_correct": True}]}],
+            with patch("app.models.save_location_set", new_callable=AsyncMock) as mock_save:
+                response = TestClient(app).post("/api/location-sets", json={
+                    "name": "Weird", "locations": [self._location(quiz_mode="telepathy")],
                 })
-            assert response.json()["success"] is True
-            assert response.json()["template"]["id"] == 7
-            assert mock_save.call_args.kwargs["template_id"] == 7
+            assert response.json()["success"] is False
+            assert "invalid quiz mode" in response.json()["message"]
+            mock_save.assert_not_awaited()
         finally:
             app.dependency_overrides.clear()
 
-    def test_create_normalizes_source_url(self):
+    def test_create_rejects_duplicate_numbers(self):
+        from app.api.routes import app, verify_admin_or_gm
+
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
+        try:
+            with patch("app.models.save_location_set", new_callable=AsyncMock) as mock_save:
+                response = TestClient(app).post("/api/location-sets", json={
+                    "name": "Dupes",
+                    "locations": [self._location(number=1), self._location(number=1)],
+                })
+            assert response.json()["success"] is False
+            assert "unique" in response.json()["message"].lower()
+            mock_save.assert_not_awaited()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_create_rejects_quiz_without_bombs(self):
+        from app.api.routes import app, verify_admin_or_gm
+
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
+        try:
+            with patch("app.models.save_location_set", new_callable=AsyncMock) as mock_save:
+                response = TestClient(app).post("/api/location-sets", json={
+                    "name": "NoBombs",
+                    "locations": [self._location(questions=[{
+                        "question_text": "Capital?", "answers": [
+                            {"answer_text": "Paris", "bomb_value": 0, "is_correct": True}],
+                    }])],
+                })
+            assert response.json()["success"] is False
+            assert "Location 1: Question 1" in response.json()["message"]
+            mock_save.assert_not_awaited()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_create_forwards_locations_and_normalizes_source_url(self):
         from app.api.routes import app, verify_admin_or_gm
 
         app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "gm", "game_id": GAME_ID}
         try:
-            with patch("app.models.save_location_quiz_template", new_callable=AsyncMock) as mock_save:
-                mock_save.return_value = {"id": 1, "name": "Sourced", "questions": []}
-                response = TestClient(app).post("/api/location-quiz-templates", json={
-                    "name": "Sourced",
-                    "questions": [
-                        {"question_text": "Q1", "source_url": "example.com/wiki",
-                         "answers": [{"answer_text": "A", "bomb_value": 5, "is_correct": True}]},
-                        {"question_text": "Q2", "source_url": "   ",
-                         "answers": [{"answer_text": "A", "bomb_value": 5, "is_correct": True}]},
-                    ],
+            with patch("app.models.save_location_set", new_callable=AsyncMock) as mock_save:
+                mock_save.return_value = {"id": 7, "name": "City", "locations": []}
+                response = TestClient(app).post("/api/location-sets", json={
+                    "name": "City",
+                    "locations": [self._location(questions=[
+                        {"question_text": "Q1", "source_url": "example.com/wiki", "answers": [
+                            {"answer_text": "A", "bomb_value": 5, "is_correct": True}]},
+                        {"question_text": "Q2", "source_url": "   ", "answers": [
+                            {"answer_text": "A", "bomb_value": 5, "is_correct": True}]},
+                    ])],
                 })
             assert response.json()["success"] is True
+            assert response.json()["set"]["id"] == 7
+            assert mock_save.call_args.kwargs["set_id"] is None
             sent = mock_save.call_args.args[2]
-            assert sent[0]["source_url"] == "https://example.com/wiki"
-            assert sent[1]["source_url"] is None
+            assert sent[0]["questions"][0]["source_url"] == "https://example.com/wiki"
+            assert sent[0]["questions"][1]["source_url"] is None
         finally:
             app.dependency_overrides.clear()
 
-    def test_delete_requires_auth(self):
-        from app.api.routes import app
-
-        admin = MagicMock()
-        admin.token = "test_admin_token"
-        with patch("app.models.get_admin", new_callable=AsyncMock, return_value=admin):
-            with patch("app.models.get_game_by_gm_token", new_callable=AsyncMock, return_value=None):
-                with patch("app.models.delete_location_quiz_template", new_callable=AsyncMock) as mock_delete:
-                    response = TestClient(app).delete(
-                        "/api/location-quiz-templates/1?token=wrong&gm_token=bad"
-                    )
-        assert response.status_code == 404
-        mock_delete.assert_not_awaited()
-
-    def test_delete_as_gm(self):
+    def test_update_forwards_set_id(self):
         from app.api.routes import app, verify_admin_or_gm
 
-        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "gm", "game_id": GAME_ID}
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
         try:
-            with patch("app.models.delete_location_quiz_template", new_callable=AsyncMock, return_value=True):
-                response = TestClient(app).delete("/api/location-quiz-templates/1")
+            with patch("app.models.save_location_set", new_callable=AsyncMock) as mock_save:
+                mock_save.return_value = {"id": 7, "name": "Renamed", "locations": []}
+                response = TestClient(app).put("/api/location-sets/7", json={
+                    "name": "Renamed", "locations": [self._location()],
+                })
+            assert response.json()["success"] is True
+            assert mock_save.call_args.kwargs["set_id"] == 7
         finally:
             app.dependency_overrides.clear()
 
-        assert response.json()["success"] is True
+    def test_update_not_found(self):
+        from app.api.routes import app, verify_admin_or_gm
+
+        app.dependency_overrides[verify_admin_or_gm] = lambda: {"role": "admin"}
+        try:
+            with patch("app.models.save_location_set", new_callable=AsyncMock, return_value=None):
+                response = TestClient(app).put("/api/location-sets/999", json={
+                    "name": "Ghost", "locations": [self._location()],
+                })
+            assert response.json()["success"] is False
+            assert "not found" in response.json()["message"].lower()
+        finally:
+            app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------

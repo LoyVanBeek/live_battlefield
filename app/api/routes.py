@@ -3034,74 +3034,6 @@ async def delete_quiz_template(
     return {"success": True, "message": "Quiz deleted."}
 
 
-class SaveLocationQuizTemplateRequest(BaseModel):
-    name: str = ""
-    questions: list[dict] = []
-    id: Optional[int] = None
-
-
-@app.get("/api/location-quiz-templates")
-async def list_location_quiz_templates(
-    db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_or_gm),
-):
-    from app.models import list_location_quiz_templates
-
-    return {"templates": await list_location_quiz_templates(db)}
-
-
-@app.get("/api/location-quiz-templates/{template_id}")
-async def get_location_quiz_template(
-    template_id: int,
-    db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_or_gm),
-):
-    from app.models import get_location_quiz_template
-
-    template = await get_location_quiz_template(db, template_id)
-    if not template:
-        return {"success": False, "message": "Location quiz template not found."}
-    return {"success": True, "template": template}
-
-
-@app.post("/api/location-quiz-templates")
-async def save_location_quiz_template(
-    body: SaveLocationQuizTemplateRequest,
-    db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_or_gm),
-):
-    from app.models import save_location_quiz_template
-
-    name = (body.name or "").strip()
-    if not name:
-        return {"success": False, "message": "A quiz name is required."}
-    if len(name) > 200:
-        return {"success": False, "message": "Quiz name is too long (max 200 characters)."}
-
-    error = _quiz_validation_error(body.questions)
-    if error:
-        return {"success": False, "message": error}
-
-    template = await save_location_quiz_template(db, name, body.questions, template_id=body.id)
-    if not template:
-        return {"success": False, "message": "Location quiz template not found."}
-    return {"success": True, "template": template, "message": f"Saved location quiz '{name}'."}
-
-
-@app.delete("/api/location-quiz-templates/{template_id}")
-async def delete_location_quiz_template(
-    template_id: int,
-    db: AsyncSession = Depends(get_api_db),
-    _=Depends(verify_admin_or_gm),
-):
-    from app.models import delete_location_quiz_template
-
-    deleted = await delete_location_quiz_template(db, template_id)
-    if not deleted:
-        return {"success": False, "message": "Location quiz template not found."}
-    return {"success": True, "message": "Location quiz deleted."}
-
-
 @app.get("/api/location-sets")
 async def list_location_sets(
     db: AsyncSession = Depends(get_api_db),
@@ -3140,13 +3072,82 @@ async def delete_location_set(
     return {"success": True, "message": "Location set deleted."}
 
 
+def _location_set_validation_error(locations: list[dict]) -> Optional[str]:
+    """Return an error if a reusable set can't be saved, else None.
+
+    A set is a standalone layout (authored in the admin editor, no game in
+    scope), so we only check that each row is usable: real coordinates, a known
+    quiz mode, unique numbers, and a quiz that can yield bombs.
+    """
+    if not locations:
+        return "Add at least one location to the set."
+    numbers = [loc.get("number") for loc in locations if loc.get("number") is not None]
+    if len(numbers) != len(set(numbers)):
+        return "Location numbers must be unique within a set."
+    for i, loc in enumerate(locations, start=1):
+        try:
+            float(loc["latitude"])
+            float(loc["longitude"])
+        except (KeyError, TypeError, ValueError):
+            return f"Location {i} needs a valid latitude and longitude."
+        if (loc.get("quiz_mode") or "code") not in ("code", "quiz", "both"):
+            return f"Location {i} has an invalid quiz mode."
+        error = _quiz_validation_error(loc.get("questions") or [])
+        if error:
+            return f"Location {i}: {error}"
+    return None
+
+
 class SaveLocationSetRequest(BaseModel):
+    name: str = ""
+    locations: list[dict] = []
+    id: Optional[int] = None
+
+
+async def _save_location_set_response(db: AsyncSession, name: str, locations: list[dict], set_id: Optional[int]):
+    from app.models import save_location_set
+
+    name = (name or "").strip()
+    if not name:
+        return {"success": False, "message": "A set name is required."}
+    if len(name) > 200:
+        return {"success": False, "message": "Set name is too long (max 200 characters)."}
+    error = _location_set_validation_error(locations)
+    if error:
+        return {"success": False, "message": error}
+
+    loc_set = await save_location_set(db, name, locations, set_id=set_id)
+    if not loc_set:
+        return {"success": False, "message": "Location set not found."}
+    return {"success": True, "set": loc_set, "message": f"Saved location set '{name}'."}
+
+
+@app.post("/api/location-sets")
+async def create_location_set(
+    body: SaveLocationSetRequest,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_or_gm),
+):
+    return await _save_location_set_response(db, body.name, body.locations, body.id)
+
+
+@app.put("/api/location-sets/{set_id}")
+async def update_location_set(
+    set_id: int,
+    body: SaveLocationSetRequest,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_or_gm),
+):
+    return await _save_location_set_response(db, body.name, body.locations, set_id)
+
+
+class SaveLocationSetSnapshotRequest(BaseModel):
     name: str = ""
 
 
 @app.post("/api/quick/save-location-set")
-async def save_location_set(
-    body: SaveLocationSetRequest,
+async def save_location_set_snapshot(
+    body: SaveLocationSetSnapshotRequest,
     db: AsyncSession = Depends(get_api_db),
     game_id: str = Depends(verify_gm_token),
 ):

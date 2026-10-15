@@ -48,3 +48,44 @@ Commits:
 - `b29560f` — fix: `clear-locations` removal events
 
 Pushed `feature/quiz_at_locations` to `origin`.
+
+# Unification: one Location Sets library
+
+Follow-up decision (confirmed with the user): drop the separate location-quiz
+library and fold quizzes into a single Location Sets library, stored
+relationally instead of as a `quiz_json` column.
+
+## Backend
+- [x] Migration `015`: only `location_sets`, `location_set_locations`,
+      `location_set_questions`, `location_set_answers` (drop the 3
+      `location_quiz_template*` tables, drop `location_set_locations.quiz_json`)
+- [x] `app/database.py`: drop `LocationQuizTemplate*`, add `LocationSetQuestion` /
+      `LocationSetAnswer`
+- [x] `app/models.py`: drop location-quiz-template helpers; `save_location_set`
+      (create/overwrite), relational read/write helpers, bulk cascade delete
+- [x] `app/api/routes.py`: drop `/api/location-quiz-templates*`; add
+      `POST`/`PUT /api/location-sets` with validation
+
+## Frontend
+- [x] `app/templates/locations.html`: the quiz modal's library row now loads a
+      location's quiz from a set (number-matched, with a fallback note) and
+      "Save as…" snapshots the whole layout after persisting the open quiz
+- [x] `app/templates/admin_dashboard.html`: replace the "Location Quiz Library"
+      with a full Location Set editor (locations + per-location quiz modal)
+
+## Tests
+- [x] Unit: `TestLocationSetEditor` (POST/PUT validation, normalization, ids)
+- [x] E2E: set round-trip via API, modal load-from-set, admin set editor;
+      POMs updated
+
+## Verification (CI order)
+1. `uv run ty check` — pass
+2. `uv run pytest tests/` — 305 pass
+3. `uvx pip-audit` against `uv export ...` — no known vulnerabilities
+4. `docker compose -f docker-compose.e2e.yml run --rm test-e2e` — 84 pass
+
+Dev DB remediation (revision 015 was already stamped with the old shape):
+ran a one-off SQL script that rebuilt `location_set_questions` /
+`location_set_answers` from `quiz_json`, then dropped `quiz_json` and the
+three template tables. The existing dev set (3 locations, 3 quizzes) survived
+and is served correctly by `/api/location-sets`.

@@ -1,11 +1,10 @@
-"""add location libraries (reusable location quizzes and location sets)
+"""add reusable location sets (a location library)
 
-Adds two game-agnostic libraries so location setup can be reused across games:
-
-* a location-quiz library (named location-scoped question sets), mirroring the
-  existing quiz templates, and
-* location sets: a named snapshot of a game's locations (position, code, bomb
-  value, mode) plus each location's quiz, so a whole layout can be re-applied.
+Adds one game-agnostic library so a whole location layout can be reused across
+games. A set is a named snapshot of locations (position, code, bomb value, mode)
+and each location's check-in quiz. Quizzes are stored relationally, exactly like
+the in-game location quiz and the normal quiz templates, rather than as a JSON
+column.
 
 Revision ID: 015
 Revises: 014
@@ -26,38 +25,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     conn = op.get_bind()
-    # --- Location-quiz library (game-agnostic, mirrors quiz_templates) ---
-    conn.execute(sa.text(
-        "CREATE TABLE IF NOT EXISTS location_quiz_templates ("
-        "id SERIAL NOT NULL, "
-        "name VARCHAR(200) NOT NULL, "
-        "created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "
-        "updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "
-        "PRIMARY KEY (id), "
-        "UNIQUE (name)"
-        ")"
-    ))
-    conn.execute(sa.text(
-        "CREATE TABLE IF NOT EXISTS location_quiz_template_questions ("
-        "id SERIAL NOT NULL, "
-        "template_id INTEGER NOT NULL REFERENCES location_quiz_templates(id), "
-        "question_text VARCHAR(500) NOT NULL, "
-        "\"order\" INTEGER NOT NULL DEFAULT 0, "
-        "source_url VARCHAR(1000), "
-        "PRIMARY KEY (id)"
-        ")"
-    ))
-    conn.execute(sa.text(
-        "CREATE TABLE IF NOT EXISTS location_quiz_template_answers ("
-        "id SERIAL NOT NULL, "
-        "question_id INTEGER NOT NULL REFERENCES location_quiz_template_questions(id), "
-        "answer_text VARCHAR(500) NOT NULL, "
-        "bomb_value INTEGER NOT NULL DEFAULT 0, "
-        "is_correct BOOLEAN NOT NULL DEFAULT false, "
-        "PRIMARY KEY (id)"
-        ")"
-    ))
-    # --- Location sets (a saved layout: positions, codes, bombs, modes + quiz) ---
+    # --- Location sets (a named, reusable layout) ---
     conn.execute(sa.text(
         "CREATE TABLE IF NOT EXISTS location_sets ("
         "id SERIAL NOT NULL, "
@@ -78,7 +46,27 @@ def upgrade() -> None:
         "code VARCHAR(20) NOT NULL, "
         "bomb_value INTEGER NOT NULL DEFAULT 1, "
         "quiz_mode VARCHAR(10) NOT NULL DEFAULT 'code', "
-        "quiz_json TEXT, "
+        "PRIMARY KEY (id)"
+        ")"
+    ))
+    # A location's check-in quiz, stored exactly like location_quiz_questions.
+    conn.execute(sa.text(
+        "CREATE TABLE IF NOT EXISTS location_set_questions ("
+        "id SERIAL NOT NULL, "
+        "set_location_id INTEGER NOT NULL REFERENCES location_set_locations(id), "
+        "question_text VARCHAR(500) NOT NULL, "
+        "\"order\" INTEGER NOT NULL DEFAULT 0, "
+        "source_url VARCHAR(1000), "
+        "PRIMARY KEY (id)"
+        ")"
+    ))
+    conn.execute(sa.text(
+        "CREATE TABLE IF NOT EXISTS location_set_answers ("
+        "id SERIAL NOT NULL, "
+        "question_id INTEGER NOT NULL REFERENCES location_set_questions(id), "
+        "answer_text VARCHAR(500) NOT NULL, "
+        "bomb_value INTEGER NOT NULL DEFAULT 0, "
+        "is_correct BOOLEAN NOT NULL DEFAULT false, "
         "PRIMARY KEY (id)"
         ")"
     ))
@@ -86,8 +74,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     conn = op.get_bind()
+    conn.execute(sa.text("DROP TABLE IF EXISTS location_set_answers"))
+    conn.execute(sa.text("DROP TABLE IF EXISTS location_set_questions"))
     conn.execute(sa.text("DROP TABLE IF EXISTS location_set_locations"))
     conn.execute(sa.text("DROP TABLE IF EXISTS location_sets"))
-    conn.execute(sa.text("DROP TABLE IF EXISTS location_quiz_template_answers"))
-    conn.execute(sa.text("DROP TABLE IF EXISTS location_quiz_template_questions"))
-    conn.execute(sa.text("DROP TABLE IF EXISTS location_quiz_templates"))

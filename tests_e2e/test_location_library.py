@@ -1,13 +1,14 @@
-"""E2E coverage for the reusable location libraries.
+"""E2E coverage for the reusable location sets library.
 
-Two game-agnostic libraries let location setup be reused across games:
-a location-quiz library (named check-in question sets) and location sets
-(a named snapshot of a game's locations, codes, modes and quizzes).
+A location set is a named layout (positions, codes, bombs, modes) plus each
+location's check-in quiz. Sets are authored in the admin editor or snapshotted
+from a game's locations page, then applied to any game.
 """
 
 import httpx
 
 from tests_e2e.config import HTTPX_TIMEOUT
+from tests_e2e.pages.admin_dashboard import AdminDashboardPage
 from tests_e2e.pages.locations_page import LocationsPage
 
 QUIZ = [
@@ -27,59 +28,73 @@ def _locations(client, gm_token):
     ).json()["locations"]
 
 
-def test_location_quiz_library_round_trip(app_url, seeded_game_with_locations):
-    """Save a location quiz, list/load it, overwrite by name, then delete it."""
-    gm = seeded_game_with_locations["gm_token"]
+def test_location_set_round_trip(app_url, admin_token):
+    """Create a set (with a quiz) via the API, load it, rename it, delete it."""
     with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
         resp = client.post(
-            "/api/location-quiz-templates",
-            params={"gm_token": gm},
-            json={"name": "E2E Check-in", "questions": QUIZ},
-        )
-        assert resp.json()["success"] is True, resp.text
-        template_id = resp.json()["template"]["id"]
-
-        listed = client.get(
-            "/api/location-quiz-templates", params={"gm_token": gm}
-        ).json()["templates"]
-        assert any(t["id"] == template_id and t["name"] == "E2E Check-in" for t in listed)
-
-        full = client.get(
-            f"/api/location-quiz-templates/{template_id}", params={"gm_token": gm}
-        ).json()["template"]
-        assert full["questions"][0]["question_text"] == "Where are we?"
-        assert full["questions"][0]["answers"][0]["is_correct"] is True
-
-        # Saving under the same name overwrites rather than duplicating.
-        resp = client.post(
-            "/api/location-quiz-templates",
-            params={"gm_token": gm},
+            "/api/location-sets",
+            params={"token": admin_token},
             json={
-                "name": "E2E Check-in",
-                "questions": [
+                "name": "E2E Set",
+                "locations": [
                     {
-                        "question_text": "Replaced?",
-                        "answers": [
-                            {"answer_text": "Yes", "bomb_value": 3, "is_correct": True}
-                        ],
+                        "number": 1,
+                        "latitude": 52.1,
+                        "longitude": 4.3,
+                        "code": "",
+                        "bomb_value": 5,
+                        "quiz_mode": "quiz",
+                        "questions": QUIZ,
                     }
                 ],
             },
         )
         assert resp.json()["success"] is True, resp.text
+        set_id = resp.json()["set"]["id"]
+        # A blank code is generated for the set location.
+        assert resp.json()["set"]["locations"][0]["code"]
 
-        listed = client.get(
-            "/api/location-quiz-templates", params={"gm_token": gm}
-        ).json()["templates"]
-        matches = [t for t in listed if t["name"] == "E2E Check-in"]
-        assert len(matches) == 1
-        # Overwriting by name replaces the row, so the id changes.
-        new_id = matches[0]["id"]
+        listed = client.get("/api/location-sets", params={"token": admin_token}).json()["sets"]
+        assert any(s["id"] == set_id and s["name"] == "E2E Set" for s in listed)
 
-        resp = client.delete(
-            f"/api/location-quiz-templates/{new_id}", params={"gm_token": gm}
+        full = client.get(
+            f"/api/location-sets/{set_id}", params={"token": admin_token}
+        ).json()["set"]
+        assert full["locations"][0]["questions"][0]["question_text"] == "Where are we?"
+        assert full["locations"][0]["questions"][0]["answers"][0]["is_correct"] is True
+
+        # PUT updates in place, allowing a rename.
+        resp = client.put(
+            f"/api/location-sets/{set_id}",
+            params={"token": admin_token},
+            json={
+                "name": "E2E Set Renamed",
+                "locations": [
+                    {
+                        "number": 2,
+                        "latitude": 51.0,
+                        "longitude": 5.0,
+                        "code": "ADMIN2",
+                        "bomb_value": 3,
+                        "quiz_mode": "both",
+                        "questions": [],
+                    }
+                ],
+            },
         )
         assert resp.json()["success"] is True, resp.text
+        assert resp.json()["set"]["id"] == set_id
+        assert resp.json()["set"]["locations"][0]["code"] == "ADMIN2"
+
+        renamed = client.get(
+            f"/api/location-sets/{set_id}", params={"token": admin_token}
+        ).json()["set"]
+        assert renamed["name"] == "E2E Set Renamed"
+        assert [loc["number"] for loc in renamed["locations"]] == [2]
+        assert renamed["locations"][0]["code"] == "ADMIN2"
+        assert renamed["locations"][0]["quiz_mode"] == "both"
+        # The PUT payload replaces the previous locations and quiz, not merges.
+        assert renamed["locations"][0]["questions"] == []
 
 
 def test_location_set_apply_restores_codes_modes_and_quiz(
@@ -216,33 +231,49 @@ def test_apply_set_rejected_after_start(app_url, seeded_game_with_teams):
         assert "already started" in resp.json()["message"].lower()
 
 
-def test_quiz_modal_loads_from_library(page, app_url, seeded_game_with_locations):
+def test_quiz_modal_loads_from_set(page, app_url, admin_token, seeded_game_with_locations):
+    """The quiz modal's Load pulls a location's quiz out of a set (number-matched)."""
     gm = seeded_game_with_locations["gm_token"]
     with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
         resp = client.post(
-            "/api/location-quiz-templates",
-            params={"gm_token": gm},
-            json={"name": "E2E Modal Quiz", "questions": QUIZ},
+            "/api/location-sets",
+            params={"token": admin_token},
+            json={
+                "name": "E2E Modal Set",
+                "locations": [{
+                    "number": 1,
+                    "latitude": 52.1,
+                    "longitude": 4.3,
+                    "code": "MODAL1",
+                    "bomb_value": 5,
+                    "quiz_mode": "both",
+                    "questions": [{
+                        "question_text": "Loaded from set?",
+                        "answers": [{"answer_text": "Yes", "bomb_value": 4, "is_correct": True}],
+                    }],
+                }],
+            },
         )
         assert resp.json()["success"] is True, resp.text
-        template_id = resp.json()["template"]["id"]
+        set_id = resp.json()["set"]["id"]
 
     lp = LocationsPage(page, gm, app_url=app_url)
     lp.goto()
-    lp.open_quiz_modal(3)  # a location without a quiz yet
+    lp.open_quiz_modal(1)  # number-matched to the set's location 1
 
-    # The library select fills with the saved quiz.
     page.wait_for_function(
-        "() => document.querySelectorAll('#lq-library-select option').length >= 2"
+        "() => document.querySelectorAll('#lq-set-select option').length >= 2"
     )
-    # Select this test's quiz by id (the library is shared across tests).
-    lp.quiz_library_select().select_option(str(template_id))
-    lp.load_library_quiz_button().click()
+    lp.quiz_set_select().select_option(str(set_id))
+    lp.load_set_quiz_button().click()
     page.wait_for_function(
-        "() => document.querySelectorAll('#lq-questions-list .quiz-question').length >= 1"
+        """() => {
+            const i = document.querySelector("#lq-questions-list input[data-role='question-text']");
+            return !!i && i.value === 'Loaded from set?';
+        }"""
     )
 
-    assert lp.quiz_question_text_input(0).input_value() == "Where are we?"
+    assert lp.quiz_question_text_input(0).input_value() == "Loaded from set?"
 
 
 def test_save_current_as_set_from_ui(page, app_url, seeded_game_with_locations):
@@ -271,3 +302,42 @@ def test_save_current_as_set_from_ui(page, app_url, seeded_game_with_locations):
         "() => !Array.from(document.querySelectorAll('#location-set-select option'))"
         ".some(o => o.textContent.includes('E2E UI Set'))"
     )
+
+
+def test_admin_set_editor(page, app_url, admin_token):
+    """Author a set, with a per-location quiz, in the admin dashboard."""
+    ap = AdminDashboardPage(page, admin_token, app_url=app_url)
+    ap.goto()
+    ap.new_set_button().click()
+    ap.set_name_input().fill("E2E Admin Set")
+    ap.set_row_field(0, "code").fill("ADMINSET1")
+    ap.set_row_field(0, "latitude").fill("52.1")
+    ap.set_row_field(0, "longitude").fill("4.3")
+    ap.set_row_field(0, "quiz_mode").select_option("both")
+
+    ap.open_set_quiz(0)
+    ap.set_quiz_add_question()
+    ap.set_quiz_question_text_input(0).fill("Admin authored?")
+    ap.set_quiz_answer_text(0, 0, "Yes")
+    ap.set_quiz_answer_bombs(0, 0, 3)
+    ap.set_quiz_apply()
+
+    ap.save_set()
+    ap.set_card("E2E Admin Set").wait_for(state="visible")
+
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        sets = client.get(
+            "/api/location-sets", params={"token": admin_token}
+        ).json()["sets"]
+        mine = next(s for s in sets if s["name"] == "E2E Admin Set")
+        assert mine["location_count"] == 1
+        assert mine["quiz_count"] == 1
+        full = client.get(
+            f"/api/location-sets/{mine['id']}", params={"token": admin_token}
+        ).json()["set"]
+        loc = full["locations"][0]
+        assert loc["code"] == "ADMINSET1"
+        assert loc["quiz_mode"] == "both"
+        assert loc["questions"][0]["question_text"] == "Admin authored?"
+
+    ap.delete_set("E2E Admin Set")
