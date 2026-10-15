@@ -159,3 +159,15 @@
 - Fix: after touching tests_e2e/ → `docker compose -f docker-compose.e2e.yml build test-e2e`;
   after touching app/ → `... up -d --build test-app`. Verify by checking the collected count
   matches the test file before trusting a pass/fail.
+
+## An empty inline element has no box — not clickable, not "visible"
+- Reusing the game page's editor for authoring a new location set surfaced it: a new
+  location's code is blank, so `<span id="cell-code-1" class="editable-cell"></span>`
+  rendered zero-width/zero-height. Playwright called it "not visible" and refused to click;
+  a real user couldn't click it either.
+- The game page never hit this because server-assigned codes are always non-empty.
+- Fix: `.editable-cell { display:inline-block; min-width:24px; min-height:1.2em; }` so the
+  hit target exists regardless of content. (Mixing `min-width` with inline `display` does
+  nothing — inline boxes ignore width/height.)
+- Also read cell text with `textContent` when seeding inline editors, not `innerHTML`:
+  any placeholder markup inside the cell would otherwise be typed into the input verbatim.
