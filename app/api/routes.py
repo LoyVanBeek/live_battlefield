@@ -446,6 +446,22 @@ async def admin_dashboard(
     )
 
 
+@app.get("/admin/{admin_token}/location-sets", response_class=HTMLResponse)
+async def location_set_editor_page(
+    request: Request, admin_token: str, db: AsyncSession = Depends(get_api_db)
+):
+    """Full-page Location Set editor (map + per-location quiz)."""
+    from app.models import get_admin
+    from app.safety import compare_digest_optional
+
+    sa = await get_admin(db)
+    if not sa or not compare_digest_optional(sa.token, admin_token):
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "location_set_editor.html", {"request": request, "token": admin_token}
+    )
+
+
 @app.get("/game-master/{gm_token}", response_class=HTMLResponse)
 async def game_master_page(
     request: Request, gm_token: str, db: AsyncSession = Depends(get_api_db),
@@ -967,7 +983,11 @@ async def get_admin_locations(
     db: AsyncSession = Depends(get_api_db),
     auth=Depends(verify_admin_or_gm),
 ):
-    from app.models import get_game_locations, get_game_events
+    from app.models import (
+        get_game_locations,
+        get_game_events,
+        get_location_quiz_question_counts,
+    )
     from app.database import EventType
 
     if game_id is None:
@@ -980,10 +1000,14 @@ async def get_admin_locations(
 
     locations = await get_game_locations(db, game_uuid)
     events = await get_game_events(db, game_uuid)
+    quiz_counts = await get_location_quiz_question_counts(db, game_uuid)
 
     location_visits = {}
     for event in events:
-        if event.event_type == EventType.CODE_REDEEMED:
+        # A visit can be proved by the printed code or by answering the location
+        # quiz. Any answer (right or wrong) counts as a visit, mirroring the
+        # "one attempt burns the question" rule.
+        if event.event_type in (EventType.CODE_REDEEMED, EventType.LOCATION_QUIZ_ANSWERED):
             payload = event.payload
             location_num = payload.get("location_number")
             color = payload.get("color")
@@ -1002,6 +1026,8 @@ async def get_admin_locations(
                 "latitude": loc.latitude,
                 "longitude": loc.longitude,
                 "bomb_value": loc.bomb_value,
+                "quiz_mode": loc.quiz_mode,
+                "question_count": quiz_counts.get(loc.number, 0),
                 "visited_by": location_visits.get(loc.number, []),
             }
         )
@@ -1762,6 +1788,13 @@ async def execute_command(
             result["message"] = f"Location {location_num} doesn't exist!"
             return result
 
+        from app.models import get_location_by_number, get_game
+
+        location = await get_location_by_number(db, game_uuid, location_num)
+        if location and location.quiz_mode == "quiz":
+            result["message"] = "This location is quiz-only - answer its quiz instead!"
+            return result
+
         if state.location_codes[location_num] != code.upper():
             result["message"] = "Invalid code!"
             return result
@@ -1776,9 +1809,6 @@ async def execute_command(
                     result["message"] = "You've already visited this location!"
                     return result
 
-        from app.models import get_location_by_number, get_game
-
-        location = await get_location_by_number(db, game_uuid, location_num)
         bomb_value = location.bomb_value if location else 1
 
         game = await get_game(db, game_uuid)
@@ -1858,6 +1888,85 @@ async def execute_command(
         # link can never vanish from the correct-answer + Next view.
         result["source_url"] = question_row.source_url
 
+    elif cmd.command == "location_quiz":
+        if state.status != GameStatusField.STARTED:
+            result["message"] = "Cannot answer quiz - game hasn't started yet!"
+            return result
+
+        paused_check = await _check_game_paused(db, game_id)
+        if paused_check:
+            return paused_check
+
+        if cmd.team_color not in state.teams:
+            result["message"] = f"Team {cmd.team_color} doesn't exist!"
+            return result
+
+        team = state.teams[cmd.team_color]
+        location_number = cmd.args.get("location_number")
+        question_id = cmd.args.get("question_id")
+        answer_id = cmd.args.get("answer_id")
+
+        if not location_number or not question_id or not answer_id:
+            result["message"] = "Missing location_number, question_id or answer_id!"
+            return result
+
+        from app.database import LocationQuizAnswer, LocationQuizQuestion
+        from app.models import get_location_by_number, get_game
+        from sqlalchemy import select
+
+        location = await get_location_by_number(db, game_uuid, location_number)
+        if not location:
+            result["message"] = f"Location {location_number} doesn't exist!"
+            return result
+
+        if location.quiz_mode not in ("quiz", "both"):
+            result["message"] = "This location has no quiz!"
+            return result
+
+        answer = await db.execute(select(LocationQuizAnswer).where(LocationQuizAnswer.id == answer_id))
+        answer_row = answer.scalar_one_or_none()
+        if not answer_row:
+            result["message"] = "Invalid answer!"
+            return result
+
+        question = await db.execute(select(LocationQuizQuestion).where(LocationQuizQuestion.id == question_id))
+        question_row = question.scalar_one_or_none()
+        if (
+            not question_row
+            or question_row.game_id != game_uuid
+            or question_row.location_number != location_number
+        ):
+            result["message"] = "Invalid question!"
+            return result
+
+        if answer_row.question_id != question_row.id:
+            result["message"] = "Invalid answer!"
+            return result
+
+        # A question can only be answered once, right or wrong.
+        for ev in events:
+            if ev.event_type.value == "location_quiz_answered":
+                p = ev.payload
+                if p.get("color") == cmd.team_color and p.get("question_id") == question_id:
+                    result["message"] = "You've already answered this question!"
+                    return result
+
+        game_obj = await get_game(db, game_uuid)
+        max_bombs = game_obj.max_bombs if game_obj else 100
+        bombs_earned = min(answer_row.bomb_value, max_bombs - team.bombs)
+        bombs_earned = max(bombs_earned, 0)
+
+        team.bombs += bombs_earned
+        if bombs_earned > 0:
+            result["success"] = True
+            result["message"] = f"Correct! +{bombs_earned} bombs."
+        else:
+            result["success"] = False
+            result["message"] = "Wrong answer! No bombs earned."
+
+        # Reveal the verifying link in the answer response (mirrors the global quiz).
+        result["source_url"] = question_row.source_url
+
     else:
         result["message"] = f"Unknown command: {cmd.command}"
 
@@ -1879,7 +1988,7 @@ async def execute_command(
             )
             await save_event(db, event, game_uuid)
             # Ship placed — check for auto-start
-            asyncio.ensure_future(_auto_start_if_ready(db, game_uuid))
+            asyncio.ensure_future(_auto_start_if_ready_detached(game_uuid))
         elif cmd.command == "code":
             event = CodeRedeemedEvent(
                 color=cmd.team_color,
@@ -1898,6 +2007,20 @@ async def execute_command(
             question_id=question_id,
             answer_id=answer_id,
             bombs_earned=bombs_earned,
+        )
+        await save_event(db, event, game_uuid)
+
+    # Same for location quizzes: every attempt is recorded (right or wrong), so a
+    # question can only be answered once and any attempt marks the visit.
+    if cmd.command == "location_quiz":
+        from app.events.models import LocationQuizAnsweredEvent
+        event = LocationQuizAnsweredEvent(
+            color=cmd.team_color,
+            location_number=location_number,
+            question_id=question_id,
+            answer_id=answer_id,
+            bombs_earned=bombs_earned,
+            success=result["success"],
         )
         await save_event(db, event, game_uuid)
 
@@ -1963,7 +2086,7 @@ async def quick_place_all_ships(
 
     success, message = await place_all_ships_game_scoped(db, auth_info["game_id"], action.team_color)
     if success:
-        asyncio.ensure_future(_auto_start_if_ready(db, uuid.UUID(auth_info["game_id"])))
+        asyncio.ensure_future(_auto_start_if_ready_detached(uuid.UUID(auth_info["game_id"])))
     return {
         "success": success,
         "message": message,
@@ -2421,6 +2544,13 @@ async def remove_location(
                 was_visited = True
                 break
 
+    # Drop this location's quiz questions too: they are keyed by
+    # (game_id, location_number), so leaving them would let a later recreated
+    # location inherit them.
+    from app.models import delete_location_quiz_questions
+
+    await delete_location_quiz_questions(db, game_uuid, action.location_number)
+
     await db.delete(location)
 
     event = LocationRemovedEvent(
@@ -2711,6 +2841,147 @@ async def save_quiz_questions(
     return {"success": True, "questions": result, "message": f"Saved {len(result)} question(s)."}
 
 
+@app.get("/api/location-quiz/state")
+async def get_location_quiz_state(
+    db: AsyncSession = Depends(get_api_db),
+    auth_info: dict = Depends(verify_team_or_gm),
+):
+    """Per-location quiz availability for the team page.
+
+    Only locations whose mode is quiz/both *and* that have questions are
+    returned. The correct flag and the verifying link are hidden until the team
+    has actually answered that question.
+    """
+    from app.models import get_game_locations, get_location_quiz_questions, get_game_events
+
+    game_uuid = uuid.UUID(auth_info["game_id"])
+    locations = await get_game_locations(db, game_uuid)
+    quiz_locations = [loc for loc in locations if loc.quiz_mode in ("quiz", "both")]
+
+    questions = await get_location_quiz_questions(db, game_uuid)
+    by_location: dict[int, list] = {}
+    for q in questions:
+        by_location.setdefault(q["location_number"], []).append(q)
+
+    color = auth_info.get("color")
+    answered_ids: set = set()
+    if color:
+        for ev in await get_game_events(db, game_uuid):
+            if ev.event_type.value == "location_quiz_answered":
+                p = ev.payload
+                if p.get("color") == color:
+                    answered_ids.add(p.get("question_id"))
+
+    result = []
+    for loc in quiz_locations:
+        qs = by_location.get(loc.number, [])
+        if not qs:
+            continue
+        qlist = []
+        for q in qs:
+            is_answered = q["id"] in answered_ids
+            answers = []
+            for a in q["answers"]:
+                entry: dict = {"id": a["id"], "answer_text": a["answer_text"]}
+                if is_answered:
+                    entry["is_correct"] = a["is_correct"]
+                answers.append(entry)
+            qlist.append({
+                "id": q["id"],
+                "question_text": q["question_text"],
+                "answered": is_answered,
+                "source_url": q["source_url"] if is_answered else None,
+                "answers": answers,
+            })
+        result.append({
+            "number": loc.number,
+            "bomb_value": loc.bomb_value,
+            "mode": loc.quiz_mode,
+            "question_count": len(qs),
+            "answered_count": sum(1 for q in qs if q["id"] in answered_ids),
+            "questions": qlist,
+        })
+    return {"locations": result}
+
+
+@app.get("/api/location-quiz/questions")
+async def get_location_quiz_questions_endpoint(
+    location_number: int = Query(...),
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    """GM view of one location's quiz questions (correct answers included)."""
+    from app.models import get_location_quiz_questions, get_location_by_number
+
+    game_uuid = uuid.UUID(game_id)
+    location = await get_location_by_number(db, game_uuid, location_number)
+    if not location:
+        return {"success": False, "message": f"Location {location_number} doesn't exist!"}
+
+    questions = await get_location_quiz_questions(db, game_uuid, location_number)
+    return {"success": True, "mode": location.quiz_mode, "questions": questions}
+
+
+class SaveLocationQuizRequest(BaseModel):
+    location_number: int
+    questions: list[dict] = []
+
+
+@app.post("/api/location-quiz/questions")
+async def save_location_quiz_questions_endpoint(
+    body: SaveLocationQuizRequest,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import save_location_quiz_questions, get_location_by_number
+
+    # Validate before touching the database: an empty list clears the location's
+    # quiz, otherwise every question must be able to yield bombs (same rule as
+    # the game quiz and the quiz library).
+    if body.questions:
+        error = _quiz_validation_error(body.questions)
+        if error:
+            return {"success": False, "message": error}
+
+    game_uuid = uuid.UUID(game_id)
+    location = await get_location_by_number(db, game_uuid, body.location_number)
+    if not location:
+        return {"success": False, "message": f"Location {body.location_number} doesn't exist!"}
+
+    result = await save_location_quiz_questions(db, game_uuid, body.location_number, body.questions)
+    return {
+        "success": True,
+        "questions": result,
+        "message": f"Saved {len(result)} question(s) for location {body.location_number}.",
+    }
+
+
+class SetLocationQuizMode(BaseModel):
+    location_number: int
+    mode: str
+
+
+@app.post("/api/quick/set_location_quiz_mode")
+async def set_location_quiz_mode_endpoint(
+    data: SetLocationQuizMode,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import set_location_quiz_mode
+
+    if data.mode not in ("code", "quiz", "both"):
+        return {"success": False, "message": "Mode must be code, quiz or both!"}
+
+    location = await set_location_quiz_mode(db, uuid.UUID(game_id), data.location_number, data.mode)
+    if not location:
+        return {"success": False, "message": f"Location {data.location_number} doesn't exist!"}
+
+    return {
+        "success": True,
+        "message": f"Location {data.location_number} mode set to {data.mode}.",
+    }
+
+
 class SaveQuizTemplateRequest(BaseModel):
     name: str = ""
     questions: list[dict] = []
@@ -2779,6 +3050,171 @@ async def delete_quiz_template(
     return {"success": True, "message": "Quiz deleted."}
 
 
+@app.get("/api/location-sets")
+async def list_location_sets(
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_or_gm),
+):
+    from app.models import list_location_sets
+
+    return {"sets": await list_location_sets(db)}
+
+
+@app.get("/api/location-sets/{set_id}")
+async def get_location_set(
+    set_id: int,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_or_gm),
+):
+    from app.models import get_location_set
+
+    loc_set = await get_location_set(db, set_id)
+    if not loc_set:
+        return {"success": False, "message": "Location set not found."}
+    return {"success": True, "set": loc_set}
+
+
+@app.delete("/api/location-sets/{set_id}")
+async def delete_location_set(
+    set_id: int,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_or_gm),
+):
+    from app.models import delete_location_set
+
+    deleted = await delete_location_set(db, set_id)
+    if not deleted:
+        return {"success": False, "message": "Location set not found."}
+    return {"success": True, "message": "Location set deleted."}
+
+
+def _location_set_validation_error(locations: list[dict]) -> Optional[str]:
+    """Return an error if a reusable set can't be saved, else None.
+
+    A set is a standalone layout (authored in the admin editor, no game in
+    scope), so we only check that each row is usable: real coordinates, a known
+    quiz mode, unique numbers, and a quiz that can yield bombs.
+    """
+    if not locations:
+        return "Add at least one location to the set."
+    numbers = [loc.get("number") for loc in locations if loc.get("number") is not None]
+    if len(numbers) != len(set(numbers)):
+        return "Location numbers must be unique within a set."
+    for i, loc in enumerate(locations, start=1):
+        try:
+            float(loc["latitude"])
+            float(loc["longitude"])
+        except (KeyError, TypeError, ValueError):
+            return f"Location {i} needs a valid latitude and longitude."
+        if (loc.get("quiz_mode") or "code") not in ("code", "quiz", "both"):
+            return f"Location {i} has an invalid quiz mode."
+        error = _quiz_validation_error(loc.get("questions") or [])
+        if error:
+            return f"Location {i}: {error}"
+    return None
+
+
+class SaveLocationSetRequest(BaseModel):
+    name: str = ""
+    locations: list[dict] = []
+    id: Optional[int] = None
+
+
+async def _save_location_set_response(db: AsyncSession, name: str, locations: list[dict], set_id: Optional[int]):
+    from app.models import save_location_set
+
+    name = (name or "").strip()
+    if not name:
+        return {"success": False, "message": "A set name is required."}
+    if len(name) > 200:
+        return {"success": False, "message": "Set name is too long (max 200 characters)."}
+    error = _location_set_validation_error(locations)
+    if error:
+        return {"success": False, "message": error}
+
+    loc_set = await save_location_set(db, name, locations, set_id=set_id)
+    if not loc_set:
+        return {"success": False, "message": "Location set not found."}
+    return {"success": True, "set": loc_set, "message": f"Saved location set '{name}'."}
+
+
+@app.post("/api/location-sets")
+async def create_location_set(
+    body: SaveLocationSetRequest,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_or_gm),
+):
+    return await _save_location_set_response(db, body.name, body.locations, body.id)
+
+
+@app.put("/api/location-sets/{set_id}")
+async def update_location_set(
+    set_id: int,
+    body: SaveLocationSetRequest,
+    db: AsyncSession = Depends(get_api_db),
+    _=Depends(verify_admin_or_gm),
+):
+    return await _save_location_set_response(db, body.name, body.locations, set_id)
+
+
+class SaveLocationSetSnapshotRequest(BaseModel):
+    name: str = ""
+
+
+@app.post("/api/quick/save-location-set")
+async def save_location_set_snapshot(
+    body: SaveLocationSetSnapshotRequest,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import save_locations_as_set
+
+    name = (body.name or "").strip()
+    if not name:
+        return {"success": False, "message": "A set name is required."}
+    if len(name) > 200:
+        return {"success": False, "message": "Set name is too long (max 200 characters)."}
+
+    saved = await save_locations_as_set(db, uuid.UUID(game_id), name)
+    if not saved:
+        return {"success": False, "message": "No locations to save yet."}
+    return {
+        "success": True,
+        "set": saved,
+        "message": f"Saved {len(saved['locations'])} locations as '{name}'.",
+    }
+
+
+class ApplyLocationSetRequest(BaseModel):
+    set_id: int
+
+
+@app.post("/api/quick/apply-location-set")
+async def apply_location_set(
+    body: ApplyLocationSetRequest,
+    db: AsyncSession = Depends(get_api_db),
+    game_id: str = Depends(verify_gm_token),
+):
+    from app.models import get_game_events, apply_location_set
+
+    game_uuid = uuid.UUID(game_id)
+    events = await get_game_events(db, game_uuid)
+    state = GameState.from_events(events)
+
+    if state.status != GameStatusField.PREPARING:
+        return {"success": False, "message": "Cannot apply a set - game already started!"}
+
+    result = await apply_location_set(db, game_uuid, body.set_id)
+    if not result:
+        return {"success": False, "message": "Location set not found."}
+
+    return {
+        "success": True,
+        "message": f"Applied '{result['name']}': {len(result['locations'])} locations.",
+        "locations": result["locations"],
+    }
+
+
 @app.post("/api/quick/reset-game")
 async def reset_game(
     db: AsyncSession = Depends(get_api_db),
@@ -2803,10 +3239,23 @@ async def clear_locations(
     db: AsyncSession = Depends(get_api_db),
     game_id: str = Depends(verify_gm_token),
 ):
-    from app.models import delete_all_locations
+    from app.models import delete_all_locations, get_game_locations
+    from app.events.models import LocationRemovedEvent
 
     game_uuid = uuid.UUID(game_id)
+    existing = await get_game_locations(db, game_uuid)
+    # Capture before the delete expires these rows.
+    removed = [(loc.number, loc.bomb_value) for loc in existing]
     count = await delete_all_locations(db, game_uuid)
+
+    # Codes are event-sourced (state.location_codes): without removal events a
+    # cleared location's code would stay redeemable.
+    for number, bomb_value in removed:
+        await save_event(
+            db,
+            LocationRemovedEvent(number=number, bomb_value=bomb_value),
+            game_uuid,
+        )
 
     return {
         "success": True,
@@ -2953,6 +3402,18 @@ async def _auto_start_if_ready(db: AsyncSession, game_uuid: uuid.UUID) -> bool:
 
     await _start_game(db, game_uuid)
     return True
+
+
+async def _auto_start_if_ready_detached(game_uuid: uuid.UUID) -> None:
+    """Fire-and-forget auto-start that owns its own DB session.
+
+    The request-scoped session is closed by ``get_api_db`` as soon as the
+    response is sent; sharing it with a background task races the close against
+    the task's queries ("another operation is in progress"). Give the task a
+    session that outlives the request.
+    """
+    async with api_session_maker() as db:
+        await _auto_start_if_ready(db, game_uuid)
 
 
 @app.post("/api/quick/start-game")

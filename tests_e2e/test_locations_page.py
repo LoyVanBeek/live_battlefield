@@ -1,4 +1,5 @@
 import pytest
+from tests_e2e.config import HTTPX_TIMEOUT
 from tests_e2e.pages.locations_page import LocationsPage
 from tests_e2e.pages.gm_page import GameMasterPage
 
@@ -264,7 +265,7 @@ def test_map_click_still_creates_location_when_not_editing(page, app_url, seeded
 
     lp.map_element().click(position={"x": 80, "y": 260})
     lp.page.wait_for_function(
-        "() => !document.querySelector('#locations-body td[colspan=\"7\"]')"
+        "() => !document.querySelector('#locations-body td[colspan=\"8\"]')"
     )
 
     assert lp.get_location_count() == 1
@@ -289,7 +290,7 @@ def test_insert_location_via_gps(page, app_url, seeded_game):
     assert "±12m" in lp.toast().text_content()
 
     page.wait_for_function(
-        "() => !document.querySelector('#locations-body td[colspan=\"7\"]')"
+        "() => !document.querySelector('#locations-body td[colspan=\"8\"]')"
     )
     assert lp.get_location_count() == 1
     # exact position — the default 2km radius would have offset it
@@ -332,3 +333,41 @@ def test_insert_location_via_gps_requires_secure_context(page, app_url, seeded_g
     assert "HTTPS" in lp.toast().text_content()
 
     assert lp.get_location_count() == 0
+
+
+def _set_location_mode(app_url, gm_token, number, mode):
+    import httpx
+
+    with httpx.Client(base_url=app_url, timeout=HTTPX_TIMEOUT) as client:
+        resp = client.post(
+            "/api/quick/set_location_quiz_mode",
+            params={"gm_token": gm_token},
+            json={"location_number": number, "mode": mode},
+        )
+        assert resp.json().get("success") is True, resp.text
+
+
+def test_quiz_only_location_hides_code_and_bombs(page, app_url, seeded_game_with_locations):
+    """A quiz-only location has no printed code, so the secret page must not
+    show its code or its code-mode bomb reward. Code/both locations still do."""
+    seed = seeded_game_with_locations
+    _set_location_mode(app_url, seed["gm_token"], 1, "quiz")
+
+    lp = LocationsPage(page, seed["gm_token"], app_url=app_url)
+    lp.goto()
+
+    # tooltip stands in for the code/bombs of a quiz-only location
+    assert lp.code_cell(1).count() == 0
+    assert lp.bombs_cell(1).count() == 0
+    assert "Quiz" in lp.quiz_cell(1).inner_text()
+
+    # a sibling in the default code mode still exposes them
+    assert lp.code_cell(2).count() == 1
+    assert "💣" in lp.bombs_cell(2).inner_text()
+
+    # switching the mode to both brings the code and bombs back
+    _set_location_mode(app_url, seed["gm_token"], 1, "both")
+    lp.goto()
+    assert lp.code_cell(1).count() == 1
+    assert "💣" in lp.bombs_cell(1).inner_text()
+

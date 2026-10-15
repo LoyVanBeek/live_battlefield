@@ -107,6 +107,44 @@ class TeamPage:
     def is_quiz_done(self):
         return self.quiz_content().text_content().lower().includes("answered")
 
+    # --- Location quiz ---
+
+    def location_quiz_section(self):
+        return self.page.locator("#location-quiz-section")
+
+    def location_quiz_content(self):
+        return self.page.locator("#location-quiz-content")
+
+    def location_quiz_select(self):
+        return self.page.locator("#location-quiz-select")
+
+    def select_location_quiz(self, value: str):
+        self.location_quiz_select().select_option(value)
+        self.page.wait_for_timeout(300)
+
+    def location_quiz_answer_buttons(self):
+        return self.location_quiz_content().locator("button.btn-primary")
+
+    def answer_location_quiz(self, answer_index: int = 0):
+        self.location_quiz_answer_buttons().nth(answer_index).click()
+        self.page.wait_for_timeout(500)
+
+    def location_quiz_verdict(self):
+        return self.page.locator("#location-quiz-verdict")
+
+    def location_quiz_correct_answer(self):
+        return self.page.locator("#location-quiz-correct-answer")
+
+    def location_quiz_source_link(self):
+        return self.page.locator("#location-quiz-source-link")
+
+    def location_quiz_next_button(self):
+        return self.page.locator("#location-quiz-next")
+
+    def next_location_quiz_question(self):
+        self.location_quiz_next_button().click()
+        self.page.wait_for_timeout(500)
+
     # --- Ship Editor ---
 
     def private_board_cell(self, row: int, col: int):

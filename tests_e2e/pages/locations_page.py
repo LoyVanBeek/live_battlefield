@@ -121,6 +121,63 @@ class LocationsPage:
             )
         self.page.wait_for_load_state("networkidle")
 
+    # --- Location quiz editor ---
+
+    def quiz_cell(self, number: int):
+        return self.page.locator(f"#cell-quiz-{number}")
+
+    def quiz_modal(self):
+        return self.page.locator("#lq-modal")
+
+    def open_quiz_modal(self, number: int):
+        self.quiz_cell(number).click()
+        self.quiz_modal().wait_for(state="visible")
+
+    def quiz_mode_select(self):
+        return self.page.locator("#lq-mode")
+
+    def set_quiz_mode(self, mode: str):
+        self.quiz_mode_select().select_option(mode)
+
+    def add_quiz_question(self):
+        self.page.locator("#lq-modal button", has_text="Add Question").click()
+        self.page.wait_for_timeout(200)
+
+    def quiz_question_blocks(self):
+        return self.page.locator("#lq-questions-list .quiz-question")
+
+    def set_quiz_question_text(self, qi: int, text: str):
+        self.page.locator(
+            f"#lq-questions-list input[data-role='question-text'][data-qi='{qi}']"
+        ).fill(text)
+
+    def add_quiz_answer(self, qi: int):
+        self.page.locator(
+            f"#lq-questions-list button[data-action='add-answer'][data-qi='{qi}']"
+        ).click()
+        self.page.wait_for_timeout(200)
+
+    def set_quiz_answer_text(self, qi: int, ai: int, text: str):
+        self.page.locator(
+            f"#lq-questions-list input[data-role='answer-text'][data-qi='{qi}'][data-ai='{ai}']"
+        ).fill(text)
+
+    def set_quiz_answer_bombs(self, qi: int, ai: int, value: int):
+        self.page.locator(
+            f"#lq-questions-list input[data-role='answer-bombs'][data-qi='{qi}'][data-ai='{ai}']"
+        ).fill(str(value))
+
+    def save_quiz(self):
+        self.page.locator("#lq-modal button", has_text="Save Quiz").click()
+        self.page.wait_for_function(
+            "() => document.getElementById('toast').classList.contains('success')",
+            timeout=10000,
+        )
+        self.page.wait_for_function(
+            "() => document.getElementById('lq-modal').style.display === 'none'",
+            timeout=10000,
+        )
+
     def start_cell_edit(self, field: str, number: int):
         """Click a Code/Bombs/Coords cell to open the inline editor."""
         cell = self.code_cell(number) if field == "code" else (
@@ -155,3 +212,31 @@ class LocationsPage:
         self.start_cell_edit(field, number)
         self.edit_input().fill(value)
         self.save_cell_edit(expect=expect)
+
+    # --- Location sets (reusable layouts, quizzes included) ---
+
+    def quiz_set_select(self):
+        return self.page.locator("#lq-set-select")
+
+    def load_set_quiz_button(self):
+        return self.page.locator("#lq-modal button", has_text="Load")
+
+    def save_as_set_button(self):
+        return self.page.locator("#lq-modal button", has_text="Save as")
+
+    def quiz_question_text_input(self, qi: int):
+        return self.page.locator(
+            f"#lq-questions-list input[data-role='question-text'][data-qi='{qi}']"
+        )
+
+    def location_set_select(self):
+        return self.page.locator("#location-set-select")
+
+    def apply_set_button(self):
+        return self.page.locator("button", has_text="Apply set")
+
+    def save_set_button(self):
+        return self.page.locator("button", has_text="Save current as set")
+
+    def delete_set_button(self):
+        return self.page.locator("button", has_text="Delete set")

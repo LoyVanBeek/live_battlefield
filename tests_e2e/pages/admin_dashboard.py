@@ -25,7 +25,9 @@ class AdminDashboardPage:
         return self.page.locator("#selected-count")
 
     def game_rows(self):
-        return self.page.locator(".game-row")
+        # Scope to the games list: the shared ".game-row" class is also used by
+        # the quiz/location libraries, whose cards must not count as games.
+        return self.page.locator("#games-list .game-row")
 
     def games_list(self):
         return self.page.locator("#games-list")
@@ -148,4 +150,26 @@ class AdminDashboardPage:
                 dialog.dismiss()
         self.page.once("dialog", handle_dialog)
         self.library_card(name).locator("button", has_text="🗑️ Delete").click()
+        self.page.wait_for_timeout(800)
+
+    # --- Location Set library (the editor itself is a separate page) ---
+    def new_set_button(self):
+        return self.page.locator("#location-sets-new-btn")
+
+    def set_card(self, name: str):
+        """The set card in the admin list whose name contains `name`."""
+        return self.page.locator("#location-sets-list .library-row", has_text=name)
+
+    def edit_set(self, name: str):
+        self.set_card(name).locator("button", has_text="✏️ Edit").click()
+        self.page.wait_for_timeout(500)
+
+    def delete_set(self, name: str, accept: bool = True):
+        def handle_dialog(dialog):
+            if accept:
+                dialog.accept()
+            else:
+                dialog.dismiss()
+        self.page.once("dialog", handle_dialog)
+        self.set_card(name).locator("button", has_text="🗑️ Delete").click()
         self.page.wait_for_timeout(800)
